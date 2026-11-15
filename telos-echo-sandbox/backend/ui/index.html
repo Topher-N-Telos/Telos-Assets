@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Telōs onboarding test</title>
+<style nonce="__NONCE__">
+body{font:16px system-ui;margin:0;padding:16px;background:#12121a;color:#eee;max-width:640px}
+h1{font-size:20px} h2{font-size:17px;margin:20px 0 6px} label{display:block;margin:8px 0 2px;font-size:13px;color:#aab}
+input,textarea,select,button{font:inherit;width:100%;box-sizing:border-box;padding:10px;border-radius:8px;border:1px solid #445;background:#1c1c28;color:#eee}
+button{background:#5b4bdb;border:0;margin-top:10px} button:disabled{opacity:.5} .row{display:flex;gap:8px;align-items:center} .row>*{width:auto}
+img{max-width:100%;border-radius:8px;margin-top:8px} .box{border:1px solid #334;border-radius:10px;padding:12px;margin:12px 0}
+.msg{color:#f99;font-size:14px} .ok{color:#9f9} small{color:#99a}
+</style></head><body>
+<h1>Telōs onboarding image test</h1>
+<small id="who"></small>
+<div class="box"><b>Avatar</b> <small id="avs"></small>
+ <label>Likeness photos (your own; up to 3)</label>
+ <input id="ph" type="file" accept="image/*" multiple>
+ <div class="row"><input id="cert" type="checkbox" style="width:auto"><span>These photos are of me (or I have permission), and the person is an adult.</span></div>
+ <label>Describe the avatar</label><textarea id="avd" rows="3"></textarea>
+ <label>Apparent age</label><input id="ava" value="30">
+ <button id="avg">Generate avatar</button><div id="avo"></div></div>
+<div class="box"><b>First Telō</b> <small id="tes"></small>
+ <label>Name</label><input id="ten">
+ <label>Describe the Telō</label><textarea id="ted" rows="3"></textarea>
+ <label>Apparent age</label><input id="tea" value="28">
+ <div class="row"><input id="adult" type="checkbox" style="width:auto"><span>The person depicted is an adult.</span></div>
+ <button id="teg">Generate Telō</button><div id="teo"></div></div>
+<div id="msg" class="msg"></div>
+<script nonce="__NONCE__">
+const $=id=>document.getElementById(id);
+const api=async(p,o={})=>{const r=await fetch(p,{...o,headers:{'x-telos':'1',...(o.headers||{})}});const t=r.headers.get('content-type')||'';if(t.includes('json')){const j=await r.json();if(!r.ok)throw Object.assign(new Error(j.error),{j});return j}if(!r.ok)throw new Error('HTTP '+r.status);return r.blob()};
+const key=()=>crypto.randomUUID().replace(/-/g,'');
+let photoIds=[];
+async function refresh(){const m=await api('/api/me');$('avs').textContent=`free left: ${m.avatar.remaining}`;$('tes').textContent=`free left: ${m.telo.remaining}`;
+ for(const [k,box] of [['avatar','avo'],['telo','teo']]){$(box).innerHTML='';for(const i of m[k].images){const im=document.createElement('img');im.src='/api/images/'+i.id;$(box).appendChild(im);
+  if(!i.accepted&&!m[k].acceptedImageId){const b=document.createElement('button');b.textContent='Use this one';b.onclick=async()=>{await api(`/api/onboarding/${k}/accept`,{method:'POST',body:JSON.stringify({imageId:i.id})});refresh()};$(box).appendChild(b)}}}}
+$('ph').onchange=async e=>{$('msg').textContent='';photoIds=[];for(const f of e.target.files){try{const r=await api('/api/uploads',{method:'POST',headers:{'x-certify':$('cert').checked?'self':''},body:f});photoIds.push(r.id)}catch(x){$('msg').textContent=x.message}}};
+async function gen(kind,fields,adult){$('msg').textContent='Generating…';try{
+ let j=await api(`/api/onboarding/${kind}/generate`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({fields,adultAttested:adult,idempotencyKey:key(),photoIds:kind==='avatar'?photoIds:[]})});
+ while(j.state==='created'||j.state==='working'){await new Promise(r=>setTimeout(r,2000));j=await api('/api/jobs/'+j.id)}
+ $('msg').textContent=j.state==='complete'?'Done.':'Failed: '+(j.failure||'')+(j.refunded?' (your free try was refunded)':'')}catch(e){$('msg').textContent=e.message}refresh()}
+$('avg').onclick=()=>gen('avatar',{description:$('avd').value,apparentAge:$('ava').value},$('cert').checked);
+$('teg').onclick=()=>gen('telo',{name:$('ten').value,description:$('ted').value,apparentAge:$('tea').value},$('adult').checked);
+refresh().catch(e=>$('msg').textContent=e.message);
+</script></body></html>
