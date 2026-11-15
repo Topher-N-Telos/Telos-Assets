@@ -25201,6 +25201,7 @@ Respond with only the world key (e.g. UMBRA). Nothing else.`;
     var busyS = R.useState(false), busy = busyS[0], setBusy = busyS[1];
     var msgS = R.useState(""), msg = msgS[0], setMsg = msgS[1];
     var alive = R.useRef(true);
+    var fileRef = R.useRef(null);
     R.useEffect(function () { alive.current = true; return function () { alive.current = false; }; }, []);
     R.useEffect(function () { TelosImg.probe().then(function (m) { if (alive.current) setMe(m); }); }, []);
     if (me === void 0) return h("div", { style: { fontSize: 11, color: "rgba(200,190,170,0.4)", fontStyle: "italic", textAlign: "center", padding: 12 } }, "…");
@@ -25212,10 +25213,12 @@ Respond with only the world key (e.g. UMBRA). Nothing else.`;
     var triesText = view.unlimited ? "" : view.remaining + (view.remaining === 1 ? " free try left" : " free tries left");
     var fieldsReady = adult && age.trim().length >= 1 && (!photos.length || cert);
     var label = { fontSize: 10, letterSpacing: 2, color: "rgba(200,190,170,0.45)", fontFamily: "Cinzel, serif", marginBottom: 6, marginTop: 14 };
-    var inputStyle = { width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 4, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.04)", color: "#EEE8DD", fontSize: 13, fontFamily: "inherit" };
+    // All surfaces use the app's own chamfered components (ChamferBox / ChamferBtn / ChamferField). No rounded or square corners.
+    var CUT = "polygon(9px 0, calc(100% - 9px) 0, 100% 9px, 100% calc(100% - 9px), calc(100% - 9px) 100%, 9px 100%, 0 calc(100% - 9px), 0 9px)";
     var checkRow = function (checked, set, text) {
-      return h("label", { style: { display: "flex", gap: 10, alignItems: "flex-start", fontSize: 12, lineHeight: 1.5, color: "rgba(200,190,170,0.7)", marginTop: 10, cursor: "pointer" } },
-        h("input", { type: "checkbox", checked: checked, onChange: function (e) { set(e.target.checked); }, style: { marginTop: 3, flexShrink: 0 } }), h("span", null, text));
+      return h("div", { style: { marginTop: 10 } }, h(ChamferBox, { size: "sm", borderColor: checked ? accent + "AA" : "rgba(255,255,255,0.12)", fillColor: checked ? accent + "26" : "#0d0d10", glowColor: checked ? accent + "55" : null, onClick: function () { if (!busy) set(!checked); }, style: { cursor: "pointer" } },
+        h("div", { style: { display: "flex", gap: 10, alignItems: "flex-start", padding: "10px 12px", fontSize: 12, lineHeight: 1.5, color: checked ? "#EEE8DD" : "rgba(200,190,170,0.7)" } },
+          h("span", { style: { flexShrink: 0, color: checked ? accent : "rgba(200,190,170,0.4)", fontSize: 13 } }, checked ? "\u25C6" : "\u25C7"), h("span", null, text))));
     };
     async function refresh() { var m = await TelosImg.probe(true); if (alive.current) setMe(m); return m; }
     async function addPhotos(files) {
@@ -25264,30 +25267,33 @@ Respond with only the world key (e.g. UMBRA). Nothing else.`;
       if (alive.current) setBusy(false);
     }
     var imgs = view.images || [];
-    return h("div", { style: { marginTop: 18, padding: 14, border: "1px solid " + accent + "55", background: accent + "12", borderRadius: 4 } },
+    var btn = function (label, onClick, disabled, glow) { return h(ChamferBtn, { size: "md", variant: "primary", accentColor: accent, glowColor: glow || null, disabled: disabled, onClick: onClick, style: { fontSize: 11 } }, label); };
+    return h(ChamferBox, { size: "md", borderColor: accent + "66", fillColor: "#101014", style: { marginTop: 18 } }, h("div", { style: { padding: 14 } },
       h("div", { style: { fontFamily: "Cinzel, serif", fontSize: 14, color: "#EEE8DD", letterSpacing: 1 } }, props.title),
-      h("div", { style: { fontSize: 12, color: "rgba(200,190,170,0.55)", fontStyle: "italic", lineHeight: 1.5, marginTop: 4 } }, props.subtitle + (triesText ? " · " + triesText : "")),
+      h("div", { style: { fontSize: 12, color: "rgba(200,190,170,0.55)", fontStyle: "italic", lineHeight: 1.5, marginTop: 4 } }, props.subtitle + (triesText ? " \u00B7 " + triesText : "")),
       imgs.length ? h("div", { style: { marginTop: 12 } }, imgs.map(function (img) {
-        return h("div", { key: img.id, style: { marginBottom: 12 } },
-          h("img", { src: "/api/images/" + img.id, alt: props.alt, style: { width: "100%", maxHeight: 420, objectFit: "contain", borderRadius: 4, background: "rgba(0,0,0,0.25)" } }),
-          h("button", { disabled: busy, onClick: function () { choose(img); }, style: { width: "100%", marginTop: 8, padding: "11px 0", border: "0", borderRadius: 4, background: busy ? "rgba(255,255,255,0.08)" : "linear-gradient(135deg, #7B5EA7, #5A3E86)", color: "#F0EAE0", fontFamily: "Cinzel, serif", fontSize: 11, letterSpacing: 1.5, cursor: busy ? "default" : "pointer" } }, chosenId === img.id ? "CONTINUE WITH THIS ONE" : "USE THIS ONE"));
+        var picked = chosenId === img.id;
+        return h("div", { key: img.id, style: { marginBottom: 14 } },
+          h(ChamferBox, { size: "md", borderColor: picked ? accent + "CC" : "rgba(255,255,255,0.12)", fillColor: "#000", glowColor: picked ? accent + "66" : null },
+            h("img", { src: "/api/images/" + img.id, alt: props.alt, style: { display: "block", width: "100%", maxHeight: 420, objectFit: "contain", clipPath: CUT, background: "rgba(0,0,0,0.25)" } })),
+          h("div", { style: { marginTop: 10 } }, btn(picked ? "CONTINUE WITH THIS ONE" : "USE THIS ONE", function () { choose(img); }, busy, picked ? accent + "66" : null)));
       })) : null,
       (!chosenId || view.unlimited) ? h("div", null,
         canPhotos ? h("div", null,
           h("div", { style: label }, props.photoLabel),
           checkRow(cert, setCert, props.certText),
-          h("input", { type: "file", accept: "image/*", multiple: true, disabled: busy || photos.length >= 3, onChange: function (e) { var f = Array.prototype.slice.call(e.target.files || []); e.target.value = ""; addPhotos(f); }, style: { marginTop: 8, fontSize: 12, color: "rgba(200,190,170,0.7)" } }),
+          h("input", { ref: fileRef, type: "file", accept: "image/*", multiple: true, style: { display: "none" }, onChange: function (e) { var f = Array.prototype.slice.call(e.target.files || []); e.target.value = ""; addPhotos(f); } }),
+          h("div", { style: { marginTop: 10 } }, h(ChamferBtn, { size: "sm", variant: "accent", accentColor: accent, disabled: busy || photos.length >= 3, onClick: function () { if (fileRef.current) fileRef.current.click(); }, style: { fontSize: 10 } }, "ADD PHOTO")),
           photos.map(function (p) {
             return h("div", { key: p.id, style: { fontSize: 11, color: "rgba(200,190,170,0.6)", marginTop: 6, display: "flex", justifyContent: "space-between" } },
-              h("span", null, "📷 " + p.name), h("button", { onClick: function () { removePhoto(p); }, style: { background: "transparent", border: "none", color: "rgba(200,80,80,0.8)", fontSize: 11, cursor: "pointer" } }, "remove"));
+              h("span", null, p.name), h("button", { onClick: function () { removePhoto(p); }, style: { background: "transparent", border: "none", color: "rgba(200,80,80,0.8)", fontSize: 11, cursor: "pointer" } }, "remove"));
           })) : null,
         h("div", { style: label }, "APPARENT AGE (18 OR OVER)"),
-        h("input", { value: age, onChange: function (e) { setAge(e.target.value); }, placeholder: "e.g. 30", style: inputStyle }),
+        h(ChamferField, { size: "sm", activeBorderColor: accent + "AA" }, h("input", { value: age, onChange: function (e) { setAge(e.target.value); }, placeholder: "e.g. 30", style: { width: "100%", boxSizing: "border-box", padding: "10px 12px", border: "none", outline: "none", background: "transparent", color: "#EEE8DD", fontSize: 13, fontFamily: "inherit" } })),
         checkRow(adult, setAdult, props.adultText),
-        h("button", { disabled: busy || !fieldsReady, onClick: generate, style: { width: "100%", marginTop: 14, padding: "12px 0", border: "0", borderRadius: 4, background: (busy || !fieldsReady) ? "rgba(255,255,255,0.08)" : "linear-gradient(135deg, #7B5EA7, #5A3E86)", color: (busy || !fieldsReady) ? "rgba(200,190,170,0.35)" : "#F0EAE0", fontFamily: "Cinzel, serif", fontSize: 11, letterSpacing: 1.5, cursor: (busy || !fieldsReady) ? "default" : "pointer" } },
-          busy ? "WORKING… THIS CAN TAKE A MINUTE" : (imgs.length ? "TRY AGAIN" : "CREATE IMAGE"))) : null,
+        h("div", { style: { marginTop: 14 } }, btn(busy ? "WORKING\u2026 THIS CAN TAKE A MINUTE" : (imgs.length ? "TRY AGAIN" : "CREATE IMAGE"), generate, busy || !fieldsReady, null))) : null,
       msg ? h("div", { style: { marginTop: 10, fontSize: 12, color: "#E8A0A0", lineHeight: 1.5 } }, msg) : null,
-      props.onSkip ? h("button", { disabled: busy, onClick: props.onSkip, style: { display: "block", margin: "14px auto 0", background: "transparent", border: "none", color: "rgba(200,190,170,0.5)", fontSize: 11, letterSpacing: 1, textDecoration: "underline", cursor: "pointer" } }, props.skipText || "Continue without an image") : null);
+      props.onSkip ? h("button", { disabled: busy, onClick: props.onSkip, style: { display: "block", margin: "14px auto 0", background: "transparent", border: "none", color: "rgba(200,190,170,0.5)", fontSize: 11, letterSpacing: 1, textDecoration: "underline", cursor: "pointer" } }, props.skipText || "Continue without an image") : null));
   }
 
   function OnboardingScreen({ onComplete }) {
