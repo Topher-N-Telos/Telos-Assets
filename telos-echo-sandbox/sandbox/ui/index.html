@@ -40,6 +40,7 @@ table{width:100%;border-collapse:collapse;font-size:12.5px}td,th{border-bottom:1
 .banner{background:#2a2310;border:1px solid #5b4a17;color:#f0d9a0;border-radius:10px;padding:8px 10px;font-size:13px;margin:8px 0}
 .banner.bad{background:#2b1416;border-color:#6a2a2e;color:#ffc2c2}
 .big{width:100%;margin-top:12px}.row>.b{flex:1}
+.toast{position:fixed;left:12px;right:12px;bottom:calc(84px + env(safe-area-inset-bottom));z-index:99;background:#222633;border:1px solid var(--line);border-radius:12px;padding:12px 14px;font-weight:600}.toast.bad{border-color:var(--bad);color:#ffb3b3}.toast.ok{color:var(--ok)}
 </style>
 </head>
 <body>
@@ -67,6 +68,7 @@ const FRIENDLY = {
   OPENAI_KEY_MISSING: 'OPENAI_API_KEY secret is not set on the Worker.', INSUFFICIENT_SKOL: 'Not enough stand-in Sköl (Usage → add).',
   QUOTE_EXPIRED: 'Quote expired. Get a new one.', ADULT_SURFACE_DISABLED: 'Adult surface is not enabled on this deployment.',
   LOW_MODERATION_NOT_ALLOWED: 'Low moderation is not enabled for this setup.', UNSUPPORTED_IMAGE_TYPE: 'Use a PNG, JPEG or WebP image.',
+  FIELD_REQUIRED: 'A required field is empty.', FIELD_INVALID: 'A field has an invalid value.', CHARACTER_NOT_FOUND: 'Character not found.', INTERNAL: 'Server error. Try again.',
   IMAGE_TOO_LARGE: 'Image too large.', TOO_MANY_REFERENCES: 'Reference limit reached for this target.', MODEL_NOT_ALLOWED: 'Model not allowed.',
   IMAGE_PROVIDER_HTTP_400: 'OpenAI rejected the request (moderation or parameters). See details.', IMAGE_PROVIDER_HTTP_429: 'OpenAI rate limit or quota hit.',
   IMAGE_PROVIDER_HTTP_401: 'OpenAI rejected the key.', INTERRUPTED: 'Job was interrupted; no charge was committed.'
@@ -83,8 +85,8 @@ async function api(path, { method = 'GET', body, raw } = {}) {
   if (!r.ok) { const e = new Error((data && data.error) || 'HTTP_' + r.status); e.data = data; throw e; }
   return data;
 }
-const toast = (m, bad) => { const s = $('#status'); s.textContent = m; s.className = bad ? 'err' : 'ok'; setTimeout(() => { s.textContent = ''; }, 5000); };
-const guard = (fn) => async (...a) => { try { await fn(...a); } catch (e) { toast(say(e.message), true); } };
+const toast = (m, bad) => { const t = h('div', { class: 'toast ' + (bad ? 'bad' : 'ok') }, m); document.body.append(t); setTimeout(() => t.remove(), bad ? 7000 : 3000); };
+const guard = (fn) => async (...a) => { try { await fn(...a); } catch (e) { toast(say(e.message) + (e.data && e.data.field ? ' [' + e.data.field + ']' : '') + (e.data && e.data.name ? ' [' + e.data.name + ']' : ''), true); } };
 
 async function refresh(rerender = true) {
   [S, batches] = await Promise.all([api('/api/state'), api('/api/batches')]);
