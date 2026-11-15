@@ -5,7 +5,123 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>TELŌS</title>
 <style>html,body{margin:0;padding:0;background:#06060F;}</style>
-</head>
+<style id="telos-local-fonts">/* cinzel-latin-ext-wght-normal */
+@font-face {
+  font-family: 'Cinzel';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400 900;
+  src: url(/_fonts/cinzel-latin-ext-wght-normal.woff2) format('woff2');
+  unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;
+}
+
+/* cinzel-latin-wght-normal */
+@font-face {
+  font-family: 'Cinzel';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400 900;
+  src: url(/_fonts/cinzel-latin-wght-normal.woff2) format('woff2');
+  unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+/* cormorant-garamond-cyrillic-ext-wght-normal */
+@font-face {
+  font-family: 'Cormorant Garamond';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 300 700;
+  src: url(/_fonts/cormorant-garamond-cyrillic-ext-wght-normal.woff2) format('woff2');
+  unicode-range: U+0460-052F,U+1C80-1C8A,U+20B4,U+2DE0-2DFF,U+A640-A69F,U+FE2E-FE2F;
+}
+
+/* cormorant-garamond-cyrillic-wght-normal */
+@font-face {
+  font-family: 'Cormorant Garamond';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 300 700;
+  src: url(/_fonts/cormorant-garamond-cyrillic-wght-normal.woff2) format('woff2');
+  unicode-range: U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116;
+}
+
+/* cormorant-garamond-vietnamese-wght-normal */
+@font-face {
+  font-family: 'Cormorant Garamond';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 300 700;
+  src: url(/_fonts/cormorant-garamond-vietnamese-wght-normal.woff2) format('woff2');
+  unicode-range: U+0102-0103,U+0110-0111,U+0128-0129,U+0168-0169,U+01A0-01A1,U+01AF-01B0,U+0300-0301,U+0303-0304,U+0308-0309,U+0323,U+0329,U+1EA0-1EF9,U+20AB;
+}
+
+/* cormorant-garamond-latin-ext-wght-normal */
+@font-face {
+  font-family: 'Cormorant Garamond';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 300 700;
+  src: url(/_fonts/cormorant-garamond-latin-ext-wght-normal.woff2) format('woff2');
+  unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;
+}
+
+/* cormorant-garamond-latin-wght-normal */
+@font-face {
+  font-family: 'Cormorant Garamond';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 300 700;
+  src: url(/_fonts/cormorant-garamond-latin-wght-normal.woff2) format('woff2');
+  unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+/* cormorant-garamond-cyrillic-ext-wght-italic */
+@font-face {
+  font-family: 'Cormorant Garamond';
+  font-style: italic;
+  font-display: swap;
+  font-weight: 300 700;
+  src: url(/_fonts/cormorant-garamond-cyrillic-ext-wght-italic.woff2) format('woff2');
+  unicode-range: U+0460-052F,U+1C80-1C8A,U+20B4,U+2DE0-2DFF,U+A640-A69F,U+FE2E-FE2F;
+}
+
+/* cormorant-garamond-cyrillic-wght-italic */
+@font-face {
+  font-family: 'Cormorant Garamond';
+  font-style: italic;
+  font-display: swap;
+  font-weight: 300 700;
+  src: url(/_fonts/cormorant-garamond-cyrillic-wght-italic.woff2) format('woff2');
+  unicode-range: U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116;
+}
+
+/* cormorant-garamond-vietnamese-wght-italic */
+@font-face {
+  font-family: 'Cormorant Garamond';
+  font-style: italic;
+  font-display: swap;
+  font-weight: 300 700;
+  src: url(/_fonts/cormorant-garamond-vietnamese-wght-italic.woff2) format('woff2');
+  unicode-range: U+0102-0103,U+0110-0111,U+0128-0129,U+0168-0169,U+01A0-01A1,U+01AF-01B0,U+0300-0301,U+0303-0304,U+0308-0309,U+0323,U+0329,U+1EA0-1EF9,U+20AB;
+}
+
+/* cormorant-garamond-latin-ext-wght-italic */
+@font-face {
+  font-family: 'Cormorant Garamond';
+  font-style: italic;
+  font-display: swap;
+  font-weight: 300 700;
+  src: url(/_fonts/cormorant-garamond-latin-ext-wght-italic.woff2) format('woff2');
+  unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;
+}
+
+/* cormorant-garamond-latin-wght-italic */
+@font-face {
+  font-family: 'Cormorant Garamond';
+  font-style: italic;
+  font-display: swap;
+  font-weight: 300 700;
+  src: url(/_fonts/cormorant-garamond-latin-wght-italic.woff2) format('woff2');
+  unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}</style></head>
 <body>
 <div id="root"></div>
 <script>
@@ -24816,42 +24932,42 @@ Respond with only the world key (e.g. UMBRA). Nothing else.`;
     { id: "Bajau", label: "Bajau", glyph: "\u25D2", desc: "Amphibious liaisons. Neck gills, pearlescent eyes. MARIS only." },
     { id: "Oceanids", label: "Oceanids", glyph: "\u274D", desc: "Sprite family, sea-born. Bioluminescent in low light." }
   ];
-  var MARIS_OUTPOST_IMAGE = "/_blob/e8b32aafd2337a785fffd1a7feda27bc";
+  var MARIS_OUTPOST_IMAGE = "/_blob/e8b32aafd2337a785fffd1a7feda27bc.jpg";
   var MARIS_DEEP_IMAGE = "/_blob/1c9757d2002de04f3849d305a4e2e85e";
   var WORLD_MAP_BRIGHTNESS = { TENEBRIS: 1 };
   var TOWN_SQUARE_IMAGES = {
-    "TERRA": "/_blob/13e8179335f642b69b5960c5c8b9b0b1",
-    "AXIOM": "/_blob/c8602a54703a0efc3355819ce09a4fee",
-    "AEONIS": "/_blob/362b2c9bbd28e8983673f19eba5ecd2f",
-    "TENEBRIS": "/_blob/2838f9c7f6d15f4d2568b0df5c3b7c8a",
-    "UMBRA": "/_blob/872c7201e6e15876a977f8bcb0f47bbf",
-    "AURIS": "/_blob/5fac0956f88455e210114e157bb361f6",
+    "TERRA": "/_blob/13e8179335f642b69b5960c5c8b9b0b1.jpg",
+    "AXIOM": "/_blob/c8602a54703a0efc3355819ce09a4fee.jpg",
+    "AEONIS": "/_blob/362b2c9bbd28e8983673f19eba5ecd2f.jpg",
+    "TENEBRIS": "/_blob/2838f9c7f6d15f4d2568b0df5c3b7c8a.jpg",
+    "UMBRA": "/_blob/872c7201e6e15876a977f8bcb0f47bbf.jpg",
+    "AURIS": "/_blob/5fac0956f88455e210114e157bb361f6.jpg",
     // UPDATED (App v93) — SOLIS map replaced with Chris's updated render, same 1344×896 framing
     // and layout as before. Two content changes, both matching Master v181: the Clothing
     // Boutique's sign now reads Ignis & Lux (renamed from La Boutique), and the Anteri Sivaad
     // flagship (Section 13.29B) stands on the western headland. SOLIS has no WORLD_CLUSTERS
     // hotspots yet, so no tap-zone coordinates depended on the old art.
-    "SOLIS": "/_blob/d7d6b68ad0f44e9a1da906f59f60e416",
-    "VELA": "/_blob/a9c493a42a6d899cc50693bd0c49456d",
+    "SOLIS": "/_blob/d7d6b68ad0f44e9a1da906f59f60e416.jpg",
+    "VELA": "/_blob/a9c493a42a6d899cc50693bd0c49456d.jpg",
     "MARIS": { outpost: MARIS_OUTPOST_IMAGE, deep: MARIS_DEEP_IMAGE }
   };
   var TOWN_SQUARE_ARCHIVES_NAME = { "TERRA": "The Archive", "UMBRA": "Ossuary", "AURIS": "Scholar's Peak", "SOLIS": "The Gallery", "VELA": "The Cube", "MARIS": "Deep Archive" };
   var WORLD_IMAGES = {
-    "TERRA": "/_blob/f9e30933f7b6a7907ff871b119154716",
-    "UMBRA": "/_blob/b1c1a1ad4faaa4794e59b952203e1575",
-    "AXIOM": "/_blob/9585914ee6ead0cecac54187b991256f",
-    "AURIS": "/_blob/5ad788f24e7653fb6429e2b4797d3fe8",
-    "SOLIS": "/_blob/b82f90a44defb49eeae76c999919e31d",
-    "AEONIS": "/_blob/940673a53a945146bb0958774ab4188a",
-    "VELA": "/_blob/ff26641ebae22d5fe355c54b16e1ab54",
-    "TENEBRIS": "/_blob/80efbf41eed5a7db5c2d1efe3a5dae87",
-    "MARIS": "/_blob/3e0ef9a64025ea968c64775684827220"
+    "TERRA": "/_blob/f9e30933f7b6a7907ff871b119154716.jpg",
+    "UMBRA": "/_blob/b1c1a1ad4faaa4794e59b952203e1575.jpg",
+    "AXIOM": "/_blob/9585914ee6ead0cecac54187b991256f.jpg",
+    "AURIS": "/_blob/5ad788f24e7653fb6429e2b4797d3fe8.jpg",
+    "SOLIS": "/_blob/b82f90a44defb49eeae76c999919e31d.jpg",
+    "AEONIS": "/_blob/940673a53a945146bb0958774ab4188a.jpg",
+    "VELA": "/_blob/ff26641ebae22d5fe355c54b16e1ab54.jpg",
+    "TENEBRIS": "/_blob/80efbf41eed5a7db5c2d1efe3a5dae87.jpg",
+    "MARIS": "/_blob/3e0ef9a64025ea968c64775684827220.jpg"
   };
   var COMPANION_IMAGES = {
-    "Seraphine": "/_blob/eb1c8e5f69d1b50a6fe75951cfcecb86",
-    "Oryn": "/_blob/76f97f29a9a131444a79def5febe9727",
-    "Nova": "/_blob/b37e126b2b37ae690c58f4fc6bac08bf",
-    "AEON": "/_blob/0fe20591a908625189f8927e42c40f79"
+    "Seraphine": "/_blob/eb1c8e5f69d1b50a6fe75951cfcecb86.jpg",
+    "Oryn": "/_blob/76f97f29a9a131444a79def5febe9727.jpg",
+    "Nova": "/_blob/b37e126b2b37ae690c58f4fc6bac08bf.jpg",
+    "AEON": "/_blob/0fe20591a908625189f8927e42c40f79.jpg"
   };
   var WORLD_GLYPH_SVGS = {
     "TERRA": `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
@@ -32334,19 +32450,19 @@ Convert this into a precise, structured clothing/outfit description optimized fo
       ] })
     ] });
   }
-  var TERRA_INT_ARCHIVE = "/_blob/2158eded970774e4eadc89de9041521a";
-  var TERRA_INT_ECHO = "/_blob/570a06a543d9c92e35737ac674403600";
-  var TERRA_INT_ARENA = "/_blob/6a75f294d9a697fdab973d4696149769";
-  var TERRA_INT_MARQUEE = "/_blob/7656fc3a56069faf38073868bc1ed4ed";
-  var TERRA_INT_ARCADE = "/_blob/3114d0a7f4bda7232d9b64131fc5edad";
-  var TERRA_INT_MAISON = "/_blob/0c0f89fcd3f1329abbe3f559354de2fd";
-  var TERRA_INT_HABERDASHER = "/_blob/3f12f2b69c1eb90f1f8f93d47c6d00b2";
-  var TERRA_INT_NIGHTCAP = "/_blob/b7b37f8e1b7532732813ce22a3fa80ef";
-  var TERRA_INT_LARDER = "/_blob/d8f4c7c00d427cba140b1c4b22de4628";
-  var TERRA_ZOOM_ARCHIVE_ECHO = "/_blob/7a12bf2b8029a23ce37a90702b77561a";
-  var TERRA_ZOOM_HAB_ATELIER = "/_blob/40ba66aefa5535c7dbb60cf50c56e61f";
-  var TERRA_ZOOM_NIGHTCAP_LARDER = "/_blob/b411da7ad5e47f0dcd35bc7327992e03";
-  var TERRA_ZOOM_ARCADE = "/_blob/c60a8fba2e390722ceb5620018026ce8";
+  var TERRA_INT_ARCHIVE = "/_blob/2158eded970774e4eadc89de9041521a.jpg";
+  var TERRA_INT_ECHO = "/_blob/570a06a543d9c92e35737ac674403600.jpg";
+  var TERRA_INT_ARENA = "/_blob/6a75f294d9a697fdab973d4696149769.jpg";
+  var TERRA_INT_MARQUEE = "/_blob/7656fc3a56069faf38073868bc1ed4ed.jpg";
+  var TERRA_INT_ARCADE = "/_blob/3114d0a7f4bda7232d9b64131fc5edad.jpg";
+  var TERRA_INT_MAISON = "/_blob/0c0f89fcd3f1329abbe3f559354de2fd.jpg";
+  var TERRA_INT_HABERDASHER = "/_blob/3f12f2b69c1eb90f1f8f93d47c6d00b2.jpg";
+  var TERRA_INT_NIGHTCAP = "/_blob/b7b37f8e1b7532732813ce22a3fa80ef.jpg";
+  var TERRA_INT_LARDER = "/_blob/d8f4c7c00d427cba140b1c4b22de4628.jpg";
+  var TERRA_ZOOM_ARCHIVE_ECHO = "/_blob/7a12bf2b8029a23ce37a90702b77561a.jpg";
+  var TERRA_ZOOM_HAB_ATELIER = "/_blob/40ba66aefa5535c7dbb60cf50c56e61f.jpg";
+  var TERRA_ZOOM_NIGHTCAP_LARDER = "/_blob/b411da7ad5e47f0dcd35bc7327992e03.jpg";
+  var TERRA_ZOOM_ARCADE = "/_blob/c60a8fba2e390722ceb5620018026ce8.jpg";
   var TERRA_VENUES = {
     archive: {
       name: "Archive",
@@ -32513,16 +32629,16 @@ Convert this into a precise, structured clothing/outfit description optimized fo
       }
     );
   }
-  var AXIOM_INT_VERTEX = "/_blob/a9af920a2e6c9506c432c08edf0b9545";
-  var AXIOM_INT_KINESCOPE = "/_blob/2069f59f11a8680540c0c8eeba1c3340";
-  var AXIOM_INT_GRID = "/_blob/bb531fcf46f102f314dfde31d1edb5cc";
-  var AXIOM_INT_CLOUD = "/_blob/13a83df7ceb22c080ad651884c6cac3b";
-  var AXIOM_INT_NODE = "/_blob/d5779cc2dce772cecf5fb9e8d14877dc";
-  var AXIOM_INT_CHROME = "/_blob/9699d40ff260f49ffa254792879f97ce";
-  var AXIOM_INT_CACHE = "/_blob/8d9192f65ac1857e82c512e57cc43d48";
-  var AXIOM_INT_NEONKITCHEN = "/_blob/b3205fbe22a455100f87e8f59ebf1091";
-  var AXIOM_INT_CLUBNEON = "/_blob/1f78374e4c3f091de0b699330f302d51";
-  var AXIOM_ZOOM_KITCHEN_NEON = "/_blob/ac18d0f2a344cde58a6c38b15a8cec6e";
+  var AXIOM_INT_VERTEX = "/_blob/a9af920a2e6c9506c432c08edf0b9545.jpg";
+  var AXIOM_INT_KINESCOPE = "/_blob/2069f59f11a8680540c0c8eeba1c3340.jpg";
+  var AXIOM_INT_GRID = "/_blob/bb531fcf46f102f314dfde31d1edb5cc.jpg";
+  var AXIOM_INT_CLOUD = "/_blob/13a83df7ceb22c080ad651884c6cac3b.jpg";
+  var AXIOM_INT_NODE = "/_blob/d5779cc2dce772cecf5fb9e8d14877dc.jpg";
+  var AXIOM_INT_CHROME = "/_blob/9699d40ff260f49ffa254792879f97ce.jpg";
+  var AXIOM_INT_CACHE = "/_blob/8d9192f65ac1857e82c512e57cc43d48.jpg";
+  var AXIOM_INT_NEONKITCHEN = "/_blob/b3205fbe22a455100f87e8f59ebf1091.jpg";
+  var AXIOM_INT_CLUBNEON = "/_blob/1f78374e4c3f091de0b699330f302d51.jpg";
+  var AXIOM_ZOOM_KITCHEN_NEON = "/_blob/ac18d0f2a344cde58a6c38b15a8cec6e.jpg";
   var AXIOM_VENUES = {
     vertex: {
       name: "Vertex",
@@ -32621,15 +32737,15 @@ Convert this into a precise, structured clothing/outfit description optimized fo
     { id: "cloud", zone: { x0: 0.77, y0: 0.23, x1: 1, y1: 0.62 }, venues: ["cloud"] },
     { id: "grid", zone: { x0: 0.76, y0: 0, x1: 1, y1: 0.23 }, venues: ["grid"] }
   ];
-  var TENEBRIS_INT_GREYMARK = "/_blob/5baa3cd318cec795e4191b605c5b631f";
-  var TENEBRIS_INT_JOUST = "/_blob/fc60bbc06e1ca340a87b871dcb25a7dc";
-  var TENEBRIS_INT_PICTUREBOX = "/_blob/10efc1f08c2fd43c7c152aba8f1688ce";
-  var TENEBRIS_INT_AFARROW = "/_blob/e66d7da036bf6f8901ce6f779c8f2b12";
-  var TENEBRIS_INT_SHOPPE = "/_blob/43af2adde1edc162dc2d2e57876d5c9b";
-  var TENEBRIS_INT_THREADBARE = "/_blob/ee7b7cd195993d32519417042389a5b4";
-  var TENEBRIS_INT_EVIDENCEROOM = "/_blob/752ea0dc24cb8492d89bbe7e7e76f5d7";
-  var TENEBRIS_INT_LASTEATERY = "/_blob/232cfeeb78251c6491df22295e2e9d0b";
-  var TENEBRIS_INT_LASTCALL = "/_blob/a007f97d1e335f09cacbfbfe539656fe";
+  var TENEBRIS_INT_GREYMARK = "/_blob/5baa3cd318cec795e4191b605c5b631f.jpg";
+  var TENEBRIS_INT_JOUST = "/_blob/fc60bbc06e1ca340a87b871dcb25a7dc.jpg";
+  var TENEBRIS_INT_PICTUREBOX = "/_blob/10efc1f08c2fd43c7c152aba8f1688ce.jpg";
+  var TENEBRIS_INT_AFARROW = "/_blob/e66d7da036bf6f8901ce6f779c8f2b12.jpg";
+  var TENEBRIS_INT_SHOPPE = "/_blob/43af2adde1edc162dc2d2e57876d5c9b.jpg";
+  var TENEBRIS_INT_THREADBARE = "/_blob/ee7b7cd195993d32519417042389a5b4.jpg";
+  var TENEBRIS_INT_EVIDENCEROOM = "/_blob/752ea0dc24cb8492d89bbe7e7e76f5d7.jpg";
+  var TENEBRIS_INT_LASTEATERY = "/_blob/232cfeeb78251c6491df22295e2e9d0b.jpg";
+  var TENEBRIS_INT_LASTCALL = "/_blob/a007f97d1e335f09cacbfbfe539656fe.jpg";
   var TENEBRIS_VENUES = {
     greymark: {
       name: "Greymark",
@@ -32724,16 +32840,16 @@ Convert this into a precise, structured clothing/outfit description optimized fo
     { id: "joust", zone: { x0: 0.44, y0: 0.62, x1: 0.72, y1: 1 }, venues: ["joust"] },
     { id: "lastcall", zone: { x0: 0.82, y0: 0.55, x1: 1, y1: 0.85 }, venues: ["lastcall"] }
   ];
-  var AEONIS_INT_AKASHIC = "/_blob/6426d9a281dc04a47130506b657d0b6b";
-  var AEONIS_INT_HERCULEA = "/_blob/14fa10810663d31f648d31a575da17b5";
-  var AEONIS_INT_CHORUS = "/_blob/aa138b14cbda475005a3bd12fab0a541";
-  var AEONIS_INT_COLONNADE = "/_blob/8dd374b6e828caeab1fab7f183004d42";
-  var AEONIS_INT_FOUNDRY = "/_blob/ab0dd6b4c9051f559ba5a2c516029134";
-  var AEONIS_INT_AGORA = "/_blob/1ffda368c285fcf1a758e2351f216e65";
-  var AEONIS_INT_LYKEION = "/_blob/1405a66821d82b0c7220e27b92160ab0";
-  var AEONIS_INT_FEAST = "/_blob/d1babf3d140e9ff7ba9750c2ed0b189a";
-  var AEONIS_INT_MARUTEKH = "/_blob/c41cb29d0b482e955c5905d9b60208d5";
-  var AEONIS_ZOOM_HARBOR = "/_blob/96be7c2d67c53613b3dbd300a40d142d";
+  var AEONIS_INT_AKASHIC = "/_blob/6426d9a281dc04a47130506b657d0b6b.jpg";
+  var AEONIS_INT_HERCULEA = "/_blob/14fa10810663d31f648d31a575da17b5.jpg";
+  var AEONIS_INT_CHORUS = "/_blob/aa138b14cbda475005a3bd12fab0a541.jpg";
+  var AEONIS_INT_COLONNADE = "/_blob/8dd374b6e828caeab1fab7f183004d42.jpg";
+  var AEONIS_INT_FOUNDRY = "/_blob/ab0dd6b4c9051f559ba5a2c516029134.jpg";
+  var AEONIS_INT_AGORA = "/_blob/1ffda368c285fcf1a758e2351f216e65.jpg";
+  var AEONIS_INT_LYKEION = "/_blob/1405a66821d82b0c7220e27b92160ab0.jpg";
+  var AEONIS_INT_FEAST = "/_blob/d1babf3d140e9ff7ba9750c2ed0b189a.jpg";
+  var AEONIS_INT_MARUTEKH = "/_blob/c41cb29d0b482e955c5905d9b60208d5.jpg";
+  var AEONIS_ZOOM_HARBOR = "/_blob/96be7c2d67c53613b3dbd300a40d142d.jpg";
   var AEONIS_VENUES = {
     akashic: {
       name: "The Akashic",
@@ -32839,25 +32955,25 @@ Convert this into a precise, structured clothing/outfit description optimized fo
       }
     }
   ];
-  var SOLIS_INT_PIAZZA = "/_blob/0905ff6c82134a9990c35b601a87960d";
-  var SOLIS_INT_ANFITEATRO = "/_blob/75e9a3dc4e27088e50293efc4850bf83";
-  var SOLIS_EXT_ANFITEATRO = "/_blob/a8327f28263fb982b55640a38e7cb23e";
-  var SOLIS_INT_ARENA = "/_blob/762eef623f03b4d1149e52ba89a715bd";
-  var SOLIS_EXT_ARENA = "/_blob/d3f96f09850903f69f9950b13e181e1f";
-  var SOLIS_INT_GALLERY = "/_blob/29d72e8eecec25910d584896285d1522";
-  var SOLIS_EXT_GALLERY = "/_blob/85c7aca614e5287abfe5be9cc0ee7d5e";
-  var SOLIS_INT_MERCATO = "/_blob/7d38e478757fb613ad8714f8a52ccab7";
-  var SOLIS_INT_IGNISLUX = "/_blob/334e74c46bd7d2fa5b7d7f137f26fb92";
-  var SOLIS_EXT_IGNISLUX = "/_blob/06fca1493ccae966f182cd7309bac98c";
-  var SOLIS_INT_AZOKA = "/_blob/2c4057c616403efcc1ca0bc77b96559a";
-  var SOLIS_EXT_AZOKA = "/_blob/7166ad98274028dc56900314a575cfc2";
-  var SOLIS_INT_LATAVOLA = "/_blob/b3f2cbd4639939abcbd45ab98dd4611b";
-  var SOLIS_EXT_LATAVOLA = "/_blob/3c4b98c1fe31c6caf758363c26543bbb";
-  var SOLIS_INT_THIRST = "/_blob/5a721698afcc0151fb65f1f413fc815f";
-  var SOLIS_INT_SIVAAD = "/_blob/4553567fa717f40df79f06bbf1c7048f";
-  var SOLIS_INT_SIVAAD_RESIDENCE = "/_blob/3f27c05381a158904be18c1d6c21e302";
-  var SOLIS_INT_SIVAAD_BOUTIQUE = "/_blob/6b27e9a0d1a1093a5d46bb1c3046210b";
-  var SOLIS_INT_SIVAAD_GROTTO = "/_blob/7162434943dc13bb8c8d8de7cb325d39";
+  var SOLIS_INT_PIAZZA = "/_blob/0905ff6c82134a9990c35b601a87960d.jpg";
+  var SOLIS_INT_ANFITEATRO = "/_blob/75e9a3dc4e27088e50293efc4850bf83.jpg";
+  var SOLIS_EXT_ANFITEATRO = "/_blob/a8327f28263fb982b55640a38e7cb23e.jpg";
+  var SOLIS_INT_ARENA = "/_blob/762eef623f03b4d1149e52ba89a715bd.jpg";
+  var SOLIS_EXT_ARENA = "/_blob/d3f96f09850903f69f9950b13e181e1f.jpg";
+  var SOLIS_INT_GALLERY = "/_blob/29d72e8eecec25910d584896285d1522.jpg";
+  var SOLIS_EXT_GALLERY = "/_blob/85c7aca614e5287abfe5be9cc0ee7d5e.jpg";
+  var SOLIS_INT_MERCATO = "/_blob/7d38e478757fb613ad8714f8a52ccab7.jpg";
+  var SOLIS_INT_IGNISLUX = "/_blob/334e74c46bd7d2fa5b7d7f137f26fb92.jpg";
+  var SOLIS_EXT_IGNISLUX = "/_blob/06fca1493ccae966f182cd7309bac98c.jpg";
+  var SOLIS_INT_AZOKA = "/_blob/2c4057c616403efcc1ca0bc77b96559a.jpg";
+  var SOLIS_EXT_AZOKA = "/_blob/7166ad98274028dc56900314a575cfc2.jpg";
+  var SOLIS_INT_LATAVOLA = "/_blob/b3f2cbd4639939abcbd45ab98dd4611b.jpg";
+  var SOLIS_EXT_LATAVOLA = "/_blob/3c4b98c1fe31c6caf758363c26543bbb.jpg";
+  var SOLIS_INT_THIRST = "/_blob/5a721698afcc0151fb65f1f413fc815f.jpg";
+  var SOLIS_INT_SIVAAD = "/_blob/4553567fa717f40df79f06bbf1c7048f.jpg";
+  var SOLIS_INT_SIVAAD_RESIDENCE = "/_blob/3f27c05381a158904be18c1d6c21e302.jpg";
+  var SOLIS_INT_SIVAAD_BOUTIQUE = "/_blob/6b27e9a0d1a1093a5d46bb1c3046210b.jpg";
+  var SOLIS_INT_SIVAAD_GROTTO = "/_blob/7162434943dc13bb8c8d8de7cb325d39.jpg";
   var SOLIS_VENUES = {
     piazza: {
       name: "Piazza Solare",
@@ -33001,18 +33117,18 @@ Convert this into a precise, structured clothing/outfit description optimized fo
     // that open the "sivaad" overview instead. A Home Studio button slots in here later.
     { id: "sivaad", label: "Anteri Sivaad", zone: { x0: 0.015, y0: 0.14, x1: 0.145, y1: 0.31 }, venues: ["sivaad_residence", "sivaad_boutique", "sivaad_grotto"], zoomImage: SOLIS_INT_SIVAAD, buttons: true, lockedFallback: "sivaad" }
   ];
-  var AURIS_EXT_TAPESTRY = "/_blob/86dec18718f9d163c4eadf4ecf9bef02";
-  var AURIS_INT_REVERIE = "/_blob/0ff63b887cc8f86eedc49d1f245c0b12";
-  var AURIS_INT_TALONFALL = "/_blob/c9b485df2e6ce8fa04c6c0a155e598fe";
-  var AURIS_EXT_SCHOLARS = "/_blob/1447131d9a77654c5d3bb539265f7486";
-  var AURIS_INT_SCHOLARS = "/_blob/596ceca9fed265ddbc2b2c411f8e8881";
-  var AURIS_INT_WEAVERS = "/_blob/8a87b2f66b12b1039a87d27ebd1194a3";
-  var AURIS_INT_LOOM = "/_blob/33a0063eff850eaf7860a799f19a535d";
-  var AURIS_EXT_AIRIE = "/_blob/b49ebeaadc46008b3e28de877b8f1bfc";
-  var AURIS_INT_AIRIE = "/_blob/d027f3b1a0819dd56b573396ef5df5d5";
-  var AURIS_INT_HEARTHGLEN = "/_blob/4b9ca303b87f4e2ebfba64961e9cd0d6";
-  var AURIS_INT_BREW = "/_blob/9a86a96d46326c4b7a936dbb0b0c73d9";
-  var AURIS_EXT_RETAIL = "/_blob/53da0699d12395e251fb0fde89a87278";
+  var AURIS_EXT_TAPESTRY = "/_blob/86dec18718f9d163c4eadf4ecf9bef02.jpg";
+  var AURIS_INT_REVERIE = "/_blob/0ff63b887cc8f86eedc49d1f245c0b12.jpg";
+  var AURIS_INT_TALONFALL = "/_blob/c9b485df2e6ce8fa04c6c0a155e598fe.jpg";
+  var AURIS_EXT_SCHOLARS = "/_blob/1447131d9a77654c5d3bb539265f7486.jpg";
+  var AURIS_INT_SCHOLARS = "/_blob/596ceca9fed265ddbc2b2c411f8e8881.jpg";
+  var AURIS_INT_WEAVERS = "/_blob/8a87b2f66b12b1039a87d27ebd1194a3.jpg";
+  var AURIS_INT_LOOM = "/_blob/33a0063eff850eaf7860a799f19a535d.jpg";
+  var AURIS_EXT_AIRIE = "/_blob/b49ebeaadc46008b3e28de877b8f1bfc.jpg";
+  var AURIS_INT_AIRIE = "/_blob/d027f3b1a0819dd56b573396ef5df5d5.jpg";
+  var AURIS_INT_HEARTHGLEN = "/_blob/4b9ca303b87f4e2ebfba64961e9cd0d6.jpg";
+  var AURIS_INT_BREW = "/_blob/9a86a96d46326c4b7a936dbb0b0c73d9.jpg";
+  var AURIS_EXT_RETAIL = "/_blob/53da0699d12395e251fb0fde89a87278.jpg";
   var AURIS_VENUES = {
     tapestry: {
       name: "The Tapestry",

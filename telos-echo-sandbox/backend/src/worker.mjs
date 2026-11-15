@@ -15,7 +15,7 @@ const SEC = {
 };
 const APP_CSP = [
   "default-src 'none'", "script-src 'unsafe-inline' https://cdn.jsdelivr.net", "style-src 'unsafe-inline' https://fonts.googleapis.com",
-  "font-src https://fonts.gstatic.com data:", "img-src 'self' data: blob:", "media-src 'self' data: blob:", "connect-src 'self'",
+  "font-src 'self' https://fonts.gstatic.com data:", "img-src 'self' data: blob:", "media-src 'self' data: blob:", "connect-src 'self'",
   "frame-src blob: data: 'self'", "worker-src blob:", "base-uri 'none'", "form-action 'none'", "frame-ancestors 'none'"
 ].join('; ');
 const withSec = (res, extra = {}) => {
@@ -40,6 +40,14 @@ export default {
       const asset = await env.ASSETS.fetch(new Request(new URL('/telos.html', request.url)));
       if (!asset.ok) return err(404, 'APP_NOT_DEPLOYED');
       return withSec(new Response(asset.body, { headers: { 'content-type': 'text/html; charset=utf-8' } }), { 'content-security-policy': APP_CSP, 'cache-control': 'private, no-cache' });
+    }
+    // App art and fonts (public/_blob/<32-hex>.jpg|png, public/_fonts/*.woff2): same login gate, strict path pattern, long cache (names never change).
+    if (/^\/(_blob\/[a-f0-9]{32}\.(jpg|png)|_fonts\/[a-z0-9-]+\.woff2)$/.test(url.pathname)) {
+      if (request.method !== 'GET') return err(405, 'METHOD_NOT_ALLOWED');
+      const asset = await env.ASSETS.fetch(new Request(url, { method: 'GET' }));
+      if (!asset.ok) return err(404, 'NOT_FOUND');
+      const type = url.pathname.endsWith('.jpg') ? 'image/jpeg' : url.pathname.endsWith('.png') ? 'image/png' : 'font/woff2';
+      return withSec(new Response(asset.body, { headers: { 'content-type': type } }), { 'cache-control': 'private, max-age=31536000, immutable' });
     }
     if (url.pathname === '/test') {
       if (request.method !== 'GET') return err(405, 'METHOD_NOT_ALLOWED');

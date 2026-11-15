@@ -9,4 +9,4 @@ Tests: `npm test` (unit), `npm run e2e` (local workerd + fake OpenAI, no spend).
 
 ## Hosted app (App v129)
 
-`public/telos.html` is the TELŌS app (App v129), served from `/` by the Worker behind the same login as the API, so the onboarding image steps can reach `/api/*` on the same origin. `/test` still serves the test harness. Known gap: the app's art and fonts were `/_blob/<hash>` assets on the Claude page's own origin and are not yet in `public/`; until they are added the hosted copy shows no world art. In-app AI chat also does not work here until a Claude relay is added to the Worker.
+`public/telos.html` is the TELŌS app (App v129), served from `/` by the Worker behind the same login as the API, so the onboarding image steps can reach `/api/*` on the same origin. `/test` still serves the test harness. Art (95 images) and fonts (Cinzel, Cormorant Garamond, served locally) live in `public/_blob` and `public/_fonts`. Still missing: 19 larger images (13 PNG town maps, 6 JPEG) that exist only in the Claude page asset store; their references 404 until supplied. In-app AI chat does not work here until a Claude relay is added to the Worker.

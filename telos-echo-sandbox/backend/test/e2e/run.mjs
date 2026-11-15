@@ -96,6 +96,17 @@ test('the Telōs app is served at / behind the same auth, with its own CSP and n
   assert.equal((await fetch(A + '/', { headers: { 'x-dev-email': EVE } })).status, 403);             // allowlist applies to the app page
 });
 
+test('app art and fonts are served behind the same login, with correct types and long cache; other paths are not exposed', async () => {
+  const img = await fetch(A + '/_blob/06fca1493ccae966f182cd7309bac98c.jpg', { headers: { 'x-dev-email': ALICE } });
+  assert.equal(img.status, 200); assert.equal(img.headers.get('content-type'), 'image/jpeg'); assert.match(img.headers.get('cache-control'), /immutable/);
+  assert.ok((await img.arrayBuffer()).byteLength > 1000);
+  const font = await fetch(A + '/_fonts/cinzel-latin-wght-normal.woff2', { headers: { 'x-dev-email': ALICE } });
+  assert.equal(font.status, 200); assert.equal(font.headers.get('content-type'), 'font/woff2');
+  assert.equal((await fetch(A + '/_blob/06fca1493ccae966f182cd7309bac98c.jpg', { headers: { 'x-dev-email': EVE } })).status, 403);
+  assert.equal((await fetch(A + '/_blob/../telos.html', { headers: { 'x-dev-email': ALICE } })).status, 404);
+  assert.equal((await fetch(A + '/_blob/missing.jpg', { headers: { 'x-dev-email': ALICE } })).status, 404);
+});
+
 test('free allotment: avatar and telo each get 1 generation + 1 redo, third is FREE_ALLOTMENT_USED; counts are per kind', async () => {
   const me0 = (await alice('GET', '/api/me')).json;
   assert.equal(me0.avatar.remaining, 2); assert.equal(me0.telo.remaining, 2);
