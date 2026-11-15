@@ -74,7 +74,7 @@ test('allowlist: unknown email is refused, testers and owner are in', async () =
 });
 
 test('page headers, CSRF, and admin routes are owner-only', async () => {
-  const r = await fetch(A + '/', { headers: { 'x-dev-email': ALICE } }); const html = await r.text();
+  const r = await fetch(A + '/test', { headers: { 'x-dev-email': ALICE } }); const html = await r.text();
   const csp = r.headers.get('content-security-policy'); const nonce = /nonce-([A-Za-z0-9+/=]+)/.exec(csp)[1];
   assert.ok(html.includes(`nonce="${nonce}"`)); assert.ok(!html.includes('__NONCE__')); assert.equal(r.headers.get('x-frame-options'), 'DENY');
   assert.equal((await fetch(A + '/api/me/purge', { method: 'POST', body: '{}', headers: { 'x-dev-email': ALICE } })).status, 403);
@@ -82,6 +82,18 @@ test('page headers, CSRF, and admin routes are owner-only', async () => {
   assert.equal((await alice('GET', '/api/_admin/summary')).status, 403);
   assert.equal((await alice('POST', '/api/_admin/pause', { paused: true })).status, 403);
   assert.equal((await alice('POST', `/api/_admin/user/${ALICE}/allowance`, { kind: 'avatar', extra: 5 })).status, 403);
+});
+
+test('the Telōs app is served at / behind the same auth, with its own CSP and no cache sharing', async () => {
+  const r = await fetch(A + '/', { headers: { 'x-dev-email': ALICE } }); const html = await r.text();
+  assert.equal(r.status, 200); assert.match(r.headers.get('content-type'), /text\/html/);
+  assert.ok(html.includes('id="root"') && html.includes('OnboardingImagePanel') && html.includes('/api/onboarding/'));
+  const csp = r.headers.get('content-security-policy');
+  assert.ok(csp.includes("connect-src 'self'") && csp.includes("frame-ancestors 'none'") && !csp.includes('*'));
+  assert.equal(r.headers.get('x-frame-options'), 'DENY'); assert.equal(r.headers.get('cache-control'), 'private, no-cache');
+  assert.equal((await fetch(A + '/', { method: 'POST', headers: { 'x-dev-email': ALICE } })).status, 405);
+  assert.equal((await fetch(A + '/telos.html', { headers: { 'x-dev-email': ALICE } })).status, 404);   // raw asset path is not exposed
+  assert.equal((await fetch(A + '/', { headers: { 'x-dev-email': EVE } })).status, 403);             // allowlist applies to the app page
 });
 
 test('free allotment: avatar and telo each get 1 generation + 1 redo, third is FREE_ALLOTMENT_USED; counts are per kind', async () => {

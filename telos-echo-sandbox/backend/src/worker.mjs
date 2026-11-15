@@ -2,6 +2,7 @@
  * Worker entry: authenticate EVERY request (Cloudflare Access JWT + tester allowlist), apply CSRF + security
  * headers, serve the test UI, and forward /api/* to the caller's OWN Durable Object (named by their verified email,
  * never by anything the client sends). Owner-only admin routes live under /api/_admin/.
+ * `/` serves the Telōs app (public/telos.html via the ASSETS binding); `/test` serves the small image test harness.
  */
 import { authenticate, AuthError } from './auth.mjs';
 import html from '../ui/index.html';
@@ -12,6 +13,11 @@ const SEC = {
   'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer', 'x-robots-tag': 'noindex, nofollow',
   'cache-control': 'no-store', 'x-frame-options': 'DENY', 'permissions-policy': 'camera=(), microphone=(), geolocation=()'
 };
+const APP_CSP = [
+  "default-src 'none'", "script-src 'unsafe-inline' https://cdn.jsdelivr.net", "style-src 'unsafe-inline' https://fonts.googleapis.com",
+  "font-src https://fonts.gstatic.com data:", "img-src 'self' data: blob:", "media-src 'self' data: blob:", "connect-src 'self'",
+  "frame-src blob: data: 'self'", "worker-src blob:", "base-uri 'none'", "form-action 'none'", "frame-ancestors 'none'"
+].join('; ');
 const withSec = (res, extra = {}) => {
   const h = new Headers(res.headers);
   for (const [k, v] of Object.entries({ ...SEC, ...extra })) h.set(k, v);
@@ -28,6 +34,14 @@ export default {
 
     const url = new URL(request.url);
     if (url.pathname === '/' || url.pathname === '/index.html') {
+      // The Telōs app itself (public/telos.html), served from the SAME origin as /api/* so the Access cookie and CSRF header apply.
+      // The bundle is one big inline script, so script/style 'unsafe-inline' is required; everything else stays locked to 'self'.
+      if (request.method !== 'GET') return err(405, 'METHOD_NOT_ALLOWED');
+      const asset = await env.ASSETS.fetch(new Request(new URL('/telos.html', request.url)));
+      if (!asset.ok) return err(404, 'APP_NOT_DEPLOYED');
+      return withSec(new Response(asset.body, { headers: { 'content-type': 'text/html; charset=utf-8' } }), { 'content-security-policy': APP_CSP, 'cache-control': 'private, no-cache' });
+    }
+    if (url.pathname === '/test') {
       if (request.method !== 'GET') return err(405, 'METHOD_NOT_ALLOWED');
       const nonce = btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(16))));
       const csp = `default-src 'none'; img-src 'self' blob: data:; style-src 'self' 'nonce-${nonce}'; script-src 'nonce-${nonce}'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`;
