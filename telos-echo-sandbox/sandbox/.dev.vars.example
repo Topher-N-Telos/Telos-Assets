@@ -1,0 +1,9 @@
+# Local testing only. Copy to .dev.vars (git-ignored). Never put a real key in a file you share.
+DEV_BYPASS_AUTH=true
+OWNER_EMAIL=you@example.com
+# Point at the local mock instead of OpenAI (no cost):
+OPENAI_API_BASE=http://127.0.0.1:8799/v1
+# OPENAI_API_KEY=   (leave unset for mock runs)
+# Optional while testing adult-surface plumbing against the MOCK only:
+# OWNER_ADULT_ATTESTED=true
+# ALLOW_LOW_MODERATION=true

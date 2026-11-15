@@ -1,0 +1,18 @@
+# SERVER SIDE ONLY. Never put any of these in the bundled HTML or browser localStorage.
+# Set OPENAI_API_KEY as a deployment-platform secret (e.g. `wrangler secret put OPENAI_API_KEY`).
+# Do not paste it into chat, source files, or the app bundle.
+OPENAI_API_KEY=replace_with_server_secret
+TELOS_IMAGE_MODEL=gpt-image-2.6-sunburst
+TELOS_IMAGE_FAST_MODEL=gpt-image-2.6-flare
+# Kill switch: routes return 503 for quote/jobs unless this is true.  -> config.imageGenerationEnabled
+TELOS_IMAGE_GENERATION_ENABLED=false
+# Pass B only. -> maybeOfferImage({ enabled })
+TELOS_IMAGE_AUTOSUGGEST_ENABLED=false
+# Less-restrictive provider moderation for verified-adult web/PWA only. -> createOpenAIImageAdapter({ allowLowModeration })
+# Leave false until the age gate, org/platform policy, and legal review are confirmed.
+TELOS_IMAGE_ADULT_LOW_MODERATION_ENABLED=false
+# Not confirmed as a documented Images-endpoint parameter; keep false unless verified. -> includeSafetyIdentifier
+TELOS_IMAGE_SEND_SAFETY_IDENTIFIER=false
+# Backend must source trusted sessions, authenticated storage, an age-verification provider,
+# policy services, a transaction-safe wallet, and a durable background job queue.
+# Still to define by the owner: per-user daily cap, global spend cap.

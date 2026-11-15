@@ -1,0 +1,44 @@
+== root shared modules ==
+# tests 46
+# pass 46
+# fail 0
+== sandbox unit ==
+ok 1 - config: safe defaults, bad values fall back, low moderation and attestation default OFF
+ok 2 - limits: each guard trips with its own code
+ok 3 - limits: identical batch within the window is refused unless explicitly allowed
+ok 4 - limits: a batch is costed as a whole, not per call
+ok 5 - cost: computed from usage tokens; null when usage missing; reserve never below the floor
+ok 6 - hashParams is order-independent and sensitive to content
+ok 7 - day/month keys follow the configured time zone
+ok 8 - minor-signal heuristic blocks obvious terms and spares ordinary words
+ok 9 - access jwt: valid token for the owner passes (email compare is case-insensitive)
+ok 10 - access jwt: every wrong claim, bad signature, alg and config is refused
+ok 11 - authenticate: dev bypass only on loopback host AND flag; never on a public hostname
+ok 12 - params: defaults are safe (auto moderation, high quality, portrait, 1 image)
+ok 13 - params: rejects bad ids, models, moderation, sizes, batch and missing scene
+ok 14 - params: minor-signal text is blocked in every free-text field
+ok 15 - canon: keeps known fields, null means confirmed absent, unknown keys dropped, adult attestation must be literal true
+ok 16 - garment physics only joins the art direction when the owner opts in
+ok 17 - uploads are identified by magic bytes, not by claimed type
+ok 18 - scores: integers 1-5 only; csv cells are escaped and formula-injection safe
+ok 19 - moderation low: needs adult surface AND server flag AND explicit selection; adult surface needs attestation
+# tests 19
+# pass 19
+# fail 0
+== sandbox e2e (local workerd + mock) ==
+ok 1 - secured instance refuses everything without Cloudflare Access (fails closed)
+ok 2 - page: CSP nonce, no leftover placeholder, hardened headers; API: CSRF guard
+ok 3 - characters, references (magic-byte checked, chunk-exact), minor/age guards
+ok 4 - generate with references: edits endpoint, auto moderation, wallet + usage recorded, idempotent replay
+ok 5 - identical request is blocked as a duplicate unless explicitly allowed
+ok 6 - rate guard: submitting again immediately is refused
+ok 7 - provider failure: job fails, hold released, no image, private diagnostics available, key never leaks
+ok 8 - batch of 3 repeats: three calls, three images, wallet charged per image
+ok 9 - text-only generation uses the generations endpoint
+ok 10 - moderation: low only on adult surface by explicit choice; adult surface alone stays auto
+ok 11 - daily call cap stops further generation (cap = 11 in this run)
+ok 12 - pause switch blocks generation and can be lifted
+ok 13 - scoring, repeat-consistency report, CSV export (formula-safe), delete, purge
+# tests 13
+# pass 13
+# fail 0

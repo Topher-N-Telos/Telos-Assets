@@ -1,0 +1,262 @@
+TAP version 13
+# Subtest: composes locked appearance with timestamp-specific mutable state
+ok 1 - composes locked appearance with timestamp-specific mutable state
+  ---
+  duration_ms: 1.175055
+  type: 'test'
+  ...
+# Subtest: suggestions are offers only and require confirmation
+ok 2 - suggestions are offers only and require confirmation
+  ---
+  duration_ms: 0.390901
+  type: 'test'
+  ...
+# Subtest: generation sends SFW auto moderation to /images/generations
+ok 3 - generation sends SFW auto moderation to /images/generations
+  ---
+  duration_ms: 0.783262
+  type: 'test'
+  ...
+# Subtest: image edit sends canonical references to /images/edits; adult uses low ONLY when enabled
+ok 4 - image edit sends canonical references to /images/edits; adult uses low ONLY when enabled
+  ---
+  duration_ms: 16.45746
+  type: 'test'
+  ...
+# Subtest: adult generation fails closed on age gate before work begins
+ok 5 - adult generation fails closed on age gate before work begins
+  ---
+  duration_ms: 0.896568
+  type: 'test'
+  ...
+# Subtest: milestone images cannot be charged by ledger
+ok 6 - milestone images cannot be charged by ledger
+  ---
+  duration_ms: 0.719049
+  type: 'test'
+  ...
+# Subtest: adapter: adult surface still uses auto moderation unless the low-moderation flag is enabled
+ok 7 - adapter: adult surface still uses auto moderation unless the low-moderation flag is enabled
+  ---
+  duration_ms: 0.229379
+  type: 'test'
+  ...
+# Subtest: adapter: SFW can never get low moderation even with the flag on
+ok 8 - adapter: SFW can never get low moderation even with the flag on
+  ---
+  duration_ms: 0.190149
+  type: 'test'
+  ...
+# Subtest: adapter: safety_identifier is not sent by default; untrusted surface and bad refs are rejected
+ok 9 - adapter: safety_identifier is not sent by default; untrusted surface and bad refs are rejected
+  ---
+  duration_ms: 0.638715
+  type: 'test'
+  ...
+# Subtest: adapter: provider errors become coded, retry-classified, and carry no prompt text
+ok 10 - adapter: provider errors become coded, retry-classified, and carry no prompt text
+  ---
+  duration_ms: 0.695277
+  type: 'test'
+  ...
+# Subtest: suggestion gate: off by default, and missing confidence no longer passes
+ok 11 - suggestion gate: off by default, and missing confidence no longer passes
+  ---
+  duration_ms: 0.172835
+  type: 'test'
+  ...
+# Subtest: browser client: one quote always yields the same idempotency key (no double charge on retry)
+ok 12 - browser client: one quote always yields the same idempotency key (no double charge on retry)
+  ---
+  duration_ms: 0.26586
+  type: 'test'
+  ...
+# Subtest: prompt: null appearance state is rendered as CONFIRMED ABSENT, not dropped
+ok 13 - prompt: null appearance state is rendered as CONFIRMED ABSENT, not dropped
+  ---
+  duration_ms: 0.231987
+  type: 'test'
+  ...
+# Subtest: unknown host gets 404; unauthenticated gets 401
+ok 14 - unknown host gets 404; unauthenticated gets 401
+  ---
+  duration_ms: 2.623548
+  type: 'test'
+  ...
+# Subtest: adult host is invisible (404) to an unverified account, available to a verified one
+ok 15 - adult host is invisible (404) to an unverified account, available to a verified one
+  ---
+  duration_ms: 0.57462
+  type: 'test'
+  ...
+# Subtest: mutations need CSRF
+ok 16 - mutations need CSRF
+  ---
+  duration_ms: 0.201375
+  type: 'test'
+  ...
+# Subtest: quote: scene ownership enforced; price comes from the wallet; surface passed is server-derived
+ok 17 - quote: scene ownership enforced; price comes from the wallet; surface passed is server-derived
+  ---
+  duration_ms: 0.833032
+  type: 'test'
+  ...
+# Subtest: client-supplied surface / moderation / amount / model / reference images are rejected
+ok 18 - client-supplied surface / moderation / amount / model / reference images are rejected
+  ---
+  duration_ms: 0.339617
+  type: 'test'
+  ...
+# Subtest: jobs: queued (202) and enqueued, never rendered inline; retry with same key reuses the job
+ok 19 - jobs: queued (202) and enqueued, never rendered inline; retry with same key reuses the job
+  ---
+  duration_ms: 0.403003
+  type: 'test'
+  ...
+# Subtest: jobs: reusing an idempotency key for a different scene is a conflict (409)
+ok 20 - jobs: reusing an idempotency key for a different scene is a conflict (409)
+  ---
+  duration_ms: 0.286088
+  type: 'test'
+  ...
+# Subtest: jobs: validation, oversize art direction, and kill switch
+ok 21 - jobs: validation, oversize art direction, and kill switch
+  ---
+  duration_ms: 0.248982
+  type: 'test'
+  ...
+# Subtest: job status: owner only; failures show fixed sanitized text, not internal codes or provider text
+ok 22 - job status: owner only; failures show fixed sanitized text, not internal codes or provider text
+  ---
+  duration_ms: 0.662326
+  type: 'test'
+  ...
+# Subtest: gallery: SFW surface never lists adult images; adult surface lists both; other users never appear
+ok 23 - gallery: SFW surface never lists adult images; adult surface lists both; other users never appear
+  ---
+  duration_ms: 0.396367
+  type: 'test'
+  ...
+# Subtest: image fetch: owner only, adult blocked on SFW even for the owner, private no-store headers
+ok 24 - image fetch: owner only, adult blocked on SFW even for the owner, private no-store headers
+  ---
+  duration_ms: 1.801339
+  type: 'test'
+  ...
+# Subtest: set-background: explicit POST, owner only, adult image refused on SFW
+ok 25 - set-background: explicit POST, owner only, adult image refused on SFW
+  ---
+  duration_ms: 0.30965
+  type: 'test'
+  ...
+# Subtest: router construction fails fast on missing adapters
+ok 26 - router construction fails fast on missing adapters
+  ---
+  duration_ms: 0.35184
+  type: 'test'
+  ...
+# Subtest: happy path: reference edit -> private save -> commit exactly once; record carries provenance
+ok 27 - happy path: reference edit -> private save -> commit exactly once; record carries provenance
+  ---
+  duration_ms: 2.315885
+  type: 'test'
+  ...
+# Subtest: idempotent: repeating the same key returns the finished result and does not render or charge again
+ok 28 - idempotent: repeating the same key returns the finished result and does not render or charge again
+  ---
+  duration_ms: 0.383223
+  type: 'test'
+  ...
+# Subtest: concurrent workers: only one wins the atomic claim, so one render and one charge
+ok 29 - concurrent workers: only one wins the atomic claim, so one render and one charge
+  ---
+  duration_ms: 0.32725
+  type: 'test'
+  ...
+# Subtest: provider failure releases the hold, fails the job with a sanitized code, never commits
+ok 30 - provider failure releases the hold, fails the job with a sanitized code, never commits
+  ---
+  duration_ms: 1.733097
+  type: 'test'
+  ...
+# Subtest: unexpected internal errors never leak their text into the job record
+ok 31 - unexpected internal errors never leak their text into the job record
+  ---
+  duration_ms: 0.285362
+  type: 'test'
+  ...
+# Subtest: early failures (scene missing) fail the job instead of leaving it stuck in "created"
+ok 32 - early failures (scene missing) fail the job instead of leaving it stuck in "created"
+  ---
+  duration_ms: 0.137183
+  type: 'test'
+  ...
+# Subtest: failure AFTER commit does not release the committed hold
+ok 33 - failure AFTER commit does not release the committed hold
+  ---
+  duration_ms: 0.357151
+  type: 'test'
+  ...
+# Subtest: failed safeguards (output review) -> no save, no charge
+ok 34 - failed safeguards (output review) -> no save, no charge
+  ---
+  duration_ms: 0.307561
+  type: 'test'
+  ...
+# Subtest: safeguards.beforeGeneration rejection stops the provider call
+ok 35 - safeguards.beforeGeneration rejection stops the provider call
+  ---
+  duration_ms: 0.357846
+  type: 'test'
+  ...
+# Subtest: age checks fail closed: missing, ambiguous, minor-presenting or minor canon are all blocked
+ok 36 - age checks fail closed: missing, ambiguous, minor-presenting or minor canon are all blocked
+  ---
+  duration_ms: 0.619861
+  type: 'test'
+  ...
+# Subtest: one ineligible character blocks a multi-character adult scene
+ok 37 - one ineligible character blocks a multi-character adult scene
+  ---
+  duration_ms: 0.273509
+  type: 'test'
+  ...
+# Subtest: surface isolation: a private-adult scene is refused on the SFW surface
+ok 38 - surface isolation: a private-adult scene is refused on the SFW surface
+  ---
+  duration_ms: 0.14324
+  type: 'test'
+  ...
+# Subtest: quote must belong to this user and scene, and a paid quote must be confirmed with a currency
+ok 39 - quote must belong to this user and scene, and a paid quote must be confirmed with a currency
+  ---
+  duration_ms: 0.529762
+  type: 'test'
+  ...
+# Subtest: a genuinely free milestone quote (amount 0) proceeds
+ok 40 - a genuinely free milestone quote (amount 0) proceeds
+  ---
+  duration_ms: 0.197783
+  type: 'test'
+  ...
+# Subtest: request validation happens before any job is created
+ok 41 - request validation happens before any job is created
+  ---
+  duration_ms: 0.129713
+  type: 'test'
+  ...
+# Subtest: missing adapters are detected at construction, not at 3am in production
+ok 42 - missing adapters are detected at construction, not at 3am in production
+  ---
+  duration_ms: 0.103564
+  type: 'test'
+  ...
+1..42
+# tests 42
+# suites 0
+# pass 42
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 209.034147

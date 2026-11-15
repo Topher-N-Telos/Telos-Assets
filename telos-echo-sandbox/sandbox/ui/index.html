@@ -1,0 +1,373 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="icon" href="data:,">
+<meta name="robots" content="noindex,nofollow">
+<meta name="color-scheme" content="dark">
+<title>Telōs Echō Sandbox</title>
+<style nonce="__NONCE__">
+:root{--bg:#0e0f13;--card:#181a21;--line:#2a2d38;--tx:#eceef4;--mut:#9aa0b2;--acc:#c9a24a;--ok:#4cc38a;--bad:#ef6a6a;--warn:#e6b450}
+*{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.4 -apple-system,system-ui,sans-serif;-webkit-text-size-adjust:100%}
+body{padding:0 0 calc(76px + env(safe-area-inset-bottom))}
+header{position:sticky;top:0;z-index:5;background:var(--bg);padding:calc(10px + env(safe-area-inset-top)) 14px 8px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:8px}
+h1{font-size:17px;margin:0}h2{font-size:15px;margin:18px 0 8px;color:var(--acc)}
+main{padding:12px 14px;max-width:720px;margin:0 auto}
+nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:#12141a;border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom);z-index:6}
+nav button{flex:1;background:none;border:0;color:var(--mut);padding:12px 4px;font-size:13px}
+nav button.on{color:var(--acc);font-weight:600}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;margin:10px 0}
+label{display:block;font-size:13px;color:var(--mut);margin:10px 0 4px}
+input[type=text],input[type=number],textarea,select{width:100%;background:#0f1117;color:var(--tx);border:1px solid var(--line);border-radius:10px;padding:11px;font:inherit}
+textarea{min-height:84px;resize:vertical}
+input[type=checkbox]{width:20px;height:20px;vertical-align:middle;margin-right:8px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.row>*{flex:1}
+a.b,button.b{display:block;text-align:center;text-decoration:none;background:var(--acc);color:#16120a;border:0;border-radius:10px;padding:12px 14px;font-weight:600;font-size:15px}
+a.s,button.s,button.b.s{background:#262a36;color:var(--tx)}button.d,button.b.d{background:#3a1f22;color:#ffb3b3}button:disabled{opacity:.45}
+.pill{display:inline-block;font-size:12px;border-radius:99px;padding:2px 9px;background:#262a36;color:var(--mut);margin:2px 4px 2px 0}
+.pill.ok{color:var(--ok)}.pill.bad{color:var(--bad)}.pill.warn{color:var(--warn)}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.thumb{position:relative;aspect-ratio:2/3;background:#0f1117;border-radius:8px;overflow:hidden;border:2px solid transparent}
+.thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.thumb button{position:absolute;top:4px;right:4px;width:34px;height:34px;padding:0;border-radius:99px;font-size:18px;line-height:1}.thumb.sel{border-color:var(--acc)}.thumb .tag{position:absolute;left:4px;bottom:4px;font-size:11px;background:#000a;border-radius:6px;padding:1px 6px}
+.refs{display:flex;gap:6px;overflow-x:auto;padding:4px 0}.refs .thumb{flex:0 0 74px}
+.sheet{position:fixed;inset:0;background:#000b;z-index:20;display:flex;align-items:flex-end}
+.sheet>div{background:var(--card);border-radius:18px 18px 0 0;padding:16px 16px calc(18px + env(safe-area-inset-bottom));width:100%;max-height:92vh;overflow:auto;max-width:720px;margin:0 auto}
+.cmp{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}.cmp img{width:100%;border-radius:8px}
+.mut{color:var(--mut);font-size:13px}.err{color:var(--bad)}.ok{color:var(--ok)}
+table{width:100%;border-collapse:collapse;font-size:12.5px}td,th{border-bottom:1px solid var(--line);padding:5px 3px;text-align:left}
+.banner{background:#2a2310;border:1px solid #5b4a17;color:#f0d9a0;border-radius:10px;padding:8px 10px;font-size:13px;margin:8px 0}
+.banner.bad{background:#2b1416;border-color:#6a2a2e;color:#ffc2c2}
+.big{width:100%;margin-top:12px}.row>.b{flex:1}
+</style>
+</head>
+<body>
+<header><h1>Telōs Echō · Sandbox</h1><span id="status" class="mut"></span></header>
+<main id="main"></main>
+<nav id="nav"></nav>
+<script nonce="__NONCE__">
+'use strict';
+const $ = (s) => document.querySelector(s);
+const h = (tag, props = {}, ...kids) => {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(props || {})) {
+    if (k === 'class') e.className = v; else if (k === 'on') for (const [ev, fn] of Object.entries(v)) e.addEventListener(ev, fn);
+    else if (v === true) e.setAttribute(k, ''); else if (v !== false && v != null) e.setAttribute(k, v);
+  }
+  for (const k of kids.flat()) if (k != null && k !== false) e.append(k.nodeType ? k : document.createTextNode(String(k)));
+  return e;
+};
+const FRIENDLY = {
+  GENERATION_PAUSED: 'Generation is paused (Usage tab).', TOO_SOON: 'Too soon after the last submit. Wait a few seconds.',
+  TOO_MANY_QUEUED: 'Too many images already queued.', DUPLICATE_RECENT: 'Identical request just ran. Tick “allow repeat” to run it again.',
+  DAILY_CALL_CAP: 'Daily image-call cap reached.', DAILY_USD_CAP: 'Daily spend cap reached.', MONTHLY_USD_CAP: 'Monthly spend cap reached.',
+  BATCH_SIZE_INVALID: 'Batch size not allowed.', BLOCKED_MINOR_TERMS: 'Text mentions a minor or age-ambiguous term. Not allowed.',
+  CHARACTER_AGE_NOT_ATTESTED: 'Each character needs an adult attestation and an apparent age (18+).',
+  OPENAI_KEY_MISSING: 'OPENAI_API_KEY secret is not set on the Worker.', INSUFFICIENT_SKOL: 'Not enough stand-in Sköl (Usage → add).',
+  QUOTE_EXPIRED: 'Quote expired. Get a new one.', ADULT_SURFACE_DISABLED: 'Adult surface is not enabled on this deployment.',
+  LOW_MODERATION_NOT_ALLOWED: 'Low moderation is not enabled for this setup.', UNSUPPORTED_IMAGE_TYPE: 'Use a PNG, JPEG or WebP image.',
+  IMAGE_TOO_LARGE: 'Image too large.', TOO_MANY_REFERENCES: 'Reference limit reached for this target.', MODEL_NOT_ALLOWED: 'Model not allowed.',
+  IMAGE_PROVIDER_HTTP_400: 'OpenAI rejected the request (moderation or parameters). See details.', IMAGE_PROVIDER_HTTP_429: 'OpenAI rate limit or quota hit.',
+  IMAGE_PROVIDER_HTTP_401: 'OpenAI rejected the key.', INTERRUPTED: 'Job was interrupted; no charge was committed.'
+};
+const say = (c) => FRIENDLY[c] || c || 'Error';
+let S = null, tab = 'gen', timer = null, sel = new Set(), form = null, batches = [], gallery = [];
+
+async function api(path, { method = 'GET', body, raw } = {}) {
+  const opt = { method, headers: { 'x-sandbox': '1' } };
+  if (raw) { opt.body = raw; } else if (body !== undefined) { opt.headers['content-type'] = 'application/json'; opt.body = JSON.stringify(body); }
+  const r = await fetch(path, opt);
+  const ct = r.headers.get('content-type') || '';
+  const data = ct.includes('json') ? await r.json() : null;
+  if (!r.ok) { const e = new Error((data && data.error) || 'HTTP_' + r.status); e.data = data; throw e; }
+  return data;
+}
+const toast = (m, bad) => { const s = $('#status'); s.textContent = m; s.className = bad ? 'err' : 'ok'; setTimeout(() => { s.textContent = ''; }, 5000); };
+const guard = (fn) => async (...a) => { try { await fn(...a); } catch (e) { toast(say(e.message), true); } };
+
+async function refresh(rerender = true) {
+  [S, batches] = await Promise.all([api('/api/state'), api('/api/batches')]);
+  if (tab === 'gal') gallery = await api('/api/gallery');
+  if (rerender) render();
+  clearTimeout(timer);
+  const busy = batches.some((b) => b.jobs.some((j) => j.state === 'created' || j.state === 'working'));
+  if (busy) timer = setTimeout(() => refresh(!document.querySelector('.sheet') && tab !== 'chars' && !/INPUT|TEXTAREA|SELECT/.test((document.activeElement || {}).tagName || '')), 4000);
+}
+
+function nav() {
+  const n = $('#nav'); n.textContent = '';
+  for (const [k, l] of [['chars', 'Characters'], ['gen', 'Generate'], ['gal', 'Gallery'], ['use', 'Usage']]) {
+    n.append(h('button', { class: tab === k ? 'on' : '', on: { click: async () => { tab = k; if (k === 'gal') gallery = await api('/api/gallery'); render(); } } }, l));
+  }
+}
+function render() {
+  nav(); const m = $('#main'); m.textContent = '';
+  if (!S) return;
+  if (!S.config.keyConfigured && !S.config.mock) m.append(h('div', { class: 'banner bad' }, 'OPENAI_API_KEY is not set on this Worker, so generation is disabled.'));
+  if (S.config.mock) m.append(h('div', { class: 'banner' }, 'MOCK MODE: local test server, no OpenAI calls.'));
+  if (S.paused) m.append(h('div', { class: 'banner' }, 'Generation is paused.'));
+  ({ chars: viewChars, gen: viewGen, gal: viewGal, use: viewUse })[tab](m);
+}
+
+// ---------- image upload (downscale big photos in the browser) ----------
+async function prepareImage(file) {
+  const ok = ['image/png', 'image/jpeg', 'image/webp'].includes(file.type);
+  if (ok && file.size <= 1.5 * 1024 * 1024) return file;
+  const bmp = await createImageBitmap(file);
+  const scale = Math.min(1, 2048 / Math.max(bmp.width, bmp.height));
+  const c = document.createElement('canvas'); c.width = Math.round(bmp.width * scale); c.height = Math.round(bmp.height * scale);
+  c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+  return await new Promise((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error('UNSUPPORTED_IMAGE_TYPE'))), 'image/jpeg', 0.92));
+}
+async function uploadRefs(files, target, role, label) {
+  for (const f of files) {
+    const blob = await prepareImage(f);
+    const q = new URLSearchParams(target); q.set('role', role); if (label) q.set('label', label);
+    await api('/api/refs?' + q, { method: 'POST', raw: blob });
+  }
+}
+const thumb = (id, onDel) => h('div', { class: 'thumb' }, h('img', { src: `/api/refs/${id}/image`, loading: 'lazy', alt: '' }),
+  h('button', { class: 'b d', on: { click: guard(async () => { if (confirm('Delete this reference?')) { await api('/api/refs/' + id, { method: 'DELETE' }); await refresh(); } }) } }, '×'));
+
+// ---------- Characters ----------
+const CANON_LABELS = { species: 'Species', apparentAge: 'Apparent age (adult, required)', height: 'Height', bodyType: 'Body type', skinTone: 'Skin tone', facialFeatures: 'Facial features', eyes: 'Eyes', hair: 'Hair', facialHair: 'Facial hair', bodyHair: 'Body hair', marks: 'Marks / scars / tattoos', physique: 'Physique', anatomy: 'Anatomy notes', mobilityAids: 'Mobility aids' };
+function viewChars(m) {
+  m.append(h('p', { class: 'mut' }, 'Canon text + reference photos. Type “none” in a field to lock it as confirmed-absent.'));
+  for (const c of S.characters) m.append(charCard(c));
+  m.append(h('button', { class: 'b big', on: { click: () => charForm(null) } }, '+ New character'));
+  m.append(h('h2', {}, 'World / environment references'));
+  const w = h('div', { class: 'card' });
+  w.append(h('div', { class: 'refs' }, S.worldRefs.map((r) => thumb(r.id))));
+  w.append(uploadRow({ world: '1' }, S.config.maxWorldRefs, S.worldRefs.length));
+  m.append(w);
+}
+function uploadRow(target, max, have) {
+  const role = h('select', {}, S.config.refRoles.map((r) => h('option', { value: r }, r)));
+  const label = h('input', { type: 'text', placeholder: 'label (optional)', maxlength: 60 });
+  const file = h('input', { type: 'file', accept: 'image/png,image/jpeg,image/webp', multiple: true });
+  const btn = h('button', { class: 'b s', on: { click: guard(async () => {
+    if (!file.files.length) return;
+    if (have + file.files.length > max) { toast('Max ' + max + ' references here', true); return; }
+    btn.disabled = true; toast('Uploading…');
+    try { await uploadRefs([...file.files], target, role.value, label.value.trim()); } finally { btn.disabled = false; }
+    await refresh();
+  }) } }, 'Upload');
+  return h('div', {}, h('div', { class: 'row' }, role, label), h('div', { class: 'row' }, file, btn), h('div', { class: 'mut' }, `${have}/${max} used`));
+}
+function charCard(c) {
+  const card = h('div', { class: 'card' });
+  card.append(h('div', { class: 'row' }, h('strong', {}, c.name), h('span', { class: 'pill ' + (c.adultAttested && c.canon.apparentAge ? 'ok' : 'bad') }, c.adultAttested && c.canon.apparentAge ? 'adult attested' : 'NOT attested'), h('span', { class: 'pill' }, 'canon v' + c.version)));
+  card.append(h('div', { class: 'refs' }, c.refs.map((r) => thumb(r.id))));
+  card.append(uploadRow({ characterId: c.id }, S.config.maxRefsPerCharacter, c.refs.length));
+  card.append(h('div', { class: 'row' },
+    h('button', { class: 'b s', on: { click: () => charForm(c) } }, 'Edit canon'),
+    h('button', { class: 'b d', on: { click: guard(async () => { if (confirm('Delete ' + c.name + ' and their references?')) { await api('/api/characters/' + c.id, { method: 'DELETE' }); await refresh(); } }) } }, 'Delete')));
+  return card;
+}
+function charForm(c) {
+  const name = h('input', { type: 'text', value: c ? c.name : '', maxlength: 60 });
+  const adult = h('input', { type: 'checkbox' }); adult.checked = !!(c && c.adultAttested);
+  const inputs = {};
+  const fields = Object.entries(CANON_LABELS).map(([k, l]) => {
+    const v = c && k in c.canon ? (c.canon[k] === null ? 'none' : c.canon[k]) : '';
+    inputs[k] = h('input', { type: 'text', value: v, maxlength: 300 });
+    return [h('label', {}, l), inputs[k]];
+  });
+  const sheet = h('div', { class: 'sheet' }, h('div', {},
+    h('h2', {}, c ? 'Edit ' + c.name : 'New character'), h('label', {}, 'Name'), name,
+    fields,
+    h('label', {}, adult, 'I attest this fictional character is an adult (18+)'),
+    h('div', { class: 'row' },
+      h('button', { class: 'b s', on: { click: () => sheet.remove() } }, 'Cancel'),
+      h('button', { class: 'b', on: { click: guard(async () => {
+        const canon = {};
+        for (const [k, el] of Object.entries(inputs)) { const v = el.value.trim(); if (!v) continue; canon[k] = /^(none|absent)$/i.test(v) ? null : v; }
+        await api(c ? '/api/characters/' + c.id : '/api/characters', { method: c ? 'PUT' : 'POST', body: { name: name.value.trim(), canon, adultAttested: adult.checked } });
+        sheet.remove(); await refresh();
+      }) } }, 'Save'))));
+  document.body.append(sheet);
+}
+
+// ---------- Generate ----------
+function defaults() { return { characterIds: [], outfits: {}, sceneText: '', worldText: '', locationText: '', artDirection: '', garmentPhysics: '', useGarmentPhysics: false, garmentType: '', condition: '', label: '', model: S.config.models[0], quality: 'high', size: '1024x1536', mode: 'cinematic', surface: 'sfw', moderation: 'auto', count: 1, allowDuplicate: false, worldRefIds: [] }; }
+function viewGen(m) {
+  if (!form) form = defaults();
+  const f = form;
+  let go = null; const upd = () => { if (go) go.disabled = !(f.characterIds.length && f.sceneText.trim()); };
+  const bind = (el, key, conv = (v) => v) => { el.addEventListener('input', () => { f[key] = conv(el.value); upd(); }); return el; };
+  m.append(h('h2', {}, 'Characters in scene'));
+  const cc = h('div', { class: 'card' });
+  if (!S.characters.length) cc.append(h('p', { class: 'mut' }, 'Add a character first (Characters tab).'));
+  for (const c of S.characters) {
+    const on = f.characterIds.includes(c.id);
+    const cb = h('input', { type: 'checkbox' }); cb.checked = on;
+    cb.addEventListener('change', () => { f.characterIds = cb.checked ? [...f.characterIds, c.id].slice(0, 4) : f.characterIds.filter((i) => i !== c.id); render(); });
+    cc.append(h('label', {}, cb, c.name, ` · ${c.refs.length} ref${c.refs.length === 1 ? '' : 's'}`));
+    if (on) cc.append(bind(h('input', { type: 'text', placeholder: 'outfit for ' + c.name + ' (garment, colour, fit)', value: f.outfits[c.id] || '', maxlength: 300 }), 'x', (v) => (f.outfits[c.id] = v)));
+  }
+  m.append(cc);
+  m.append(h('h2', {}, 'Scene'));
+  const sc = h('div', { class: 'card' });
+  sc.append(h('label', {}, 'Scene description'), bind(h('textarea', { maxlength: 1500 }, f.sceneText), 'sceneText'));
+  sc.append(h('label', {}, 'Location'), bind(h('input', { type: 'text', value: f.locationText, maxlength: 200 }), 'locationText'));
+  sc.append(h('label', {}, 'World / environment notes'), bind(h('textarea', { maxlength: 1500 }, f.worldText), 'worldText'));
+  sc.append(h('label', {}, 'Art direction'), bind(h('textarea', { maxlength: 1500 }, f.artDirection), 'artDirection'));
+  if (S.worldRefs.length) { sc.append(h('label', {}, 'Environment references to attach')); for (const r of S.worldRefs) { const cb = h('input', { type: 'checkbox' }); cb.checked = f.worldRefIds.includes(r.id); cb.addEventListener('change', () => { f.worldRefIds = cb.checked ? [...f.worldRefIds, r.id] : f.worldRefIds.filter((i) => i !== r.id); }); sc.append(h('label', {}, cb, r.label || r.role)); } }
+  m.append(sc);
+  m.append(h('h2', {}, 'Garment fidelity test'));
+  const gc = h('div', { class: 'card' });
+  gc.append(h('div', { class: 'row' }, h('div', {}, h('label', {}, 'Garment type'), bind(h('input', { type: 'text', value: f.garmentType, placeholder: 'e.g. brief, robe', maxlength: 60 }), 'garmentType')),
+    h('div', {}, h('label', {}, 'Condition'), bind(h('input', { type: 'text', value: f.condition, placeholder: 'e.g. dry / wet', maxlength: 40 }), 'condition'))));
+  gc.append(h('label', {}, 'Garment construction notes'), bind(h('textarea', { maxlength: 800 }, f.garmentPhysics), 'garmentPhysics'));
+  const ug = h('input', { type: 'checkbox' }); ug.checked = f.useGarmentPhysics; ug.addEventListener('change', () => { f.useGarmentPhysics = ug.checked; });
+  gc.append(h('label', {}, ug, 'Include construction notes in the prompt (A/B test: run once on, once off)'));
+  gc.append(h('label', {}, 'Run label (groups repeats in the report)'), bind(h('input', { type: 'text', value: f.label, maxlength: 60 }), 'label'));
+  m.append(gc);
+  m.append(h('h2', {}, 'Settings'));
+  const st = h('div', { class: 'card' });
+  const pick = (opts, key, conv) => { const s = h('select', {}, opts.map(([v, l]) => h('option', { value: v }, l))); s.value = String(f[key]); s.addEventListener('change', () => { f[key] = conv ? conv(s.value) : s.value; render(); }); return s; };
+  st.append(h('label', {}, 'Model'), pick(S.config.models.map((x) => [x, x]), 'model'));
+  st.append(h('div', { class: 'row' }, h('div', {}, h('label', {}, 'Quality'), pick([['low', 'low'], ['medium', 'medium'], ['high', 'high']], 'quality')), h('div', {}, h('label', {}, 'Size'), pick([['1024x1536', 'portrait'], ['1024x1024', 'square'], ['1536x1024', 'landscape']], 'size'))));
+  st.append(h('div', { class: 'row' }, h('div', {}, h('label', {}, 'Style'), pick([['cinematic', 'scene'], ['portrait', 'portrait']], 'mode')),
+    h('div', {}, h('label', {}, 'Images (repeat count)'), pick(Array.from({ length: S.config.maxBatch }, (_, i) => [i + 1, String(i + 1)]), 'count', Number))));
+  if (S.config.adultSurfaceEnabled) st.append(h('label', {}, 'Surface'), pick([['sfw', 'SFW (default)'], ['adult', 'Adult (owner-attested)']], 'surface'));
+  const modOpts = [['auto', 'auto (default)']]; if (S.config.lowModerationEnabled && f.surface === 'adult') modOpts.push(['low', 'low — manual choice only']);
+  if (f.moderation === 'low' && !(S.config.lowModerationEnabled && f.surface === 'adult')) f.moderation = 'auto';
+  st.append(h('label', {}, 'Moderation'), pick(modOpts, 'moderation'));
+  if (f.moderation === 'low') st.append(h('div', { class: 'banner' }, '“low” loosens OpenAI’s filter only; it is not unrestricted. OpenAI can still refuse or block an image, and its usage policies still apply.'));
+  const ad = h('input', { type: 'checkbox' }); ad.checked = f.allowDuplicate; ad.addEventListener('change', () => { f.allowDuplicate = ad.checked; });
+  st.append(h('label', {}, ad, 'Allow repeat of an identical request'));
+  m.append(st);
+  go = h('button', { class: 'b big', on: { click: guard(quote) } }, 'Get quote'); upd(); m.append(go);
+  m.append(h('h2', {}, 'Recent batches'));
+  if (!batches.length) m.append(h('p', { class: 'mut' }, 'None yet.'));
+  for (const b of batches) m.append(batchCard(b));
+}
+async function quote() {
+  const q = await api('/api/quote', { method: 'POST', body: { params: form } });
+  const p = q.preflight;
+  const sheet = h('div', { class: 'sheet' }, h('div', {},
+    h('h2', {}, 'Confirm generation'),
+    h('p', {}, `${q.count} image${q.count > 1 ? 's' : ''} · ${q.model}`),
+    h('p', {}, h('strong', {}, `${q.amountSkol} Sköl`), ' (stand-in wallet, no real charge) · balance ', String(q.available)),
+    h('p', {}, h('strong', {}, `≈ $${q.estUsd}`), ' real OpenAI cost (estimate; hard limit still applies)'),
+    h('p', { class: 'mut' }, `${q.endpoint === 'edits' ? q.referenceCount + ' reference image(s) attached' : 'text only, no references'} · moderation ${q.moderation} · ${q.surface}`),
+    q.warnings.map((w) => h('div', { class: 'banner' }, w === 'NO_REFERENCES_ATTACHED' ? 'No reference images attached. Identity will not be anchored.' : 'Missing reference: ' + w.split(':')[1])),
+    p.ok ? null : h('div', { class: 'banner bad' }, say(p.code) + (p.retryAfterMs ? ` (${Math.ceil(p.retryAfterMs / 1000)}s)` : '')),
+    h('div', { class: 'row' },
+      h('button', { class: 'b s', on: { click: () => sheet.remove() } }, 'Cancel'),
+      h('button', { class: 'b', disabled: !p.ok, on: { click: guard(async (ev) => {
+        ev.target.disabled = true;
+        await api('/api/generate', { method: 'POST', body: { quoteId: q.quoteId, confirm: true } });
+        sheet.remove(); form.allowDuplicate = false; toast('Queued'); await refresh();
+      }) } }, 'Confirm & generate'))));
+  document.body.append(sheet);
+}
+function batchCard(b) {
+  const c = h('div', { class: 'card' });
+  c.append(h('div', { class: 'mut' }, new Date(b.createdAt).toLocaleString(), ' · ', b.label || '(no label)', ' · ', b.model, ' · ', b.moderation));
+  const row = h('div', { class: 'row' });
+  for (const j of b.jobs) {
+    const cls = j.state === 'complete' ? 'ok' : j.state === 'failed' ? 'bad' : 'warn';
+    row.append(h('span', { class: 'pill ' + cls, on: j.state === 'failed' ? { click: guard(() => showDiag(j)) } : {} }, `#${j.seq + 1} ${j.state}${j.failure ? ': ' + j.failure : ''}`));
+    if (j.state === 'created') row.append(h('button', { class: 'b s', on: { click: guard(async () => { await api(`/api/jobs/${j.id}/cancel`, { method: 'POST' }); await refresh(); }) } }, 'cancel'));
+  }
+  c.append(row);
+  c.append(h('button', { class: 'b s', on: { click: guard(async () => { const full = await api('/api/batches/' + b.id); form = { ...defaults(), ...full.params, allowDuplicate: true }; tab = 'gen'; toast('Settings loaded; tick repeat and get a quote'); render(); window.scrollTo(0, 0); }) } }, 'Load these settings to repeat'));
+  return c;
+}
+async function showDiag(j) {
+  const d = await api(`/api/jobs/${j.id}/diag`);
+  const sheet = h('div', { class: 'sheet' }, h('div', {}, h('h2', {}, say(j.failure)), h('p', { class: 'mut' }, d.detail || 'No provider detail recorded.'), h('button', { class: 'b s big', on: { click: () => sheet.remove() } }, 'Close')));
+  document.body.append(sheet);
+}
+
+// ---------- Gallery / compare ----------
+const SCORES = [['identity', 'Identity'], ['anatomy', 'Anatomy'], ['fabric', 'Fabric'], ['costume', 'Costume'], ['scene', 'Scene']];
+function viewGal(m) {
+  if (!gallery.length) { m.append(h('p', { class: 'mut' }, 'No images yet.')); return; }
+  m.append(h('div', { class: 'row' }, h('span', { class: 'mut' }, 'Tap an image to open it · use + to pick 2–4 for Compare'),
+    h('button', { class: 'b s', disabled: sel.size < 2, on: { click: () => compare() } }, `Compare (${sel.size})`)));
+  const g = h('div', { class: 'grid' });
+  for (const im of gallery) {
+    const t = h('div', { class: 'thumb' + (sel.has(im.id) ? ' sel' : '') }, h('img', { src: '/api/images/' + im.id, loading: 'lazy', alt: '' }),
+      h('span', { class: 'tag' }, (im.score && im.score.identity ? '★' + im.score.identity : '–') + ' ' + (im.label || '')));
+    t.addEventListener('click', () => openImage(im));
+    const pick = h('button', { class: 'b s', on: { click: (e) => { e.stopPropagation(); sel.has(im.id) ? sel.delete(im.id) : sel.size < 4 && sel.add(im.id); render(); } } }, sel.has(im.id) ? '✓' : '+');
+    t.append(pick); g.append(t);
+  }
+  m.append(g);
+}
+function scoreForm(im, after) {
+  const vals = { ...(im.score || {}) };
+  const f = h('div', {});
+  for (const [k, l] of SCORES) {
+    const s = h('select', {}, h('option', { value: '' }, '–'), [1, 2, 3, 4, 5].map((n) => h('option', { value: n }, n)));
+    s.value = vals[k] ? String(vals[k]) : ''; s.addEventListener('change', () => { vals[k] = s.value ? Number(s.value) : undefined; });
+    f.append(h('div', { class: 'row' }, h('span', {}, l), s));
+  }
+  const notes = h('textarea', { maxlength: 500, placeholder: 'notes: seams, opacity, skin tone, hair, etc.' }, vals.notes || ''); notes.addEventListener('input', () => { vals.notes = notes.value; });
+  f.append(notes, h('button', { class: 'b big', on: { click: guard(async () => { await api(`/api/images/${im.id}/score`, { method: 'POST', body: vals }); toast('Saved'); await after(); }) } }, 'Save score (1 poor – 5 faithful)'));
+  return f;
+}
+function openImage(im) {
+  const sheet = h('div', { class: 'sheet' }, h('div', {},
+    h('img', { src: '/api/images/' + im.id, class: 'cmpimg' }),
+    h('p', { class: 'mut' }, `${im.characterNames.join(' + ')} · ${im.model} · ${im.quality} ${im.size} · mod ${im.moderation} · ${im.referenceCount} refs · $${im.usd}${im.usdEstimated ? ' (est.)' : ''}`),
+    h('p', { class: 'mut' }, [im.garmentType, im.condition, im.label].filter(Boolean).join(' · ')),
+    h('div', { class: 'refs' }, (im.refIds || []).map((id) => h('div', { class: 'thumb' }, h('img', { src: `/api/refs/${id}/image`, alt: '' })))),
+    scoreForm(im, async () => { gallery = await api('/api/gallery'); }),
+    h('div', { class: 'row' },
+      h('button', { class: 'b s', on: { click: () => { sheet.remove(); render(); } } }, 'Close'),
+      h('button', { class: 'b d', on: { click: guard(async () => { if (confirm('Delete this image permanently?')) { await api('/api/images/' + im.id, { method: 'DELETE' }); sel.delete(im.id); sheet.remove(); await refresh(); gallery = await api('/api/gallery'); render(); } }) } }, 'Delete'))));
+  sheet.querySelector('.cmpimg').addEventListener('click', () => {});
+  document.body.append(sheet);
+}
+function compare() {
+  const ims = gallery.filter((i) => sel.has(i.id));
+  const refIds = [...new Set(ims.flatMap((i) => i.refIds || []))];
+  const sheet = h('div', { class: 'sheet' }, h('div', {},
+    h('h2', {}, 'Compare'),
+    h('p', { class: 'mut' }, 'References used:'),
+    h('div', { class: 'refs' }, refIds.map((id) => h('div', { class: 'thumb' }, h('img', { src: `/api/refs/${id}/image`, alt: '' })))),
+    h('div', { class: 'cmp' }, ims.map((im) => h('div', {}, h('img', { src: '/api/images/' + im.id, alt: '' }),
+      h('div', { class: 'mut' }, SCORES.map(([k, l]) => `${l[0]}:${im.score && im.score[k] ? im.score[k] : '–'}`).join(' · '), ' ', im.garmentType || '', ' ', im.condition || '')))),
+    h('button', { class: 'b s big', on: { click: () => sheet.remove() } }, 'Close')));
+  document.body.append(sheet);
+}
+
+// ---------- Usage ----------
+function viewUse(m) {
+  const c = S.counters, L = S.config.limits, w = S.wallet;
+  const bar = (v, max) => `${v} / ${max}`;
+  m.append(h('div', { class: 'card' },
+    h('div', {}, h('strong', {}, 'Real OpenAI spend (estimate)')),
+    h('div', {}, `Today: $${c.usdToday.toFixed(2)} / $${L.usdPerDay} · Month: $${c.usdMonth.toFixed(2)} / $${L.usdPerMonth}`),
+    h('div', {}, `Image calls today: ${bar(c.callsToday, L.callsPerDay)} · queued: ${c.queuedOrWorking}`),
+    h('div', { class: 'mut' }, `Reserve per call: $${S.reservePerCallUsd.toFixed(2)}. The OpenAI dashboard and the project’s $10 hard limit are the source of truth.`)));
+  m.append(h('div', { class: 'card' },
+    h('div', {}, h('strong', {}, 'Stand-in Sköl wallet (no real money)')),
+    h('div', {}, `Available ${w.available} · held ${w.held} · spent ${w.spent}`),
+    h('button', { class: 'b s', on: { click: guard(async () => { await api('/api/wallet/grant', { method: 'POST', body: { amount: 1000 } }); await refresh(); }) } }, '+1000 Sköl')));
+  m.append(h('div', { class: 'card' },
+    h('button', { class: 'b ' + (S.paused ? '' : 'd') + ' big', on: { click: guard(async () => { await api('/api/pause', { method: 'POST', body: { paused: !S.paused } }); await refresh(); }) } }, S.paused ? 'Resume generation' : 'PAUSE all generation')));
+  m.append(h('h2', {}, 'Report'));
+  const r = h('div', { class: 'card' }, h('p', { class: 'mut' }, 'Loading…')); m.append(r);
+  api('/api/report').then((rep) => {
+    r.textContent = '';
+    const tbl = (title, rows) => { r.append(h('strong', {}, title)); if (!rows.length) { r.append(h('p', { class: 'mut' }, 'Nothing yet (needs scored images' + (title.includes('Repeat') ? ' from repeated identical runs' : '') + ').')); return; }
+      const t = h('table', {}, h('tr', {}, ['group', 'n', 'ident', 'anat', 'fabric', 'cost', '$'].map((x) => h('th', {}, x))));
+      for (const g of rows) { const f = (k) => (g[k] ? `${g[k].avg} (${g[k].min}-${g[k].max})` : '–'); t.append(h('tr', {}, [g.key, g.n, f('identity'), f('anatomy'), f('fabric'), f('costume'), g.usd].map((x) => h('td', {}, String(x))))); }
+      r.append(t); };
+    tbl('By garment / condition / model', rep.byGarment); r.append(h('div', {})); tbl('Repeat groups (consistency: watch the min-max spread)', rep.byRepeatGroup);
+  }).catch(() => {});
+  m.append(h('a', { href: '/api/export.csv', class: 'b s big', style: null }, 'Download scores CSV'));
+  m.append(h('h2', {}, 'Danger'));
+  m.append(h('button', { class: 'b d big', on: { click: guard(async () => { const t = prompt('Type DELETE EVERYTHING to erase all characters, references and images:'); if (t !== 'DELETE EVERYTHING') return; await api('/api/purge', { method: 'POST', body: { confirm: t } }); form = null; sel.clear(); await refresh(); }) } }, 'Erase all sandbox data'));
+}
+
+refresh().catch((e) => { $('#main').textContent = 'Could not load: ' + e.message; });
+</script>
+</body>
+</html>

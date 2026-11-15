@@ -1,0 +1,30 @@
+name = "telos-echo-sandbox"
+main = "src/worker.mjs"
+compatibility_date = "2026-11-01"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+preview_urls = false
+
+[[rules]]
+type = "Text"
+globs = ["**/*.html"]
+fallthrough = false
+
+[[durable_objects.bindings]]
+name = "SANDBOX"
+class_name = "Sandbox"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Sandbox"]
+
+# Non-secret settings. Secrets (OPENAI_API_KEY, OWNER_EMAIL, ACCESS_TEAM_DOMAIN, ACCESS_AUD) are set with
+# `npx wrangler secret put <NAME>` and never live in this file. DEV_BYPASS_AUTH must never be set here.
+[vars]
+MAX_CALLS_PER_DAY = "20"
+MAX_USD_PER_DAY = "3"
+MAX_USD_PER_MONTH = "8"
+MAX_BATCH = "3"
+TIME_ZONE = "America/Detroit"
+ALLOW_LOW_MODERATION = "false"
+OWNER_ADULT_ATTESTED = "false"
