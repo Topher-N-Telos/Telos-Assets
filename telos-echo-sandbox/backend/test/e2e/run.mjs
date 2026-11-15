@@ -164,13 +164,20 @@ test('admin: owner can grant extra free generations; non-owner cannot; purge kee
   assert.equal((await alice('POST', '/api/me/purge', {})).json.error, 'CONFIRM_REQUIRED');
 });
 
+test('owner is unlimited: no free-allotment or daily-call limit, can re-accept; testers unaffected', async () => {
+  const o = (await owner('GET', '/api/me')).json; assert.equal(o.avatar.unlimited, true); assert.equal(o.avatar.remaining, null);
+  for (let i = 0; i < 3; i++) { await sleep(150); const r = await gen(owner, 'avatar'); assert.equal(r.status, 200, JSON.stringify(r.json)); const j = await wait(owner, r.json.id); assert.equal(j.state, 'complete'); assert.equal(j.remaining, null);
+    const a = await owner('POST', '/api/onboarding/avatar/accept', { imageId: j.imageId }); assert.equal(a.status, 200); }
+  assert.equal((await alice('GET', '/api/me')).json.avatar.unlimited, false);
+});
+
 test('global pause and the owner summary', async () => {
   await owner('POST', '/api/_admin/pause', { paused: true });
   await sleep(150);
   const r = await gen(alice, 'avatar'); assert.equal(r.status, 429); assert.equal(r.json.error, 'GENERATION_PAUSED');
   await owner('POST', '/api/_admin/pause', { paused: false });
   const s = (await owner('GET', '/api/_admin/summary')).json;
-  assert.equal(s.paused, false); assert.ok(s.usdToday > 0 && s.usdToday < 1, String(s.usdToday));
+  assert.equal(s.paused, false); assert.ok(s.usdToday > 0 && s.usdToday < 5, String(s.usdToday));
   assert.ok(!JSON.stringify(s).includes('mock-key'));
 });
 

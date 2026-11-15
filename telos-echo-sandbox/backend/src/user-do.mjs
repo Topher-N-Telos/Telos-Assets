@@ -26,6 +26,7 @@ export class UserState extends DurableObject {
   }
   get cfg() { return parseConfig(this.env); }
   get devMock() { return this.env.DEV_BYPASS_AUTH === 'true' && !!this.env.OPENAI_API_BASE; }
+  get unlimited() { const o = String(this.env.OWNER_EMAIL || '').toLowerCase(); return !!o && this.meta('email') === o && this.env.OWNER_UNLIMITED !== 'false'; }
   get ledger() { return this.env.LEDGER.get(this.env.LEDGER.idFromName('global')); }
   q(s, ...b) { return this.sql.exec(s, ...b).toArray(); }
   one(s, ...b) { return this.q(s, ...b)[0] ?? null; }
@@ -126,9 +127,9 @@ export class UserState extends DurableObject {
 
   // ---------- views ----------
   kindView(kind) {
-    const allowed = this.allowed(kind), used = this.used(kind);
+    const allowed = this.allowed(kind), used = this.used(kind), unl = this.unlimited;
     return {
-      freeTotal: allowed, used, remaining: Math.max(0, allowed - used), acceptedImageId: this.accepted(kind),
+      unlimited: unl, freeTotal: unl ? null : allowed, used, remaining: unl ? null : Math.max(0, allowed - used), acceptedImageId: this.accepted(kind),
       images: this.q('SELECT id,job_id,accepted,created_at FROM images WHERE kind=? ORDER BY created_at', kind).map((r) => ({ id: r.id, jobId: r.job_id, accepted: !!r.accepted, createdAt: r.created_at })),
       pendingJob: this.one("SELECT id,state FROM jobs WHERE kind=? AND state IN ('created','working') ORDER BY created_at DESC LIMIT 1", kind)
     };
@@ -147,7 +148,7 @@ export class UserState extends DurableObject {
     const j = this.one('SELECT id,kind,state,failure,refunded,result,created_at FROM jobs WHERE id=?', id);
     if (!j) throw new ApiError(404, 'NOT_FOUND');
     const r = j.result ? JSON.parse(j.result) : null;
-    return { id: j.id, kind: j.kind, state: j.state, failure: j.failure ?? null, refunded: !!j.refunded, imageId: r?.imageId ?? null, createdAt: j.created_at, remaining: Math.max(0, this.allowed(j.kind) - this.used(j.kind)) };
+    return { id: j.id, kind: j.kind, state: j.state, failure: j.failure ?? null, refunded: !!j.refunded, imageId: r?.imageId ?? null, createdAt: j.created_at, remaining: this.unlimited ? null : Math.max(0, this.allowed(j.kind) - this.used(j.kind)) };
   }
   imageBytes(id) {
     const r = this.one('SELECT blob_id FROM images WHERE id=?', id); const b = r && this.getBlob(r.blob_id);
@@ -199,13 +200,13 @@ export class UserState extends DurableObject {
     }
     if (!cfg.generationEnabled) throw new ApiError(503, 'GENERATION_PAUSED');
     if (!this.env.OPENAI_API_KEY && !this.devMock) throw new ApiError(503, 'OPENAI_KEY_MISSING');
-    if (this.accepted(kind)) throw new ApiError(409, 'ALREADY_ACCEPTED');
+    if (this.accepted(kind) && !this.unlimited) throw new ApiError(409, 'ALREADY_ACCEPTED');
     const last = this.meta('lastSubmitAt', 0);
     if (last && now - last < cfg.minSubmitIntervalMs) throw new ApiError(429, 'TOO_SOON', { retryAfterMs: cfg.minSubmitIntervalMs - (now - last) });
     if (this.one("SELECT COUNT(*) n FROM jobs WHERE state IN ('created','working')").n >= cfg.maxQueuedUser) throw new ApiError(429, 'TOO_MANY_QUEUED');
-    if (this.callsToday(now) >= cfg.maxCallsPerDayUser) throw new ApiError(429, 'DAILY_CALL_CAP', { cap: cfg.maxCallsPerDayUser });
+    if (!this.unlimited && this.callsToday(now) >= cfg.maxCallsPerDayUser) throw new ApiError(429, 'DAILY_CALL_CAP', { cap: cfg.maxCallsPerDayUser });
     for (const id of p.photoIds) if (!this.one('SELECT 1 x FROM uploads WHERE id=?', id)) throw new ApiError(404, 'PHOTO_NOT_FOUND', { id });
-    if (this.used(kind) >= this.allowed(kind)) throw new ApiError(402, 'FREE_ALLOTMENT_USED');
+    if (!this.unlimited && this.used(kind) >= this.allowed(kind)) throw new ApiError(402, 'FREE_ALLOTMENT_USED');
     if (!cfg.allowPhotoUploads && p.photoIds.length) throw new ApiError(403, 'PHOTO_UPLOADS_DISABLED');
 
     const email = this.meta('email');
@@ -227,7 +228,7 @@ export class UserState extends DurableObject {
   accept(kind, body) {
     const img = this.one('SELECT id,kind FROM images WHERE id=?', String(body.imageId ?? ''));
     if (!img || img.kind !== kind) throw new ApiError(404, 'NOT_FOUND');
-    if (this.accepted(kind)) throw new ApiError(409, 'ALREADY_ACCEPTED');
+    if (this.accepted(kind)) { if (!this.unlimited) throw new ApiError(409, 'ALREADY_ACCEPTED'); this.run('UPDATE images SET accepted=0 WHERE kind=?', kind); }
     this.run('UPDATE images SET accepted=1 WHERE id=?', img.id);
     if (kind === 'avatar') {   // retention: likeness photos are deleted as soon as the avatar is chosen
       for (const u of this.q('SELECT id,blob_id FROM uploads')) { this.delBlob(u.blob_id); this.run('DELETE FROM uploads WHERE id=?', u.id); }
