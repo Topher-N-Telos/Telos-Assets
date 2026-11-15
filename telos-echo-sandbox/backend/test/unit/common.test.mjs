@@ -12,7 +12,7 @@ test('normalize: valid, and every fail-closed adult rule', () => {
   assert.throws(() => normalizeOnboarding('avatar', { ...ok, fields: { ...ok.fields, description: 'a young child' } }), /BLOCKED_MINOR_TERMS/);
   assert.throws(() => normalizeOnboarding('avatar', { ...ok, idempotencyKey: 'short' }), /FIELD_INVALID/);
   assert.throws(() => normalizeOnboarding('x', ok), /NOT_FOUND/);
-  assert.throws(() => normalizeOnboarding('telo', { ...ok, photoIds: ['abcdefgh'] }), /PHOTOS_NOT_ALLOWED_FOR_TELO/);
+  assert.deepEqual(normalizeOnboarding('telo', { ...ok, photoIds: ['abcdefgh'] }).photoIds, ['abcdefgh']);   // 14B.1A
 });
 test('helpers', () => {
   assert.ok(containsMinorSignal('a 12 year old')); assert.ok(!containsMinorSignal('a grown man'));

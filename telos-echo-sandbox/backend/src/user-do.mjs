@@ -160,10 +160,12 @@ export class UserState extends DurableObject {
   async addUpload(request) {
     const cfg = this.cfg;
     if (!cfg.allowPhotoUploads) throw new ApiError(403, 'PHOTO_UPLOADS_DISABLED');
+    // Avatar likeness photos (Master 18.7A): certification 'self' | 'permission'. Imported-character references for the Telō (Master 14B.1A): certification 'rights'.
     const cert = request.headers.get('x-certify');
-    if (!['self', 'permission'].includes(cert)) throw new ApiError(400, 'CERTIFICATION_REQUIRED');
-    if (this.accepted('avatar')) throw new ApiError(409, 'ALREADY_ACCEPTED');
-    if (this.one('SELECT COUNT(*) n FROM uploads').n >= cfg.maxPhotos) throw new ApiError(400, 'TOO_MANY_PHOTOS', { max: cfg.maxPhotos });
+    if (!['self', 'permission', 'rights'].includes(cert)) throw new ApiError(400, 'CERTIFICATION_REQUIRED');
+    const kind = cert === 'rights' ? 'telo' : 'avatar';
+    if (this.accepted(kind) && !this.unlimited) throw new ApiError(409, 'ALREADY_ACCEPTED');
+    if (this.one(`SELECT COUNT(*) n FROM uploads WHERE ${kind === 'telo' ? "certified='rights'" : "certified!='rights'"}`).n >= cfg.maxPhotos) throw new ApiError(400, 'TOO_MANY_PHOTOS', { max: cfg.maxPhotos });
     const len = Number(request.headers.get('content-length') || 0);
     if (len > cfg.maxPhotoBytes) throw new ApiError(413, 'IMAGE_TOO_LARGE', { maxBytes: cfg.maxPhotoBytes });
     const bytes = new Uint8Array(await request.arrayBuffer());
@@ -205,7 +207,7 @@ export class UserState extends DurableObject {
     if (last && now - last < cfg.minSubmitIntervalMs) throw new ApiError(429, 'TOO_SOON', { retryAfterMs: cfg.minSubmitIntervalMs - (now - last) });
     if (this.one("SELECT COUNT(*) n FROM jobs WHERE state IN ('created','working')").n >= cfg.maxQueuedUser) throw new ApiError(429, 'TOO_MANY_QUEUED');
     if (!this.unlimited && this.callsToday(now) >= cfg.maxCallsPerDayUser) throw new ApiError(429, 'DAILY_CALL_CAP', { cap: cfg.maxCallsPerDayUser });
-    for (const id of p.photoIds) if (!this.one('SELECT 1 x FROM uploads WHERE id=?', id)) throw new ApiError(404, 'PHOTO_NOT_FOUND', { id });
+    for (const id of p.photoIds) { const u = this.one('SELECT certified FROM uploads WHERE id=?', id); if (!u) throw new ApiError(404, 'PHOTO_NOT_FOUND', { id }); if ((u.certified === 'rights') !== (kind === 'telo')) throw new ApiError(400, 'PHOTO_WRONG_PURPOSE', { id }); }
     if (!this.unlimited && this.used(kind) >= this.allowed(kind)) throw new ApiError(402, 'FREE_ALLOTMENT_USED');
     if (!cfg.allowPhotoUploads && p.photoIds.length) throw new ApiError(403, 'PHOTO_UPLOADS_DISABLED');
 
@@ -230,9 +232,8 @@ export class UserState extends DurableObject {
     if (!img || img.kind !== kind) throw new ApiError(404, 'NOT_FOUND');
     if (this.accepted(kind)) { if (!this.unlimited) throw new ApiError(409, 'ALREADY_ACCEPTED'); this.run('UPDATE images SET accepted=0 WHERE kind=?', kind); }
     this.run('UPDATE images SET accepted=1 WHERE id=?', img.id);
-    if (kind === 'avatar') {   // retention: likeness photos are deleted as soon as the avatar is chosen
-      for (const u of this.q('SELECT id,blob_id FROM uploads')) { this.delBlob(u.blob_id); this.run('DELETE FROM uploads WHERE id=?', u.id); }
-    }
+    // retention: reference photos for the chosen kind are deleted as soon as the image is chosen
+    for (const u of this.q('SELECT id,blob_id,certified FROM uploads')) if ((u.certified === 'rights') === (kind === 'telo')) { this.delBlob(u.blob_id); this.run('DELETE FROM uploads WHERE id=?', u.id); }
     return this.me();
   }
 
@@ -293,7 +294,7 @@ export class UserState extends DurableObject {
           for (const id of p.photoIds) {
             const u = self.one('SELECT blob_id FROM uploads WHERE id=?', id); const b = u && self.getBlob(u.blob_id);
             if (!b) throw new Error('CANON_REFERENCES_UNAVAILABLE');
-            refs.push({ bytes: b.bytes, mime: b.mime, label: 'the user\'s own likeness reference photo (SUBJECT 1) — face and body' });
+            refs.push({ bytes: b.bytes, mime: b.mime, label: p.kind === 'telo' ? 'the character to render, reference image of an existing character (SUBJECT 1) — appearance' : 'the user\'s own likeness reference photo (SUBJECT 1) — face and body' });
           }
           return refs;
         },

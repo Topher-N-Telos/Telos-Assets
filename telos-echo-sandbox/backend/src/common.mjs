@@ -112,6 +112,5 @@ export function normalizeOnboarding(kind, body) {
   if (!/^[A-Za-z0-9_-]{16,64}$/.test(key)) throw new ApiError(400, 'FIELD_INVALID', { field: 'idempotencyKey' });
   const photoIds = body.photoIds ?? [];
   if (!Array.isArray(photoIds) || photoIds.length > 3 || photoIds.some((i) => typeof i !== 'string' || !/^[A-Za-z0-9_-]{6,64}$/.test(i))) throw new ApiError(400, 'FIELD_INVALID', { field: 'photoIds' });
-  if (kind === 'telo' && photoIds.length) throw new ApiError(400, 'PHOTOS_NOT_ALLOWED_FOR_TELO');   // Master 14B.1: no face reproduction for Telōsians
   return { kind, name, canon, description, style, world, outfit, photoIds, idempotencyKey: key };
 }

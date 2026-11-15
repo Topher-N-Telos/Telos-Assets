@@ -131,7 +131,6 @@ test('minors are refused: age < 18, minor terms, missing attestation', async () 
   assert.equal((await gen(bob, 'telo', { fields: { description: 'a teenage boy on a beach' } })).json.error, 'BLOCKED_MINOR_TERMS');
   assert.equal((await gen(bob, 'telo', { fields: { apparentAge: undefined, description: 'x' } })).json.error, 'FIELD_REQUIRED');
   assert.equal((await bob('POST', '/api/onboarding/telo/generate', { ...body(), adultAttested: false })).json.error, 'ADULT_ATTESTATION_REQUIRED');
-  assert.equal((await bob('POST', '/api/onboarding/telo/generate', { ...body(), photoIds: ['abcdefgh'] })).json.error, 'PHOTOS_NOT_ALLOWED_FOR_TELO');
   assert.equal((await bob('GET', '/api/me')).json.telo.remaining, 1);   // nothing consumed
 });
 
@@ -154,6 +153,21 @@ test('photo uploads: certification, magic bytes, per-user isolation, edits endpo
   assert.equal((await bob('GET', `/api/uploads/${u1.json.id}/image`)).status, 404);           // photos deleted on accept
   assert.equal((await bob('GET', '/api/me')).json.uploads.length, 0);
   assert.equal((await bob('POST', '/api/onboarding/avatar/generate', body())).json.error, 'ALREADY_ACCEPTED');
+});
+
+test('Telō imported-character references (14B.1A): rights certification, separate from avatar photos, edits endpoint, accept clears only telo refs', async () => {
+  await sleep(150);
+  const png = makePng(64, 96, [40, 60, 90]);
+  const r1 = await alice('POST', '/api/uploads', png, { 'x-certify': 'rights' }); assert.equal(r1.status, 200, JSON.stringify(r1.json));
+  const av = await alice('POST', '/api/uploads', png, { 'x-certify': 'self' }); assert.equal(av.status, 200);
+  assert.equal((await alice('POST', '/api/onboarding/avatar/generate', body({ photoIds: [r1.json.id] }))).json.error, 'PHOTO_WRONG_PURPOSE');
+  assert.equal((await alice('POST', '/api/onboarding/telo/generate', body({ photoIds: [av.json.id] }))).json.error, 'PHOTO_WRONG_PURPOSE');
+  const g = await alice('POST', '/api/onboarding/telo/generate', body({ photoIds: [r1.json.id] })); assert.equal(g.status, 200, JSON.stringify(g.json));
+  const j = await wait(alice, g.json.id); assert.equal(j.state, 'complete', JSON.stringify(j));
+  const sent = mockLog.at(-1); assert.equal(sent.path, '/v1/images/edits'); assert.equal(sent.imageParts, 1);
+  await alice('POST', '/api/onboarding/telo/accept', { imageId: j.imageId });
+  assert.equal((await alice('GET', `/api/uploads/${r1.json.id}/image`)).status, 404);
+  assert.equal((await alice('GET', '/api/me')).json.uploads.length, 1);   // the avatar photo is untouched
 });
 
 test('admin: owner can grant extra free generations; non-owner cannot; purge keeps counters', async () => {

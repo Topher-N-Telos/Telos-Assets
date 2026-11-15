@@ -19,6 +19,9 @@ img{max-width:100%;border-radius:8px;margin-top:8px} .box{border:1px solid #334;
  <label>Apparent age</label><input id="ava" value="30">
  <button id="avg">Generate avatar</button><div id="avo"></div></div>
 <div class="box"><b>First Telō</b> <small id="tes"></small>
+ <label>Reference images of an existing character (optional, up to 3)</label>
+ <input id="tph" type="file" accept="image/*" multiple>
+ <div class="row"><input id="tcert" type="checkbox" style="width:auto"><span>I created this character or hold the rights to it. These are character art, not photos of real people.</span></div>
  <label>Name</label><input id="ten">
  <label>Describe the Telō</label><textarea id="ted" rows="3"></textarea>
  <label>Apparent age</label><input id="tea" value="28">
@@ -29,13 +32,14 @@ img{max-width:100%;border-radius:8px;margin-top:8px} .box{border:1px solid #334;
 const $=id=>document.getElementById(id);
 const api=async(p,o={})=>{const r=await fetch(p,{...o,headers:{'x-telos':'1',...(o.headers||{})}});const t=r.headers.get('content-type')||'';if(t.includes('json')){const j=await r.json();if(!r.ok)throw Object.assign(new Error(j.error),{j});return j}if(!r.ok)throw new Error('HTTP '+r.status);return r.blob()};
 const key=()=>crypto.randomUUID().replace(/-/g,'');
-let photoIds=[];
+let photoIds=[],telePhotoIds=[];
 async function refresh(){const m=await api('/api/me');$('avs').textContent=`free left: ${m.avatar.unlimited?'unlimited':m.avatar.remaining}`;$('tes').textContent=`free left: ${m.telo.unlimited?'unlimited':m.telo.remaining}`;
  for(const [k,box] of [['avatar','avo'],['telo','teo']]){$(box).innerHTML='';for(const i of m[k].images){const im=document.createElement('img');im.src='/api/images/'+i.id;$(box).appendChild(im);
   if(!i.accepted&&!m[k].acceptedImageId){const b=document.createElement('button');b.textContent='Use this one';b.onclick=async()=>{await api(`/api/onboarding/${k}/accept`,{method:'POST',body:JSON.stringify({imageId:i.id})});refresh()};$(box).appendChild(b)}}}}
 $('ph').onchange=async e=>{$('msg').textContent='';photoIds=[];for(const f of e.target.files){try{const r=await api('/api/uploads',{method:'POST',headers:{'x-certify':$('cert').checked?'self':''},body:f});photoIds.push(r.id)}catch(x){$('msg').textContent=x.message}}};
+$('tph').onchange=async e=>{$('msg').textContent='';telePhotoIds=[];for(const f of e.target.files){try{const r=await api('/api/uploads',{method:'POST',headers:{'x-certify':$('tcert').checked?'rights':''},body:f});telePhotoIds.push(r.id)}catch(x){$('msg').textContent=x.message}}};
 async function gen(kind,fields,adult){$('msg').textContent='Generating…';try{
- let j=await api(`/api/onboarding/${kind}/generate`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({fields,adultAttested:adult,idempotencyKey:key(),photoIds:kind==='avatar'?photoIds:[]})});
+ let j=await api(`/api/onboarding/${kind}/generate`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({fields,adultAttested:adult,idempotencyKey:key(),photoIds:kind==='avatar'?photoIds:telePhotoIds})});
  while(j.state==='created'||j.state==='working'){await new Promise(r=>setTimeout(r,2000));j=await api('/api/jobs/'+j.id)}
  $('msg').textContent=j.state==='complete'?'Done.':'Failed: '+(j.failure||'')+(j.refunded?' (your free try was refunded)':'')}catch(e){$('msg').textContent=e.message}refresh()}
 $('avg').onclick=()=>gen('avatar',{description:$('avd').value,apparentAge:$('ava').value},$('cert').checked);
