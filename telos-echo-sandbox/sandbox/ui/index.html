@@ -33,7 +33,7 @@ a.s,button.s,button.b.s{background:#262a36;color:var(--tx)}button.d,button.b.d{b
 .thumb button{position:absolute;top:4px;right:4px;width:34px;height:34px;padding:0;border-radius:99px;font-size:18px;line-height:1}.thumb.sel{border-color:var(--acc)}.thumb .tag{position:absolute;left:4px;bottom:4px;font-size:11px;background:#000a;border-radius:6px;padding:1px 6px}
 .refs{display:flex;gap:6px;overflow-x:auto;padding:4px 0}.refs .thumb{flex:0 0 74px}
 .sheet{position:fixed;inset:0;background:#000b;z-index:20;display:flex;align-items:flex-end}
-.sheet>div{background:var(--card);border-radius:18px 18px 0 0;padding:16px 16px calc(18px + env(safe-area-inset-bottom));width:100%;max-height:92vh;overflow:auto;max-width:720px;margin:0 auto}
+.sheet>div{background:var(--card);border-radius:18px 18px 0 0;padding:16px 16px calc(18px + env(safe-area-inset-bottom));width:100%;max-height:calc(100vh - 190px);max-height:calc(100dvh - 190px);overscroll-behavior:contain;-webkit-overflow-scrolling:touch;overflow:auto;max-width:720px;margin:0 auto}
 .cmp{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}.cmp img{width:100%;border-radius:8px}
 .mut{color:var(--mut);font-size:13px}.err{color:var(--bad)}.ok{color:var(--ok)}
 table{width:100%;border-collapse:collapse;font-size:12.5px}td,th{border-bottom:1px solid var(--line);padding:5px 3px;text-align:left}
@@ -189,6 +189,7 @@ function charForm(c) {
         sheet.remove(); await refresh();
       }) } }, 'Save'))));
   document.body.append(sheet);
+  sheet.firstChild.scrollTop = 0;
 }
 
 // ---------- Generate ----------
