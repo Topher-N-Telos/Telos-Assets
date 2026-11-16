@@ -24933,7 +24933,7 @@ Respond with only the world key (e.g. UMBRA). Nothing else.`;
     { id: "Oceanids", label: "Oceanids", glyph: "\u274D", desc: "Sprite family, sea-born. Bioluminescent in low light." }
   ];
   var MARIS_OUTPOST_IMAGE = "/_blob/e8b32aafd2337a785fffd1a7feda27bc.jpg";
-  var MARIS_DEEP_IMAGE = "/_blob/1c9757d2002de04f3849d305a4e2e85e";
+  var MARIS_DEEP_IMAGE = "/_blob/1c9757d2002de04f3849d305a4e2e85e.png";
   var WORLD_MAP_BRIGHTNESS = { TENEBRIS: 1 };
   var TOWN_SQUARE_IMAGES = {
     "TERRA": "/_blob/13e8179335f642b69b5960c5c8b9b0b1.jpg",
@@ -33315,7 +33315,7 @@ Convert this into a precise, structured clothing/outfit description optimized fo
     // overview copy is minimal where canon (Master v186, 13.29B) defines no MARIS mechanics yet.
     sivaad: {
       name: "Anteri Sivaad",
-      interior: "/_blob/e64528bcc821aff2eeb7dc3750455719",
+      interior: "/_blob/e64528bcc821aff2eeb7dc3750455719.png",
       gate: "sivaad",
       overview: {
         whatHappens: "The MARIS house of Anteri Sivaad Boutique and Residences \u2014 an invitation-only membership above Pinnacle.",
@@ -33336,7 +33336,7 @@ Convert this into a precise, structured clothing/outfit description optimized fo
     },
     sivaad_boutique: {
       name: "The Boutique",
-      interior: "/_blob/91c3be5608ae185e603b0f9f30bff16c",
+      interior: "/_blob/91c3be5608ae185e603b0f9f30bff16c.png",
       gate: "sivaad",
       overview: {
         whatHappens: "The members' house for collections you can't find anywhere else.",
@@ -33348,7 +33348,7 @@ Convert this into a precise, structured clothing/outfit description optimized fo
       name: "Sivaad Interior Design Studio",
       buttonLabel: "Design Studio",
       buttonSub: "Sivaad Interior",
-      interior: "/_blob/a05ad9bd554e7dac663f820e69c85f1a",
+      interior: "/_blob/a05ad9bd554e7dac663f820e69c85f1a.png",
       gate: "sivaad",
       overview: {
         whatHappens: "Anteri Sivaad's members-only interior design studio.",
@@ -33420,7 +33420,7 @@ Convert this into a precise, structured clothing/outfit description optimized fo
     },
     porthole: {
       name: "Porthole Theatre",
-      interior: "/_blob/a87696715c2186130540308d989f4056",
+      interior: "/_blob/a87696715c2186130540308d989f4056.png",
       overview: {
         whatHappens: "Enter a five-tab story-streaming destination.",
         whatsHoused: "Home (Continue Watching / New Episodes / Trending / Recommended), By World, By Genre, Creators, My Stories.",
@@ -33438,7 +33438,7 @@ Convert this into a precise, structured clothing/outfit description optimized fo
     },
     deep_archive: {
       name: "Deep Archive",
-      interior: "/_blob/3dc3ada29bd6841d70f3cab2c822dd54",
+      interior: "/_blob/3dc3ada29bd6841d70f3cab2c822dd54.png",
       overview: {
         whatHappens: "MARIS's archive building, the most ancient institutional structure in TEL\u014CS.",
         whatsHoused: "Records from before the surface civilizations began counting time, stored in pressure gradients: the oldest, deepest records need the most pressure to reach.",
@@ -33467,14 +33467,14 @@ Convert this into a precise, structured clothing/outfit description optimized fo
   // Chris, Oct 7 2026: the MARIS outpost's Colosseum is Charybdis, the giant whirlpool in the outpost map's background. The Deep entrance
   // shows Tethys (the underwater volcano). The same Language game (The Current) is played at either; each entrance shows only its own zone.
   var MARIS_CLUSTERS = [
-    { id: "tethys", entrance: "deep", zone: { x0: 0.50, y0: 0.05, x1: 0.65, y1: 0.26 }, venues: ["tethys"], zoomImage: "/_blob/8e0ac18060fc6764bf937d1df2621c3f", single: true, directGame: true },
+    { id: "tethys", entrance: "deep", zone: { x0: 0.50, y0: 0.05, x1: 0.65, y1: 0.26 }, venues: ["tethys"], zoomImage: "/_blob/8e0ac18060fc6764bf937d1df2621c3f.png", single: true, directGame: true },
     { id: "shoal_market", entrance: "deep", label: "Shoal Market", zone: { x0: 0.02, y0: 0.45, x1: 0.24, y1: 0.68 }, venues: ["shoal_market"] },
     { id: "shoprow", entrance: "deep", label: "Current / Trove / Reef / The Drink", zone: { x0: 0.57, y0: 0.62, x1: 0.94, y1: 0.88 }, venues: ["current", "trove", "reef", "the_drink"], zoomImage: "/_blob/fd460daa1f6123a08308ad15521c429b",
       subZones: { current: { x0: 0.03, y0: 0.15, x1: 0.30, y1: 0.80 }, trove: { x0: 0.30, y0: 0.15, x1: 0.47, y1: 0.80 }, reef: { x0: 0.47, y0: 0.15, x1: 0.66, y1: 0.80 }, the_drink: { x0: 0.66, y0: 0.15, x1: 0.98, y1: 0.80 } } },
     { id: "porthole", entrance: "deep", label: "Porthole Theatre", zone: { x0: 0.67, y0: 0.20, x1: 0.97, y1: 0.42 }, venues: ["porthole"] },
-    { id: "deep_archive", entrance: "deep", label: "Deep Archive", zone: { x0: 0.20, y0: 0.70, x1: 0.50, y1: 0.97 }, venues: ["deep_archive"], zoomImage: "/_blob/79c4235ef838030e242bd317dd930a04", single: true },
-    { id: "sivaad", entrance: "deep", label: "Anteri Sivaad", zone: { x0: 0.03, y0: 0.05, x1: 0.28, y1: 0.36 }, venues: ["sivaad_residence", "sivaad_boutique", "sivaad_studio", "sivaad_bryn"], zoomImage: "/_blob/e64528bcc821aff2eeb7dc3750455719", buttons: true, lockedFallback: "sivaad" },
-    { id: "luminarium", entrance: "deep", label: "Luminarium", zone: { x0: 0.07, y0: 0.22, x1: 0.16, y1: 0.37 }, venues: ["luminarium"], zoomImage: "/_blob/b088d272112220f2ee78a2a3b7d5a0da", single: true },
+    { id: "deep_archive", entrance: "deep", label: "Deep Archive", zone: { x0: 0.20, y0: 0.70, x1: 0.50, y1: 0.97 }, venues: ["deep_archive"], zoomImage: "/_blob/79c4235ef838030e242bd317dd930a04.png", single: true },
+    { id: "sivaad", entrance: "deep", label: "Anteri Sivaad", zone: { x0: 0.03, y0: 0.05, x1: 0.28, y1: 0.36 }, venues: ["sivaad_residence", "sivaad_boutique", "sivaad_studio", "sivaad_bryn"], zoomImage: "/_blob/e64528bcc821aff2eeb7dc3750455719.png", buttons: true, lockedFallback: "sivaad" },
+    { id: "luminarium", entrance: "deep", label: "Luminarium", zone: { x0: 0.07, y0: 0.22, x1: 0.16, y1: 0.37 }, venues: ["luminarium"], zoomImage: "/_blob/b088d272112220f2ee78a2a3b7d5a0da.png", single: true },
     { id: "charybdis", entrance: "outpost", zone: { x0: 0.43, y0: 0.05, x1: 0.77, y1: 0.16 }, venues: ["charybdis"], zoomImage: "/_blob/6535119cd9bf1af0abcbb44e809113d1", single: true, directGame: true }
   ];
   var UMBRA_CLUSTERS = [{ id: "pit", zone: { x0: 0.36, y0: 0.06, x1: 0.65, y1: 0.28 }, venues: ["pit"] }];
