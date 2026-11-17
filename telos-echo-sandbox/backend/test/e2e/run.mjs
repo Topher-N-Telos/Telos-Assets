@@ -28,9 +28,9 @@ function launch(port, vars) {
 before(async () => {
   ({ log: globalThis.mockLog } = mock = await startMock(MOCK));
   await Promise.all([
-    launch(8787, BASE),
+    launch(8787, { ...BASE, MAX_USD_PER_DAY: 10, MAX_USD_PER_MONTH: 100 }),
     launch(8788, {}),                                                                   // no auth config at all
-    launch(8789, { ...BASE, MAX_USD_PER_DAY: 0.45, EST_USD_PER_CALL: 0.1 }),          // tiny global cap
+    launch(8789, { ...BASE, MAX_USD_PER_DAY: 0.65, EST_USD_PER_CALL: 0.1 }),          // tiny global cap
     launch(8790, { ...BASE, MAX_USD_PER_DAY: 50, MAX_USD_PER_MONTH: 500, MAX_CALLS_PER_DAY_USER: 60 })            // roomy caps: prebuilt-Telō tests
   ]);
 });
@@ -59,7 +59,11 @@ const wait = async (api, id, ms = 60000) => {
     await sleep(250);
   }
 };
-const gen = async (api, kind, over) => { const r = await api('POST', `/api/onboarding/${kind}/generate`, body(over)); return r; };
+// Avatars are now a package like Telōs: first generation = package, later ones are single-image redos ('full') unless a test says otherwise.
+const gen = async (api, kind, over) => {
+  if (kind === 'avatar' && !(over && over.part)) { const me = (await api('GET', '/api/me')).json; over = { ...over, part: me?.avatar?.hasPackage ? 'full' : 'package' }; }
+  return api('POST', `/api/onboarding/${kind}/generate`, body(over));
+};
 const genWait = async (api, kind, over) => { const r = await gen(api, kind, over); assert.equal(r.status, 200, JSON.stringify(r.json)); return wait(api, r.json.id); };
 
 test('secured instance refuses everything without Access config (fails closed)', async () => {
@@ -167,13 +171,14 @@ test('photo uploads: certification, magic bytes, per-user isolation, edits endpo
   const u2 = await bob('POST', '/api/uploads', png, { 'x-certify': 'self' }); assert.equal(u2.status, 200);
   const back = await bob('GET', `/api/uploads/${u1.json.id}/image`); assert.deepEqual(back.bytes, big);
   assert.equal((await alice('GET', `/api/uploads/${u1.json.id}/image`)).status, 404);          // other tester cannot read it
-  assert.equal((await alice('POST', '/api/onboarding/avatar/generate', body({ photoIds: [u1.json.id] }))).status, 404);
+  assert.equal((await alice('POST', '/api/onboarding/avatar/generate', body({ photoIds: [u1.json.id], part: 'full' }))).status, 404);
   await sleep(150);
   const r = await bob('POST', '/api/onboarding/avatar/generate', body({ photoIds: [u1.json.id, u2.json.id] })); assert.equal(r.status, 200, JSON.stringify(r.json));
   const j = await wait(bob, r.json.id); assert.equal(j.state, 'complete', JSON.stringify(j));
-  const sent = mockLog.at(-1); assert.equal(sent.path, '/v1/images/edits'); assert.equal(sent.imageParts, 2);
+  const sent = mockLog.at(-2); assert.equal(sent.path, '/v1/images/edits'); assert.equal(sent.imageParts, 2);
   assert.equal((await bob('POST', `/api/onboarding/avatar/accept`, { imageId: 'nope' })).status, 404);
-  const acc = await bob('POST', `/api/onboarding/avatar/accept`, { imageId: j.imageId }); assert.equal(acc.json.avatar.acceptedImageId, j.imageId);
+  assert.ok(j.faceImageId); assert.equal((await bob('POST', `/api/onboarding/avatar/accept`, { imageId: j.imageId })).json.error, 'FACE_IMAGE_REQUIRED');
+  const acc = await bob('POST', `/api/onboarding/avatar/accept`, { imageId: j.imageId, faceImageId: j.faceImageId }); assert.equal(acc.json.avatar.acceptedImageId, j.imageId);
   assert.equal((await bob('GET', `/api/uploads/${u1.json.id}/image`)).status, 404);           // photos deleted on accept
   assert.equal((await bob('GET', '/api/me')).json.uploads.length, 0);
   assert.equal((await bob('POST', '/api/onboarding/avatar/generate', body())).json.error, 'ALREADY_ACCEPTED');
@@ -184,7 +189,7 @@ test('Telō imported-character references (14B.1A): rights certification, separa
   const png = makePng(64, 96, [40, 60, 90]);
   const r1 = await alice('POST', '/api/uploads', png, { 'x-certify': 'rights' }); assert.equal(r1.status, 200, JSON.stringify(r1.json));
   const av = await alice('POST', '/api/uploads', png, { 'x-certify': 'self' }); assert.equal(av.status, 200);
-  assert.equal((await alice('POST', '/api/onboarding/avatar/generate', body({ photoIds: [r1.json.id] }))).json.error, 'PHOTO_WRONG_PURPOSE');
+  assert.equal((await alice('POST', '/api/onboarding/avatar/generate', body({ photoIds: [r1.json.id], part: 'full' }))).json.error, 'PHOTO_WRONG_PURPOSE');
   assert.equal((await alice('POST', '/api/onboarding/telo/generate', body({ photoIds: [av.json.id] }))).json.error, 'PHOTO_WRONG_PURPOSE');
   const g = await alice('POST', '/api/onboarding/telo/generate', body({ photoIds: [r1.json.id] })); assert.equal(g.status, 200, JSON.stringify(g.json));
   const j = await wait(alice, g.json.id); assert.equal(j.state, 'complete', JSON.stringify(j));
@@ -207,7 +212,7 @@ test('admin: owner can grant extra free generations; non-owner cannot; purge kee
 test('owner is unlimited: no free-allotment or daily-call limit, can re-accept; testers unaffected', async () => {
   const o = (await owner('GET', '/api/me')).json; assert.equal(o.avatar.unlimited, true); assert.equal(o.avatar.remaining, null);
   for (let i = 0; i < 3; i++) { await sleep(150); const r = await gen(owner, 'avatar'); assert.equal(r.status, 200, JSON.stringify(r.json)); const j = await wait(owner, r.json.id); assert.equal(j.state, 'complete'); assert.equal(j.remaining, null);
-    const a = await owner('POST', '/api/onboarding/avatar/accept', { imageId: j.imageId }); assert.equal(a.status, 200); }
+    const mo = (await owner('GET', '/api/me')).json.avatar; const a = await owner('POST', '/api/onboarding/avatar/accept', { imageId: j.imageId, faceImageId: mo.faceImages.at(-1).id }); assert.equal(a.status, 200); }
   assert.equal((await alice('GET', '/api/me')).json.avatar.unlimited, false);
 });
 
