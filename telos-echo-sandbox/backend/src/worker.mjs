@@ -5,6 +5,7 @@
  * `/` serves the Telōs app (public/telos.html via the ASSETS binding); `/test` serves the small image test harness.
  */
 import { authenticate, AuthError } from './auth.mjs';
+import { PREBUILT, allRefFiles } from './prebuilt-canon.mjs';
 import html from '../ui/index.html';
 export { UserState } from './user-do.mjs';
 export { Ledger } from './ledger-do.mjs';
@@ -83,6 +84,17 @@ export default {
     }
 
     const stub = env.USER_STATE.get(env.USER_STATE.idFromName(who.email));
+    // Prebuilt Telōs: reference images live in the Worker's private assets (public/_refs, never served to clients). Before the first
+    // generation for a character, copy them into this user's own DO over RPC (once per canon version), then forward the request as normal.
+    if (parts[1] === 'prebuilt' && parts[3] === 'generate' && request.method === 'POST' && PREBUILT[parts[2]] && !(await stub.hasCanon(parts[2]))) {
+      const files = {};
+      for (const f of allRefFiles(parts[2])) {
+        const a = await env.ASSETS.fetch(new Request(new URL(`/_refs/${f}`, request.url)));
+        if (!a.ok) return err(503, 'CANON_NOT_DEPLOYED');
+        files[f] = new Uint8Array(await a.arrayBuffer());
+      }
+      await stub.seedCanon(parts[2], files);
+    }
     const headers = new Headers(request.headers);
     headers.set('x-telos-user', who.email);          // set by the Worker only; overwrites anything the client sent
     return withSec(await stub.fetch(new Request(request, { headers })));

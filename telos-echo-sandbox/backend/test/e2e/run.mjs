@@ -8,10 +8,10 @@ import { join } from 'node:path';
 import { startMock } from './mock-openai.mjs';
 import { makePng } from './png.mjs';
 
-const A = 'http://localhost:8787', B = 'http://localhost:8788', C = 'http://localhost:8789', MOCK = 8799;
+const A = 'http://localhost:8787', B = 'http://localhost:8788', C = 'http://localhost:8789', D = 'http://localhost:8790', MOCK = 8799;
 let mock, procs = [];
-const OWNER = 'owner@example.com', ALICE = 'alice@example.com', BOB = 'bob@example.com', EVE = 'eve@example.com';
-const BASE = { OWNER_EMAIL: OWNER, ALLOWED_EMAILS: `${ALICE},${BOB}`, DEV_BYPASS_AUTH: 'true', OPENAI_API_BASE: `http://127.0.0.1:${MOCK}/v1`, OPENAI_API_KEY: 'mock-key', MIN_SUBMIT_INTERVAL_MS: 100 };
+const OWNER = 'owner@example.com', ALICE = 'alice@example.com', BOB = 'bob@example.com', EVE = 'eve@example.com', CARA = 'cara@example.com';
+const BASE = { OWNER_EMAIL: OWNER, ALLOWED_EMAILS: `${ALICE},${BOB},${CARA}`, DEV_BYPASS_AUTH: 'true', OPENAI_API_BASE: `http://127.0.0.1:${MOCK}/v1`, OPENAI_API_KEY: 'mock-key', MIN_SUBMIT_INTERVAL_MS: 100 };
 
 function launch(port, vars) {
   const args = ['wrangler', 'dev', '--local', '--port', String(port), '--persist-to', mkdtempSync(join(tmpdir(), 'telos-be-')), '--inspector-port', String(port + 100)];
@@ -30,7 +30,8 @@ before(async () => {
   await Promise.all([
     launch(8787, BASE),
     launch(8788, {}),                                                                   // no auth config at all
-    launch(8789, { ...BASE, MAX_USD_PER_DAY: 0.45, EST_USD_PER_CALL: 0.1 })           // tiny global cap
+    launch(8789, { ...BASE, MAX_USD_PER_DAY: 0.45, EST_USD_PER_CALL: 0.1 }),          // tiny global cap
+    launch(8790, { ...BASE, MAX_USD_PER_DAY: 50, MAX_USD_PER_MONTH: 500 })            // roomy caps: prebuilt-Telō tests
   ]);
 });
 after(() => { for (const p of procs) { try { process.kill(-p.pid, 'SIGKILL'); } catch {} } mock?.server.close(); });
@@ -231,4 +232,72 @@ test('global USD cap stops spend across users (tiny cap instance)', async () => 
 test('no secrets leak in any response', async () => {
   for (const p of ['/api/me', '/api/_admin/summary']) { const r = await owner('GET', p); assert.ok(!JSON.stringify(r.json).includes('mock-key'), p); }
   assert.equal(mockLog.filter((e) => e.auth !== 'Bearer mock-key').length, 0);
+});
+
+
+// ---------- prebuilt (starter) Telōs: canon references seeded server-side, outfit / scene generation ----------
+const cara = as(CARA, D), aliceD = as(ALICE, D), bobD = as(BOB, D), ownerD = as(OWNER, D), eveD = as(EVE, D);
+const pbBody = (over = {}) => ({ mode: 'scene', scene: 'Standing at a heavy wooden door at dusk, about to knock.', idempotencyKey: key(), ...over });
+const pbGen = (api, id, over) => api('POST', `/api/prebuilt/${id}/generate`, pbBody(over));
+const pbWait = async (api, id, over) => { const r = await pbGen(api, id, over); assert.equal(r.status, 200, JSON.stringify(r.json)); return wait(api, r.json.id); };
+
+test('prebuilt: canon references are private to the Worker (not served to anyone)', async () => {
+  for (const p of ['/_refs/terra-nova/face.jpg', '/_refs/auris-aeon/dragon-face.jpg', '/public/_refs/terra-nova/face.jpg']) assert.equal((await aliceD('GET', p)).status, 404, p);
+  assert.equal((await ownerD('GET', '/_refs/terra-nova/face.jpg')).status, 404);
+});
+
+test('prebuilt: scene uses face+body+canon look; outfit change drops the look; Æon dragon has no look and human has one', async () => {
+  assert.equal((await cara('GET', '/api/me')).json.prebuilt.remaining, 6);
+  const n = mockLog.length;
+  let j = await pbWait(cara, 'nova'); assert.equal(j.state, 'complete', JSON.stringify(j)); assert.ok(j.imageId); assert.equal(j.remaining, 5);
+  let sent = mockLog.at(-1); assert.equal(mockLog.length - n, 1); assert.equal(sent.path, '/v1/images/edits'); assert.equal(sent.imageParts, 3);
+  await sleep(150);
+  j = await pbWait(cara, 'nova', { mode: 'outfit', outfit: 'a deep burgundy wool coat with gold buttons', scene: undefined }); assert.equal(j.state, 'complete', JSON.stringify(j));
+  assert.equal(mockLog.at(-1).imageParts, 2);
+  await sleep(150);
+  j = await pbWait(cara, 'aeon', { scene: 'Resting at the foot of a waterfall in the cave city.' }); assert.equal(j.state, 'complete'); assert.equal(mockLog.at(-1).imageParts, 2);   // dragon (default): face + body
+  await sleep(150);
+  j = await pbWait(cara, 'aeon', { form: 'human' }); assert.equal(j.state, 'complete'); assert.equal(mockLog.at(-1).imageParts, 3);                                   // Sir Rocco: face + body + look
+  assert.equal((await cara('GET', '/api/images/' + j.imageId)).bytes[1], 0x50);
+  assert.equal((await bobD('GET', '/api/images/' + j.imageId)).status, 404);                                                                                          // private to the owner
+  assert.equal((await cara('GET', '/api/me')).json.prebuilt.remaining, 2);
+});
+
+test('prebuilt: validation fails closed before any spend', async () => {
+  const n = mockLog.length;
+  const bad = async (id, over, status, code) => { const r = await pbGen(cara, id, over); assert.equal(r.status, status, JSON.stringify(r.json)); assert.equal(r.json.error, code); };
+  await bad('nobody', {}, 404, 'NOT_FOUND');
+  await bad('nova', { mode: 'banana' }, 400, 'FIELD_INVALID');
+  await bad('nova', { mode: 'outfit', outfit: '' }, 400, 'FIELD_REQUIRED');
+  await bad('nova', { scene: '' }, 400, 'FIELD_REQUIRED');
+  await bad('nova', { form: 'human' }, 400, 'FIELD_INVALID');                                    // only Æon has a second form
+  await bad('aeon', { form: 'wolf' }, 400, 'FIELD_INVALID');
+  await bad('oryn', { scene: 'a teen standing at a door' }, 400, 'BLOCKED_MINOR_TERMS');
+  await bad('oryn', { idempotencyKey: 'short' }, 400, 'FIELD_INVALID');
+  await bad('oryn', { scene: 'x'.repeat(501) }, 400, 'FIELD_INVALID');
+  assert.equal(mockLog.length, n);
+  assert.equal((await eveD('POST', '/api/prebuilt/nova/generate', pbBody())).status, 403);   // allowlist applies
+});
+
+test('prebuilt: provider rejection refunds the allotment; replay is idempotent; image delete works; owner is unlimited', async () => {
+  const before = (await cara('GET', '/api/me')).json.prebuilt.remaining;
+  await sleep(150);
+  const j = await pbWait(cara, 'seraphine', { scene: 'FORCE_400 at the library window' });
+  assert.equal(j.state, 'failed'); assert.equal(j.refunded, true);
+  assert.equal((await cara('GET', '/api/me')).json.prebuilt.remaining, before);
+  await sleep(150);
+  const b = pbBody({ scene: 'At the moonlit balcony.' });
+  const r1 = await cara('POST', '/api/prebuilt/seraphine/generate', b); assert.equal(r1.status, 200);
+  const n = mockLog.length; const r2 = await cara('POST', '/api/prebuilt/seraphine/generate', b);
+  assert.equal(r2.json.replay, true); assert.equal(r2.json.id, r1.json.id);
+  const done = await wait(cara, r1.json.id); assert.equal(mockLog.length - n, 1);
+  assert.equal((await cara('DELETE', '/api/images/' + done.imageId)).status, 200); assert.equal((await cara('GET', '/api/images/' + done.imageId)).status, 404);
+  const ownerJob = await pbWait(ownerD, 'oryn'); assert.equal(ownerJob.state, 'complete'); assert.equal(ownerJob.remaining, null);
+});
+
+test('prebuilt: allotment runs out at the configured number, then FREE_ALLOTMENT_USED', async () => {
+  const me = (await cara('GET', '/api/me')).json.prebuilt;
+  for (let i = 0; i < me.remaining; i++) { await sleep(150); const j = await pbWait(cara, 'oryn'); assert.equal(j.state, 'complete', JSON.stringify(j)); }
+  await sleep(150);
+  const r = await pbGen(cara, 'oryn'); assert.ok([402, 429].includes(r.status), JSON.stringify(r.json));
 });

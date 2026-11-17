@@ -15,6 +15,7 @@ function num(v, fallback, { min = 0, max = Infinity, int = false } = {}) {
 export const DEFAULTS = Object.freeze({
   freeAvatar: 2,            // Master 18.7 (v203): avatar image free + one free redo
   freeTelo: 2,              // Master 30.2 (v203): first Telō free + its first redo free
+  freePrebuilt: 6,          // tester build: free outfit/scene generations for prebuilt Telōs (economy not yet specified; owner adjustable)
   quality: 'high', size: '1024x1536',
   maxCallsPerDayUser: 8,    // attempts per user per day (refunded attempts still count toward this cap)
   minSubmitIntervalMs: 5000, maxQueuedUser: 1,
@@ -31,6 +32,7 @@ export function parseConfig(env = {}) {
   return {
     freeAvatar: num(env.FREE_AVATAR_GENERATIONS, d.freeAvatar, { min: 0, max: 20, int: true }),
     freeTelo: num(env.FREE_TELO_GENERATIONS, d.freeTelo, { min: 0, max: 20, int: true }),
+    freePrebuilt: num(env.FREE_PREBUILT_GENERATIONS, d.freePrebuilt, { min: 0, max: 100, int: true }),
     quality, size,
     model: String(env.IMAGE_MODEL || 'gpt-image-2.6-sunburst'),
     maxCallsPerDayUser: num(env.MAX_CALLS_PER_DAY_USER, d.maxCallsPerDayUser, { min: 1, max: 200, int: true }),

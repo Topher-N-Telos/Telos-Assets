@@ -9,9 +9,11 @@ import { createSceneImageService } from '../../src/scene-image-service.mjs';
 import { createOpenAIImageAdapter } from '../../src/openai-image-api.mjs';
 import { ApiError, parseConfig, costFromUsage, dayKey, containsMinorSignal, sniffImage, firstNumber, normalizeOnboarding, KINDS } from './common.mjs';
 import { screenUpload, screenOutput } from './safety.mjs';
+import { PREBUILT, PREBUILT_VERSION, refPlan, prebuiltScene, normalizePrebuilt } from './prebuilt-canon.mjs';
 
 const CHUNK = 900_000;
 const MAX_JSON_BYTES = 32 * 1024;
+const PREBUILT_KIND = 'prebuilt';
 const STALE_WORKING_MS = 10 * 60 * 1000;
 const rid = () => crypto.randomUUID().replace(/-/g, '').slice(0, 22);
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
@@ -66,7 +68,7 @@ export class UserState extends DurableObject {
   delBlob(id) { this.run('DELETE FROM blob_chunks WHERE blob_id=?', id); this.run('DELETE FROM blobs WHERE id=?', id); }
 
   // ---------- entitlements ----------
-  allowed(kind) { return (kind === 'avatar' ? this.cfg.freeAvatar : this.cfg.freeTelo) + (this.meta(`extra_${kind}`, 0)); }
+  allowed(kind) { return (kind === 'avatar' ? this.cfg.freeAvatar : kind === PREBUILT_KIND ? this.cfg.freePrebuilt : this.cfg.freeTelo) + (this.meta(`extra_${kind}`, 0)); }
   used(kind) { return this.one("SELECT COUNT(*) n FROM grants WHERE kind=? AND state IN ('held','committed')", kind).n; }
   accepted(kind) { return this.one('SELECT id FROM images WHERE kind=? AND accepted=1', kind)?.id ?? null; }
 
@@ -110,13 +112,15 @@ export class UserState extends DurableObject {
       if (c === 'generate' && m === 'POST') return json(await this.generate(b, await this.body(request)));
       if (c === 'accept' && m === 'POST') return json(this.accept(b, await this.body(request)));
     }
+    if (a === 'prebuilt' && b && c === 'generate' && m === 'POST') return json(await this.generatePrebuilt(b, await this.body(request)));
     if (a === 'jobs' && b && m === 'GET') return json(this.jobView(b));
+    if (a === 'images' && b && m === 'DELETE') return json(this.deletePrebuiltImage(b));
     if (a === 'images' && b && m === 'GET') return this.imageBytes(b);
     // internal admin routes: the Worker only forwards these for the owner
     if (a === '_admin') {
       if (b === 'allowance' && m === 'POST') {
         const j = await this.body(request);
-        if (!KINDS.includes(j.kind) || !Number.isInteger(j.extra) || j.extra < 1 || j.extra > 20) throw new ApiError(400, 'FIELD_INVALID');
+        if (![...KINDS, PREBUILT_KIND].includes(j.kind) || !Number.isInteger(j.extra) || j.extra < 1 || j.extra > 20) throw new ApiError(400, 'FIELD_INVALID');
         this.setMeta(`extra_${j.kind}`, this.meta(`extra_${j.kind}`, 0) + j.extra);
         return json(this.me());
       }
@@ -137,7 +141,7 @@ export class UserState extends DurableObject {
   me() {
     const cfg = this.cfg, now = Date.now();
     return {
-      avatar: this.kindView('avatar'), telo: this.kindView('telo'),
+      avatar: this.kindView('avatar'), telo: this.kindView('telo'), prebuilt: this.kindView(PREBUILT_KIND),
       uploads: this.q('SELECT id,certified,created_at FROM uploads ORDER BY created_at').map((r) => ({ id: r.id, certifiedAs: r.certified, createdAt: r.created_at })),
       limits: { callsToday: this.callsToday(now), callsPerDay: cfg.maxCallsPerDayUser, minIntervalMs: cfg.minSubmitIntervalMs },
       config: { quality: cfg.quality, size: cfg.size, allowPhotoUploads: cfg.allowPhotoUploads, maxPhotos: cfg.maxPhotos, keyConfigured: !!this.env.OPENAI_API_KEY || this.devMock },
@@ -190,10 +194,44 @@ export class UserState extends DurableObject {
     return { ok: true };
   }
 
+  // ---------- prebuilt Telō canon references (seeded by the Worker over RPC; never reachable from a client request) ----------
+  hasCanon(charId) { return this.meta(`canon_${charId}`)?.version === PREBUILT_VERSION; }
+  seedCanon(charId, files) {
+    const c = PREBUILT[charId]; if (!c) throw new ApiError(404, 'NOT_FOUND');
+    const old = this.meta(`canon_${charId}`);
+    const next = {};
+    for (const [path, bytes] of Object.entries(files)) next[path] = this.putBlob(bytes, sniffImage(new Uint8Array(bytes)) ?? 'image/jpeg');
+    this.setMeta(`canon_${charId}`, { version: PREBUILT_VERSION, files: next });
+    if (old?.files) for (const id of Object.values(old.files)) this.delBlob(id);
+    return true;
+  }
+  canonRefs(charId, form, hasOutfit) {
+    const rec = this.meta(`canon_${charId}`);
+    if (rec?.version !== PREBUILT_VERSION) throw new Error('CANON_REFERENCES_UNAVAILABLE');
+    return refPlan(charId, form, hasOutfit).map((r) => {
+      const b = rec.files[r.file] && this.getBlob(rec.files[r.file]);
+      if (!b) throw new Error('CANON_REFERENCES_UNAVAILABLE');
+      return { bytes: b.bytes, mime: b.mime, label: r.label };
+    });
+  }
+
   // ---------- generate ----------
+  async generatePrebuilt(charId, body) {
+    const p = normalizePrebuilt(charId, body);
+    if (!this.hasCanon(charId)) throw new ApiError(503, 'CANON_NOT_SEEDED');
+    return this.admit(PREBUILT_KIND, p);
+  }
   async generate(kind, body) {
+    return this.admit(kind, normalizeOnboarding(kind, body));
+  }
+  deletePrebuiltImage(id) {
+    const r = this.one('SELECT blob_id,kind FROM images WHERE id=?', id);
+    if (!r || r.kind !== PREBUILT_KIND) throw new ApiError(404, 'NOT_FOUND');
+    this.delBlob(r.blob_id); this.run('DELETE FROM images WHERE id=?', id);
+    return { ok: true };
+  }
+  async admit(kind, p) {
     const cfg = this.cfg, now = Date.now();
-    const p = normalizeOnboarding(kind, body);
     const hash = await sha(JSON.stringify(stable(p)));
     const prior = this.one('SELECT id,hash FROM jobs WHERE idem=?', p.idempotencyKey);
     if (prior) {                                       // idempotent replay: same key -> same job, no new spend
@@ -202,7 +240,7 @@ export class UserState extends DurableObject {
     }
     if (!cfg.generationEnabled) throw new ApiError(503, 'GENERATION_PAUSED');
     if (!this.env.OPENAI_API_KEY && !this.devMock) throw new ApiError(503, 'OPENAI_KEY_MISSING');
-    if (this.accepted(kind) && !this.unlimited) throw new ApiError(409, 'ALREADY_ACCEPTED');
+    if (kind !== PREBUILT_KIND && this.accepted(kind) && !this.unlimited) throw new ApiError(409, 'ALREADY_ACCEPTED');
     const last = this.meta('lastSubmitAt', 0);
     if (last && now - last < cfg.minSubmitIntervalMs) throw new ApiError(429, 'TOO_SOON', { retryAfterMs: cfg.minSubmitIntervalMs - (now - last) });
     if (this.one("SELECT COUNT(*) n FROM jobs WHERE state IN ('created','working')").n >= cfg.maxQueuedUser) throw new ApiError(429, 'TOO_MANY_QUEUED');
@@ -271,25 +309,29 @@ export class UserState extends DurableObject {
     const email = this.meta('email');
     const principal = { userId: (await sha(String(email))).slice(0, 32), verifiedAdult: false, age: 18 };
     const sceneId = `scene_${job.id}`;
-    const adult = (p.canon.apparentAge && (firstNumber(p.canon.apparentAge) ?? 18) >= 18) ? 'adult' : 'unknown';
-    const sceneIntro = p.kind === 'avatar'
+    const pb = p.kind === PREBUILT_KIND ? prebuiltScene(p) : null;
+    const adult = pb ? 'adult' : (p.canon.apparentAge && (firstNumber(p.canon.apparentAge) ?? 18) >= 18) ? 'adult' : 'unknown';
+    const sceneIntro = pb ? pb.sceneIntro : p.kind === 'avatar'
       ? 'Onboarding portrait of the user\'s own avatar: one person, head-and-shoulders to three-quarter framing, shown in their world.'
       : 'Onboarding portrait of the user\'s first Telōsian companion: one person, head-and-shoulders to three-quarter framing, shown in their world.';
     let usedProvider = false;
 
     const service = createSceneImageService({
       scenes: { async getAuthorizedScene(uid, sid) {
-        return sid === sceneId ? { id: sceneId, description: sceneIntro, worldId: 'onboarding', locationId: null, participantIds: [p.kind], occurredAt: new Date(job.created_at).toISOString(), privateAdult: false } : null;
+        return sid === sceneId ? { id: sceneId, description: sceneIntro, worldId: 'onboarding', locationId: null, participantIds: [pb ? p.charId : p.kind], occurredAt: new Date(job.created_at).toISOString(), privateAdult: false } : null;
       } },
       canon: {
         async getCharacterSnapshots() {
+          if (pb) return [{ id: p.charId, displayName: pb.displayName, canonVersion: PREBUILT_VERSION, canonAgeClass: 'adult', ageAmbiguous: false, minorPresenting: false, adultEligible: false,
+            appearance: { locked: pb.locked, atSceneTime: pb.outfit ? { currentOutfit: pb.outfit } : {} }, relationshipFacts: [] }];
           return [{ id: p.kind, displayName: p.name || (p.kind === 'avatar' ? 'The user' : 'The companion'), canonVersion: 'v1', canonAgeClass: adult, ageAmbiguous: adult !== 'adult', minorPresenting: false, adultEligible: false,
             appearance: { locked: p.canon, atSceneTime: p.outfit ? { currentOutfit: p.outfit } : {} }, relationshipFacts: [] }];
         },
-        async getWorldSnapshot() { return { id: 'onboarding', visualCanon: p.world || '' }; }
+        async getWorldSnapshot() { return { id: 'onboarding', visualCanon: pb ? pb.worldVisual : (p.world || '') }; }
       },
       media: {
         async loadCanonReferences() {
+          if (pb) return self.canonRefs(p.charId, p.form, !!p.outfit);
           const refs = [];
           for (const id of p.photoIds) {
             const u = self.one('SELECT blob_id FROM uploads WHERE id=?', id); const b = u && self.getBlob(u.blob_id);
@@ -301,7 +343,7 @@ export class UserState extends DurableObject {
         async savePrivateImage(rec) {
           const id = rid(); const { bytes, ...m } = rec;
           self.run('INSERT INTO images(id,job_id,kind,blob_id,meta,accepted,created_at) VALUES(?,?,?,?,?,0,?)', id, jobId, p.kind, self.putBlob(bytes, rec.mime),
-            JSON.stringify({ model: m.providerModel, quality: cfg.quality, size: cfg.size, referenceCount: m.referenceCount, endpoint: m.endpoint, moderation: m.moderation }), Date.now());
+            JSON.stringify({ model: m.providerModel, quality: cfg.quality, size: cfg.size, referenceCount: m.referenceCount, endpoint: m.endpoint, moderation: m.moderation, ...(pb ? { charId: p.charId, form: p.form, mode: p.mode } : {}) }), Date.now());
           return { id };
         }
       },
@@ -326,7 +368,7 @@ export class UserState extends DurableObject {
       },
       safeguards: {
         async beforeGeneration({ snapshots }) {
-          if (containsMinorSignal(p.name, p.description, p.style, p.world, p.outfit, ...Object.values(p.canon))) throw new Error('BLOCKED_MINOR_TERMS');
+          if (containsMinorSignal(p.name, p.description, p.style, p.world, p.outfit, p.scene, p.direction, ...Object.values(p.canon ?? {}))) throw new Error('BLOCKED_MINOR_TERMS');
           if (!snapshots.every((s) => s.canonAgeClass === 'adult')) throw new Error('MINOR_OR_AMBIGUOUS_CHARACTER_BLOCKED');
         },
         async afterGeneration({ bytes }) {
@@ -351,7 +393,7 @@ export class UserState extends DurableObject {
 
     try {
       await service({ principal, trustedSurface: 'sfw',
-        request: { sceneId, idempotencyKey: job.idem, purpose: 'manual', quoteId: null, artDirection: [p.description, p.style && `Style: ${p.style}`].filter(Boolean).join('\n'), mode: 'portrait', quality: cfg.quality, size: cfg.size } });
+        request: { sceneId, idempotencyKey: job.idem, purpose: 'manual', quoteId: null, artDirection: pb ? pb.artDirection : [p.description, p.style && `Style: ${p.style}`].filter(Boolean).join('\n'), mode: pb ? pb.mode : 'portrait', quality: cfg.quality, size: cfg.size } });
     } catch { /* recorded on the job row and in diag */ }
 
     // Reconcile: ANY job that did not complete refunds the free allotment (Chris, Nov 15: rejected images are refunded).
