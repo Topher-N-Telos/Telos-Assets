@@ -313,7 +313,7 @@ export class UserState extends DurableObject {
     const adult = pb ? 'adult' : (p.canon.apparentAge && (firstNumber(p.canon.apparentAge) ?? 18) >= 18) ? 'adult' : 'unknown';
     const sceneIntro = pb ? pb.sceneIntro : p.kind === 'avatar'
       ? 'Onboarding portrait of the user\'s own avatar: one person, head-and-shoulders to three-quarter framing, shown in their world.'
-      : 'Onboarding portrait of the user\'s first Telōsian companion: one person, head-and-shoulders to three-quarter framing, shown in their world.';
+      : 'Onboarding full-length reference image of the user\'s first Telōsian companion: one person, the ENTIRE body visible from head to feet including footwear, standing upright and facing the camera in a relaxed neutral pose with arms slightly away from the body, centered with clear space around the figure, shown in their world against an uncluttered background that does not hide the silhouette.';
     let usedProvider = false;
 
     const service = createSceneImageService({
