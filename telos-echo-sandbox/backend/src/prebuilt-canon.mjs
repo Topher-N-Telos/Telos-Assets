@@ -8,9 +8,9 @@
  */
 import { ApiError, containsMinorSignal } from './common.mjs';
 
-export const PREBUILT_VERSION = 'v2';   // v2: adds the garment-layer registration canvas
+export const PREBUILT_VERSION = 'v3';   // v3: garment edits use the registration canvas + per-slot edit masks
 export const PREBUILT_MODES = ['outfit', 'scene', 'garment'];
-export const GARMENT_SLOTS = ['top', 'bottom', 'onepiece', 'shoes', 'accessory'];
+export const GARMENT_SLOTS = ['top', 'bottom', 'onepiece', 'shoes'];
 
 const REF_LABEL = {
   face: (n) => `FACE / IDENTITY reference for ${n} (SUBJECT 1) — reproduce this exact face, skin tone and hair`,
@@ -73,16 +73,20 @@ export const PREBUILT = Object.freeze({
 export const prebuiltIds = Object.keys(PREBUILT);
 
 /** Reference files (role -> path under /_refs/) for a given request. 'look' is dropped when the user asks for a new outfit. */
-export function refPlan(charId, form, hasOutfit, mode) {
+export function refPlan(charId, form, hasOutfit, mode, slot) {
   const c = PREBUILT[charId];
   if (mode === 'garment') {                       // wardrobe layer: ONE reference, the body fitted into the exact output canvas
-    return [{ role: 'canvas', file: `${c.dir}/canvas.jpg`, label: `REGISTRATION CANVAS for ${c.name} (SUBJECT 1) — the garment layer must be drawn at the exact position, scale and pose it has when worn on this body in this exact canvas` }];
+    return [
+      { role: 'canvas', file: `${c.dir}/canvas.jpg`, label: `${c.name} (SUBJECT 1) — the exact image to edit. Keep her face, hair, skin, body, pose, the backdrop and the framing identical` },
+      { role: 'mask', file: `${c.dir}/mask-${slot}.png`, label: '' }   // edit mask: only this region may change
+    ];
   }
   const set = c.refs[form];
   return Object.entries(set).filter(([role]) => !(role === 'look' && hasOutfit))
     .map(([role, file]) => ({ role, file: `${c.dir}/${file}.jpg`, label: REF_LABEL[role](c.name) }));
 }
-export const allRefFiles = (charId) => [...new Set([...Object.values(PREBUILT[charId].refs).flatMap((s) => Object.values(s)), ...(PREBUILT[charId].canvas ? ['canvas'] : [])])].map((f) => `${PREBUILT[charId].dir}/${f}.jpg`);
+export const allRefFiles = (charId) => [...new Set([...Object.values(PREBUILT[charId].refs).flatMap((s) => Object.values(s)), ...(PREBUILT[charId].canvas ? ['canvas'] : [])])].map((f) => `${PREBUILT[charId].dir}/${f}.jpg`)
+  .concat(PREBUILT[charId].canvas ? GARMENT_SLOTS.map((s) => `${PREBUILT[charId].dir}/mask-${s}.png`) : []);
 
 const text = (v, max, field) => {
   if (v === undefined || v === null || v === '') return '';
@@ -121,11 +125,11 @@ export function prebuiltScene(p) {
   const look = typeof c.canonLookText === 'string' ? c.canonLookText : c.canonLookText[p.form];
   const outfit = p.outfit || look || '';
   if (p.mode === 'garment') {
-    const what = { top: 'upper-body garment (top, shirt, jacket or blouse)', bottom: 'lower-body garment (trousers, skirt or shorts)', onepiece: 'one-piece garment (dress or jumpsuit)', shoes: 'pair of shoes', accessory: 'accessory' }[p.slot];
+    const what = { top: 'upper-body garment (top, shirt, jacket or blouse)', bottom: 'lower-body garment (trousers, skirt or shorts)', onepiece: 'one-piece garment (dress or jumpsuit)', shoes: 'pair of shoes' }[p.slot];
     return {
-      sceneIntro: `Wardrobe layer for ${c.name}: ONLY the ${what} described below, drawn on a fully transparent background. Show no person at all: no skin, no face, no hair, no hands, no mannequin, no other clothing. The garment sits at exactly the position, scale and pose it has when worn on the body in the registration canvas, same framing, same canvas, so it can be laid directly over that image.`,
-      displayName: c.name, locked, outfit: p.outfit, worldVisual: '', background: 'transparent',
-      artDirection: [`Garment (${p.slot}): ${p.outfit}`, 'Transparent background. Garment only. Keep the registration canvas geometry exactly.', p.direction].filter(Boolean).join('\n'),
+      sceneIntro: `Wardrobe edit for ${c.name}: replace ONLY her ${what} with the one described below. Fit it to her actual body exactly as it is in the image: her shoulder width, arm length, waist and hip line, in her current pose. Everything outside the edit area stays pixel-identical.`,
+      displayName: c.name, locked, outfit: p.outfit, worldVisual: '',
+      artDirection: [`New ${p.slot}: ${p.outfit}`, 'Tailored to her measurements, not oversized. Same backdrop, lighting, framing and pose as the image.', p.direction].filter(Boolean).join('\n'),
       mode: 'portrait'
     };
   }

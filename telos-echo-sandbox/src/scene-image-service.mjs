@@ -93,7 +93,10 @@ export function createSceneImageService({ scenes, canon, media, wallet, jobs, sa
         throw new Error('CHARACTER_NOT_ELIGIBLE_FOR_ADULT_SURFACE');
       }
 
-      const refs = await media.loadCanonReferences(principal.userId, snapshots, world, scene);
+      const allRefs = await media.loadCanonReferences(principal.userId, snapshots, world, scene);
+      if (!Array.isArray(allRefs)) throw new Error('CANON_REFERENCES_UNAVAILABLE');
+      const mask = allRefs.find((r) => r.role === 'mask') ?? null;       // optional edit mask: the only region the model may change
+      const refs = allRefs.filter((r) => r.role !== 'mask');
       if (!Array.isArray(refs) || refs.some((r) => !r.bytes || !r.mime)) throw new Error('CANON_REFERENCES_UNAVAILABLE');
       const referenceManifest = refs.map((r) => r.label).filter(Boolean).length === refs.length ? refs.map((r) => r.label) : [];
       const prompt = buildSceneImagePrompt({
@@ -116,7 +119,7 @@ export function createSceneImageService({ scenes, canon, media, wallet, jobs, sa
       hold = await wallet.reserve({ principal, quote, idempotencyKey: request.idempotencyKey });
 
       const safetyIdentifier = createHash('sha256').update(principal.userId).digest('hex');
-      const result = await openaiImage({ prompt, referenceImages: refs, surface: trustedSurface, safetyIdentifier,
+      const result = await openaiImage({ prompt, referenceImages: refs, ...(mask ? { mask } : {}), surface: trustedSurface, safetyIdentifier,
         ...(request.quality ? { quality: request.quality } : {}), ...(request.size ? { size: request.size } : {}), ...(request.background ? { background: request.background } : {}) });
 
       const evaluation = await safeguards.afterGeneration({ principal, scene, snapshots, trustedSurface, bytes: result.bytes });

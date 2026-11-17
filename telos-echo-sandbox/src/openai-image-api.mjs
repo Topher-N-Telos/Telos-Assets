@@ -65,7 +65,7 @@ export function createOpenAIImageAdapter({
    * Reference format: {bytes: Buffer|Uint8Array, mime:'image/png'|'image/jpeg'|'image/webp'}.
    * Takes trusted, server-retrieved assets only. Never accept arbitrary URLs from clients.
    */
-  return async function render({ prompt, referenceImages = [], surface, safetyIdentifier, quality = 'high', size = '1024x1536', background }) {
+  return async function render({ prompt, referenceImages = [], surface, safetyIdentifier, quality = 'high', size = '1024x1536', background, mask }) {
     if (!['sfw', 'adult'].includes(surface)) throw new Error('UNTRUSTED_SURFACE');
     if (!prompt || typeof prompt !== 'string') throw new Error('PROMPT_REQUIRED');
     if (referenceImages.length > MAX_REFERENCE_IMAGES) throw new Error('TOO_MANY_REFERENCES');
@@ -97,6 +97,12 @@ export function createOpenAIImageAdapter({
       const ext = ref.mime === 'image/jpeg' ? 'jpg' : ref.mime.split('/')[1];
       form.append('image[]', new Blob([bytes], { type: ref.mime }), `canon-${i}.${ext}`);
     });
+    if (mask) {   // trusted, server-built PNG: transparent pixels are the ONLY area the model may repaint
+      if (mask.mime !== 'image/png') throw new Error('UNSUPPORTED_CANON_REFERENCE_FORMAT');
+      const mb = Buffer.from(mask.bytes);
+      if (!mb.length || mb.length > MAX_REFERENCE_BYTES) throw new Error('CANON_REFERENCE_INVALID_SIZE');
+      form.append('mask', new Blob([mb], { type: 'image/png' }), 'mask.png');
+    }
     // For 2.6, omit input_fidelity: that parameter is model-specific.
     return submit('/images/edits', form, true, moderation);
   };

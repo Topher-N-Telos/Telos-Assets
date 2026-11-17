@@ -13,8 +13,8 @@
   .box > .in { background: #0d0d10; padding: 12px; }
   .stage { position: relative; width: 100%; aspect-ratio: 2 / 3; background: #000; overflow: hidden; }
   .stage.checker { background: conic-gradient(#555 25%, #333 0 50%, #555 0 75%, #333 0) 0 0 / 24px 24px; }
-  .stage img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: fill; display: block; }
-  .stage img.hide { display: none; }
+  .stage img, .stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: fill; display: block; }
+  .stage .hide { display: none; }
   .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
   .btn { background: #2a2630; color: var(--ink); border: 0; padding: 12px 14px; font: 600 11px/1 Georgia, serif; letter-spacing: 2px; cursor: pointer; }
   .btn.on { background: #3b3220; box-shadow: 0 0 14px rgba(201,164,92,.55); }
@@ -26,7 +26,7 @@
 </style></head>
 <body>
 <h1>WARDROBE LAYER TEST</h1>
-<div class="sub">Nova. Each piece is drawn alone on a transparent layer, then stacked over her base image on this screen.</div>
+<div class="sub">Nova. Each piece is painted onto her body inside a locked area, then lifted out as a layer and stacked over her base image on this screen.</div>
 
 <div class="box cut"><div class="in cut">
   <div class="stage cut" id="stage"><img id="base" alt="Nova base"></div>
@@ -48,7 +48,7 @@
 
 <script>
 (function () {
-  var SLOTS = { top: 'fitted cream linen blouse with rolled sleeves', bottom: 'high-waisted charcoal tailored trousers', shoes: 'white leather low-top sneakers' };
+  var SLOTS = { top: 'fitted cream linen blouse with rolled sleeves', bottom: 'high-waisted charcoal tailored trousers', onepiece: 'knee-length emerald wrap dress', shoes: 'white leather low-top sneakers' };
   var slot = 'top', layers = {}, busy = false, solo = false, checker = false;
   var $ = function (id) { return document.getElementById(id); };
   var log = function (t) { $('log').textContent = t; };
@@ -72,12 +72,20 @@
       b.onclick = function () { L.visible = !L.visible; L.img.classList.toggle('hide', !L.visible); drawToggles(); }; $('toggles').appendChild(b);
     });
   }
-  function transparency(img) {   // how much of the layer is truly clear, and where the garment sits
-    var c = document.createElement('canvas'); c.width = 128; c.height = 192; var x = c.getContext('2d'); x.drawImage(img, 0, 0, 128, 192);
-    var d = x.getImageData(0, 0, 128, 192).data, clear = 0, minX = 999, minY = 999, maxX = -1, maxY = -1;
-    for (var i = 0; i < d.length; i += 4) { var px = (i / 4) % 128, py = Math.floor(i / 4 / 128); if (d[i + 3] < 12) clear++; else { if (px < minX) minX = px; if (px > maxX) maxX = px; if (py < minY) minY = py; if (py > maxY) maxY = py; } }
-    var pct = Math.round(100 * clear / (d.length / 4));
-    return { clearPct: pct, bbox: maxX < 0 ? null : [Math.round(minX / 128 * 100), Math.round(minY / 192 * 100), Math.round(maxX / 128 * 100), Math.round(maxY / 192 * 100)] };
+  var baseImg = null;
+  function loadImg(src) { return new Promise(function (ok, no) { var i = new Image(); i.onload = function () { ok(i); }; i.onerror = no; i.src = src; }); }
+  // The model returns the whole edited picture. Everything it left alone equals the base, so the layer is just the pixels that changed.
+  function makeLayer(out, base) {
+    var W = 1024, H = 1536, c1 = document.createElement('canvas'), c2 = document.createElement('canvas'); c1.width = c2.width = W; c1.height = c2.height = H;
+    var x1 = c1.getContext('2d', { willReadFrequently: true }), x2 = c2.getContext('2d', { willReadFrequently: true }); x1.drawImage(out, 0, 0, W, H); x2.drawImage(base, 0, 0, W, H);
+    var a = x1.getImageData(0, 0, W, H), b = x2.getImageData(0, 0, W, H).data, n = 0, minX = W, minY = H, maxX = 0, maxY = 0;
+    for (var i = 0; i < a.data.length; i += 4) {
+      var d = Math.abs(a.data[i] - b[i]) + Math.abs(a.data[i + 1] - b[i + 1]) + Math.abs(a.data[i + 2] - b[i + 2]);
+      var al = d < 36 ? 0 : d > 72 ? 255 : Math.round((d - 36) / 36 * 255); a.data[i + 3] = al;
+      if (al > 0) { n++; var p = i / 4, px = p % W, py = (p - px) / W; if (px < minX) minX = px; if (px > maxX) maxX = px; if (py < minY) minY = py; if (py > maxY) maxY = py; }
+    }
+    x1.putImageData(a, 0, 0);
+    return { canvas: c1, changedPct: Math.round(1000 * n / (W * H)) / 10, bbox: n ? [Math.round(minX / W * 100), Math.round(minY / H * 100), Math.round(maxX / W * 100), Math.round(maxY / H * 100)] : null };
   }
   $('desc').value = SLOTS.top; drawSlots();
   $('bgBtn').onclick = function () { checker = !checker; $('stage').classList.toggle('checker', checker); $('bgBtn').classList.toggle('on', checker); };
@@ -90,13 +98,12 @@
       var j = r;
       for (var n = 0; n < 120 && j.state !== 'complete' && j.state !== 'failed'; n++) { await new Promise(function (ok) { setTimeout(ok, 2000); }); j = await api('GET', '/api/jobs/' + r.id); }
       if (j.state !== 'complete') throw { code: j.failure || 'GENERATION_FAILED', refunded: j.refunded };
-      var img = new Image(); img.alt = mySlot; img.crossOrigin = 'anonymous';
-      await new Promise(function (ok, no) { img.onload = ok; img.onerror = no; img.src = '/api/images/' + j.imageId; });
+      var out = await loadImg('/api/images/' + j.imageId); baseImg = baseImg || await loadImg('/api/prebuilt/nova/base');
+      var L = makeLayer(out, baseImg); var img = L.canvas; img.setAttribute('aria-label', mySlot);
       if (layers[mySlot]) layers[mySlot].img.remove();
       $('stage').appendChild(img); layers[mySlot] = { img: img, visible: true, id: j.imageId };
-      var t = transparency(img);
-      log('Done: ' + mySlot + ' layer.\nClear (transparent) area: ' + t.clearPct + '%\nGarment box (left, top, right, bottom, % of canvas): ' + (t.bbox ? t.bbox.join(', ') : 'none') +
-          '\n' + (t.clearPct < 20 ? 'Warning: the layer looks like it has a solid background.' : 'Transparency looks real. Check the fit over her body above.'));
+      log('Done: ' + mySlot + ' layer.\nChanged area: ' + L.changedPct + '% of the canvas\nBox (left, top, right, bottom, % of canvas): ' + (L.bbox ? L.bbox.join(', ') : 'none') +
+          '\n' + (L.changedPct < 0.5 ? 'Warning: almost nothing changed.' : 'Check the fit over her body above; SHOW TRANSPARENCY shows the extracted layer alone.'));
       drawToggles();
     } catch (e) { log('Could not make the layer: ' + (e && e.code || e) + (e && e.refunded ? '. Your free try was refunded.' : '')); }
     busy = false; $('make').disabled = false;

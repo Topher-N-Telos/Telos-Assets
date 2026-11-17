@@ -9,7 +9,7 @@ test('four starters are defined and every reference file exists and is a reasona
   assert.deepEqual(prebuiltIds.sort(), ['aeon', 'nova', 'oryn', 'seraphine']);
   for (const id of prebuiltIds) for (const f of allRefFiles(id)) {
     const p = new URL(`../../public/_refs/${f}`, import.meta.url);
-    assert.ok(existsSync(p), f); assert.ok(statSync(p).size > 20_000 && statSync(p).size < 1_500_000, f);
+    assert.ok(existsSync(p), f); assert.ok(statSync(p).size > (f.includes('/mask-') ? 500 : 20_000) && statSync(p).size < 1_500_000, f);
   }
 });
 test('refPlan: look reference is dropped when a new outfit is requested; dragon has no look', () => {
