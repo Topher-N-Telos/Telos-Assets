@@ -114,5 +114,10 @@ export function normalizeOnboarding(kind, body) {
   if (!/^[A-Za-z0-9_-]{16,64}$/.test(key)) throw new ApiError(400, 'FIELD_INVALID', { field: 'idempotencyKey' });
   const photoIds = body.photoIds ?? [];
   if (!Array.isArray(photoIds) || photoIds.length > 3 || photoIds.some((i) => typeof i !== 'string' || !/^[A-Za-z0-9_-]{6,64}$/.test(i))) throw new ApiError(400, 'FIELD_INVALID', { field: 'photoIds' });
-  return { kind, name, canon, description, style, world, outfit, photoIds, idempotencyKey: key };
+  // Telō onboarding is a two-image package (full-length + face close-up, one free allotment unit). 'full' / 'face' redo ONE image (one unit each).
+  const part = kind === 'telo' ? (body.part ?? 'package') : 'full';
+  if (!['package', 'full', 'face'].includes(part)) throw new ApiError(400, 'FIELD_INVALID', { field: 'part' });
+  const refImageId = body.refImageId ?? '';
+  if (part === 'face' && !/^[A-Za-z0-9_-]{6,64}$/.test(String(refImageId))) throw new ApiError(400, 'FIELD_INVALID', { field: 'refImageId' });
+  return { kind, name, canon, description, style, world, outfit, photoIds, idempotencyKey: key, part, ...(part === 'face' ? { refImageId: String(refImageId) } : {}) };
 }

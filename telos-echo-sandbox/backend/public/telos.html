@@ -25164,6 +25164,10 @@ Respond with only the world key (e.g. UMBRA). Nothing else.`;
     }
     var MESSAGES = {
       FREE_ALLOTMENT_USED: "You have used your free tries for this image.",
+      PACKAGE_ALREADY_GENERATED: "Your first images are already made. Use Try Again on the one you want to redo.",
+      PACKAGE_REQUIRED: "Create your first images before redoing one.",
+      FACE_IMAGE_REQUIRED: "Choose a face close-up as well as the full-length image.",
+      REF_IMAGE_NOT_FOUND: "Pick a full-length image first.",
       ADULT_ATTESTATION_REQUIRED: "Please confirm that the person shown is an adult (18+).",
       CHARACTER_AGE_NOT_ADULT: "Characters in Telōs must be adults (18+).",
       BLOCKED_MINOR_TERMS: "That description has wording we cannot use. Characters in Telōs must be adults (18+).",
@@ -25200,6 +25204,8 @@ Respond with only the world key (e.g. UMBRA). Nothing else.`;
     var photosS = R.useState([]), photos = photosS[0], setPhotos = photosS[1];
     var busyS = R.useState(false), busy = busyS[0], setBusy = busyS[1];
     var msgS = R.useState(""), msg = msgS[0], setMsg = msgS[1];
+    var selFullS = R.useState(null), selFull = selFullS[0], setSelFull = selFullS[1];
+    var selFaceS = R.useState(null), selFace = selFaceS[0], setSelFace = selFaceS[1];
     var alive = R.useRef(true);
     var fileRef = R.useRef(null);
     R.useEffect(function () { alive.current = true; return function () { alive.current = false; }; }, []);
@@ -25210,7 +25216,13 @@ Respond with only the world key (e.g. UMBRA). Nothing else.`;
     var isAvatar = kind === "avatar";
     var canPhotos = !!(me.config && me.config.allowPhotoUploads) && props.allowPhotos !== false;
     var chosenId = view.acceptedImageId || null;
-    var triesText = view.unlimited ? "" : view.remaining + (view.remaining === 1 ? " free try left" : " free tries left");
+    var isTelo = kind === "telo";
+    var fullImgs = isTelo ? (view.images || []) : [], faceImgs = isTelo ? (view.faceImages || []) : [];
+    // Telō images come as a pair (full-length + face close-up) that is ONE free unit; redoing either image on its own is one unit.
+    var pickDefault = function (list, accepted) { return list.length ? (accepted || list[list.length - 1].id) : null; };
+    var fullSel = selFull && fullImgs.some(function (i) { return i.id === selFull; }) ? selFull : pickDefault(fullImgs, view.acceptedImageId);
+    var faceSel = selFace && faceImgs.some(function (i) { return i.id === selFace; }) ? selFace : pickDefault(faceImgs, view.acceptedFaceImageId);
+    var triesText = view.unlimited ? "" : isTelo ? (view.hasPackage ? view.remaining + (view.remaining === 1 ? " free redo left" : " free redos left") : "Full-length image and face close-up included free") : view.remaining + (view.remaining === 1 ? " free try left" : " free tries left");
     var fieldsReady = adult && age.trim().length >= 1 && (!photos.length || cert);
     var label = { fontSize: 10, letterSpacing: 2, color: "rgba(200,190,170,0.45)", fontFamily: "Cinzel, serif", marginBottom: 6, marginTop: 14 };
     // All surfaces use the app's own chamfered components (ChamferBox / ChamferBtn / ChamferField). No rounded or square corners.
@@ -25238,20 +25250,20 @@ Respond with only the world key (e.g. UMBRA). Nothing else.`;
       try { await TelosImg.call("/api/uploads/" + p.id, { method: "DELETE" }); } catch (e) { /* already gone */ }
       setPhotos(function (list) { return list.filter(function (x) { return x.id !== p.id; }); });
     }
-    async function generate() {
+    async function generate(part) {
       setBusy(true); setMsg("");
       try {
         var base = props.getFields();
         var fields = Object.assign({}, base, { apparentAge: age.trim() });
         var j = await TelosImg.call("/api/onboarding/" + kind + "/generate", { method: "POST", headers: { "content-type": "application/json" },
-          body: JSON.stringify({ fields: fields, adultAttested: adult, idempotencyKey: TelosImg.newKey(), photoIds: photos.map(function (p) { return p.id; }) }) });
+          body: JSON.stringify(Object.assign({ fields: fields, adultAttested: adult, idempotencyKey: TelosImg.newKey(), photoIds: photos.map(function (p) { return p.id; }) }, isTelo ? (part === "face" ? { part: "face", refImageId: fullSel } : part === "full" ? { part: "full" } : { part: "package" }) : {})) });
         var deadline = Date.now() + 4 * 60 * 1000;
         while ((j.state === "created" || j.state === "working") && Date.now() < deadline) {
           await new Promise(function (r) { setTimeout(r, 2000); });
           if (!alive.current) return;
           j = await TelosImg.call("/api/jobs/" + j.id);
         }
-        if (j.state === "failed") setMsg("That image could not be created." + (j.refunded ? " Your free try was refunded." : ""));
+        if (j.state === "failed") setMsg((isTelo && !part ? "Those images could not be created." : "That image could not be created.") + (j.refunded ? " Your free try was refunded." : ""));
         else if (j.state !== "complete") setMsg("This is taking longer than expected. Check back in a moment.");
       } catch (e) { setMsg(TelosImg.message(e)); }
       if (alive.current) { await refresh(); setBusy(false); }
@@ -25266,12 +25278,38 @@ Respond with only the world key (e.g. UMBRA). Nothing else.`;
       } catch (e) { setMsg(TelosImg.message(e)); }
       if (alive.current) setBusy(false);
     }
+    async function chooseTelo() {
+      setBusy(true); setMsg("");
+      try {
+        if (view.acceptedImageId !== fullSel || (faceSel && view.acceptedFaceImageId !== faceSel)) await TelosImg.call("/api/onboarding/telo/accept", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(faceSel ? { imageId: fullSel, faceImageId: faceSel } : { imageId: fullSel }) });
+        var d1 = await TelosImg.imageDataUrl(fullSel, 900);
+        var d2 = faceSel ? await TelosImg.imageDataUrl(faceSel, 700) : null;
+        if (alive.current) { setPhotos([]); await refresh(); }
+        props.onAccepted(d1, fullSel, d2, faceSel);
+      } catch (e) { setMsg(TelosImg.message(e)); }
+      if (alive.current) setBusy(false);
+    }
     var imgs = view.images || [];
     var btn = function (label, onClick, disabled, glow) { return h(ChamferBtn, { size: "md", variant: "primary", accentColor: accent, glowColor: glow || null, disabled: disabled, onClick: onClick, style: { fontSize: 11 } }, label); };
     return h(ChamferBox, { size: "md", borderColor: accent + "66", fillColor: "#101014", style: { marginTop: 18 } }, h("div", { style: { padding: 14 } },
       h("div", { style: { fontFamily: "Cinzel, serif", fontSize: 14, color: "#EEE8DD", letterSpacing: 1 } }, props.title),
       h("div", { style: { fontSize: 12, color: "rgba(200,190,170,0.55)", fontStyle: "italic", lineHeight: 1.5, marginTop: 4 } }, props.subtitle + (triesText ? " \u00B7 " + triesText : "")),
-      imgs.length ? h("div", { style: { marginTop: 12 } }, imgs.map(function (img) {
+      isTelo && fullImgs.length ? h("div", null,
+        [["FULL LENGTH", fullImgs, fullSel, setSelFull, "full", 440], ["FACE CLOSE-UP", faceImgs, faceSel, setSelFace, "face", 320]].map(function (sec) {
+          var list = sec[1], selId = sec[2], setSel = sec[3], partName = sec[4];
+          if (!list.length) return null;
+          return h("div", { key: partName, style: { marginTop: 12 } },
+            h("div", { style: label }, sec[0]),
+            list.map(function (img) {
+              var picked = selId === img.id;
+              return h("div", { key: img.id, style: { marginBottom: 12 } },
+                h(ChamferBox, { size: "md", borderColor: picked ? accent + "CC" : "rgba(255,255,255,0.12)", fillColor: "#000", glowColor: picked ? accent + "66" : null, onClick: function () { if (!busy && !chosenId) setSel(img.id); }, style: { cursor: chosenId ? "default" : "pointer" } },
+                  h("img", { src: "/api/images/" + img.id, alt: props.alt + " " + partName, style: { display: "block", width: "100%", maxHeight: sec[5], objectFit: "contain", clipPath: CUT, background: "rgba(0,0,0,0.25)" } })));
+            }),
+            (!chosenId || view.unlimited) ? h("div", { style: { marginTop: 4 } }, btn(busy ? "WORKING\u2026" : "TRY AGAIN", function () { generate(partName); }, busy || !fieldsReady || (!view.unlimited && view.remaining < 1), null)) : null);
+        }),
+        h("div", { style: { marginTop: 16 } }, btn(chosenId ? "CONTINUE WITH THESE" : "USE THESE", chooseTelo, busy || !fullSel || (faceImgs.length > 0 && !faceSel), chosenId ? accent + "66" : null))) : null,
+      !isTelo && imgs.length ? h("div", { style: { marginTop: 12 } }, imgs.map(function (img) {
         var picked = chosenId === img.id;
         return h("div", { key: img.id, style: { marginBottom: 14 } },
           h(ChamferBox, { size: "md", borderColor: picked ? accent + "CC" : "rgba(255,255,255,0.12)", fillColor: "#000", glowColor: picked ? accent + "66" : null },
@@ -25291,7 +25329,7 @@ Respond with only the world key (e.g. UMBRA). Nothing else.`;
         h("div", { style: label }, "APPARENT AGE (18 OR OVER)"),
         h(ChamferField, { size: "sm", activeBorderColor: accent + "AA" }, h("input", { value: age, onChange: function (e) { setAge(e.target.value); }, placeholder: "e.g. 30", style: { width: "100%", boxSizing: "border-box", padding: "10px 12px", border: "none", outline: "none", background: "transparent", color: "#EEE8DD", fontSize: 13, fontFamily: "inherit" } })),
         checkRow(adult, setAdult, props.adultText),
-        h("div", { style: { marginTop: 14 } }, btn(busy ? "WORKING\u2026 THIS CAN TAKE A MINUTE" : (imgs.length ? "TRY AGAIN" : "CREATE IMAGE"), generate, busy || !fieldsReady, null))) : null,
+        (!isTelo || !view.hasPackage) ? h("div", { style: { marginTop: 14 } }, btn(busy ? "WORKING\u2026 THIS CAN TAKE A MINUTE" : (isTelo ? "CREATE IMAGES" : (imgs.length ? "TRY AGAIN" : "CREATE IMAGE")), function () { generate(); }, busy || !fieldsReady, null)) : null) : null,
       msg ? h("div", { style: { marginTop: 10, fontSize: 12, color: "#E8A0A0", lineHeight: 1.5 } }, msg) : null,
       props.onSkip ? h("button", { disabled: busy, onClick: props.onSkip, style: { display: "block", margin: "14px auto 0", background: "transparent", border: "none", color: "rgba(200,190,170,0.5)", fontSize: 11, letterSpacing: 1, textDecoration: "underline", cursor: "pointer" } }, props.skipText || "Continue without an image") : null));
   }
@@ -26831,19 +26869,19 @@ Write a complete roleplay system prompt in the voice of instructions to the AI (
       return h("div", { style: { height: "var(--app-h, 100dvh)", overflowY: "auto", background: "#06060F", padding: "32px 20px", boxSizing: "border-box" } },
         h("div", { style: { maxWidth: 520, margin: "0 auto" } },
           h("div", { style: { fontFamily: "Cinzel, serif", fontSize: 22, color: "#EEE8DD", marginBottom: 6 } }, `Meet ${customTelo.teloName}.`),
-          h("div", { style: { fontSize: 13, color: "rgba(200,190,170,0.45)", fontStyle: "italic", lineHeight: 1.5 } }, "Your first Tel\u014D's image is on us."),
+          h("div", { style: { fontSize: 13, color: "rgba(200,190,170,0.45)", fontStyle: "italic", lineHeight: 1.5 } }, "Your first Tel\u014D's full-length image and face close-up are on us."),
           h(OnboardingImagePanel, {
             kind: "telo", accent: tAccent, title: `${customTelo.teloName.toUpperCase()}'S IMAGE`, subtitle: "Drawn in the style you chose for your avatar.", alt: customTelo.teloName, defaultAge: teloAgeDefault,
             getFields: () => ({ name: customTelo.teloName, species: String(tcfg.teloType || teloImageSpecies || customTeloSpecies || "").slice(0, 300), description: String(tcfg.physicalDesc || customTeloExpandedAppearance || customTeloAppearance || customTelo.teloIntro || "").slice(0, 1500), style: style, outfit: String(tcfg.outfit || "").slice(0, 300) }),
             photoLabel: "REFERENCE ART OF A CHARACTER YOU CREATED (OPTIONAL, UP TO 3)", certText: "I created this character or hold the rights to it. These are character art, not photos of real people.",
             adultText: `${customTelo.teloName} is an adult (18 or over).`,
-            onAccepted: async (dataUrl) => {
+            onAccepted: async (dataUrl, _id, faceUrl) => {
               try {
                 const nm = customTelo.teloName;
-                if (COMPANION_CONFIGS[nm]) COMPANION_CONFIGS[nm].referenceImage = dataUrl;
+                if (COMPANION_CONFIGS[nm]) { COMPANION_CONFIGS[nm].referenceImage = dataUrl; if (faceUrl) COMPANION_CONFIGS[nm].faceImage = faceUrl; }
                 const list = await loadMyTelosians();
                 const idx = list.findIndex((r) => r && r.firstName === nm);
-                if (idx >= 0) { list[idx] = { ...list[idx], referenceImage: dataUrl }; await saveMyTelosians(list); }
+                if (idx >= 0) { list[idx] = { ...list[idx], referenceImage: dataUrl, ...(faceUrl ? { faceImage: faceUrl } : {}) }; await saveMyTelosians(list); }
               } catch (e) { console.warn("Could not attach the accepted image to the saved Telo:", e); }
               setPhase("reveal");
             },

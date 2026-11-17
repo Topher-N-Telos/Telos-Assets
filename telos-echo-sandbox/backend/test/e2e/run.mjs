@@ -31,7 +31,7 @@ before(async () => {
     launch(8787, BASE),
     launch(8788, {}),                                                                   // no auth config at all
     launch(8789, { ...BASE, MAX_USD_PER_DAY: 0.45, EST_USD_PER_CALL: 0.1 }),          // tiny global cap
-    launch(8790, { ...BASE, MAX_USD_PER_DAY: 50, MAX_USD_PER_MONTH: 500 })            // roomy caps: prebuilt-Telō tests
+    launch(8790, { ...BASE, MAX_USD_PER_DAY: 50, MAX_USD_PER_MONTH: 500, MAX_CALLS_PER_DAY_USER: 60 })            // roomy caps: prebuilt-Telō tests
   ]);
 });
 after(() => { for (const p of procs) { try { process.kill(-p.pid, 'SIGKILL'); } catch {} } mock?.server.close(); });
@@ -136,14 +136,14 @@ test('idempotent replay: same key -> same job, no new provider call, no extra en
   assert.equal(r2.status, 200); assert.equal(r2.json.replay, true); assert.equal(r2.json.id, r1.json.id);
   const bad = await bob('POST', '/api/onboarding/telo/generate', { ...b, fields: fields({ description: 'something else entirely' }) });
   assert.equal(bad.status, 409); assert.equal(bad.json.error, 'IDEMPOTENCY_CONFLICT');
-  await wait(bob, r1.json.id); assert.equal(mockLog.length - n, 1);
-  assert.equal((await bob('GET', '/api/me')).json.telo.remaining, 1);
+  await wait(bob, r1.json.id); assert.equal(mockLog.length - n, 2);                       // a Telō package = full-length + face close-up
+  assert.equal((await bob('GET', '/api/me')).json.telo.remaining, 1);                       // ...but ONE allotment unit
 });
 
 test('provider rejection refunds the free try (FORCE_400)', async () => {
   await sleep(150);
   const before = (await bob('GET', '/api/me')).json.telo.remaining;
-  const r = await gen(bob, 'telo', { fields: { description: 'FORCE_400 a man by the sea' } }); assert.equal(r.status, 200);
+  const r = await gen(bob, 'telo', { part: 'full', fields: { description: 'FORCE_400 a man by the sea' } }); assert.equal(r.status, 200);     // single-image redo
   const j = await wait(bob, r.json.id);
   assert.equal(j.state, 'failed'); assert.equal(j.refunded, true); assert.equal(j.imageId, null);
   assert.equal((await bob('GET', '/api/me')).json.telo.remaining, before);
@@ -189,7 +189,9 @@ test('Telō imported-character references (14B.1A): rights certification, separa
   const g = await alice('POST', '/api/onboarding/telo/generate', body({ photoIds: [r1.json.id] })); assert.equal(g.status, 200, JSON.stringify(g.json));
   const j = await wait(alice, g.json.id); assert.equal(j.state, 'complete', JSON.stringify(j));
   const sent = mockLog.at(-1); assert.equal(sent.path, '/v1/images/edits'); assert.equal(sent.imageParts, 1);
-  await alice('POST', '/api/onboarding/telo/accept', { imageId: j.imageId });
+  assert.ok(j.faceImageId);
+  assert.equal((await alice('POST', '/api/onboarding/telo/accept', { imageId: j.imageId })).json.error, 'FACE_IMAGE_REQUIRED');
+  assert.equal((await alice('POST', '/api/onboarding/telo/accept', { imageId: j.imageId, faceImageId: j.faceImageId })).status, 200);
   assert.equal((await alice('GET', `/api/uploads/${r1.json.id}/image`)).status, 404);
   assert.equal((await alice('GET', '/api/me')).json.uploads.length, 1);   // the avatar photo is untouched
 });
@@ -300,4 +302,48 @@ test('prebuilt: allotment runs out at the configured number, then FREE_ALLOTMENT
   for (let i = 0; i < me.remaining; i++) { await sleep(150); const j = await pbWait(cara, 'oryn'); assert.equal(j.state, 'complete', JSON.stringify(j)); }
   await sleep(150);
   const r = await pbGen(cara, 'oryn'); assert.ok([402, 429].includes(r.status), JSON.stringify(r.json));
+});
+
+
+// ---------- Telō onboarding package: full-length + face close-up = one free unit; either redo = one unit ----------
+const tg = (api, over) => api('POST', '/api/onboarding/telo/generate', body(over));
+const tw = async (api, over) => { const r = await tg(api, over); assert.equal(r.status, 200, JSON.stringify(r.json)); return wait(api, r.json.id); };
+
+test('telo package: two images for one allotment unit; face is built from the full-length image; second package refused; each redo is one unit', async () => {
+  const n = mockLog.length;
+  assert.equal((await cara('GET', '/api/me')).json.telo.remaining, 2);
+  const j = await tw(cara); assert.equal(j.state, 'complete', JSON.stringify(j)); assert.ok(j.imageId && j.faceImageId && j.imageId !== j.faceImageId); assert.equal(j.remaining, 1);
+  assert.equal(mockLog.length - n, 2); assert.equal(mockLog[n].path, '/v1/images/generations'); assert.equal(mockLog[n + 1].path, '/v1/images/edits'); assert.equal(mockLog[n + 1].imageParts, 1);
+  const me = (await cara('GET', '/api/me')).json.telo; assert.equal(me.hasPackage, true); assert.equal(me.images.length, 1); assert.equal(me.faceImages.length, 1);
+  assert.equal((await cara('GET', '/api/images/' + j.faceImageId)).bytes[1], 0x50);
+  await sleep(150);
+  const again = await tg(cara); assert.equal(again.status, 409); assert.equal(again.json.error, 'PACKAGE_ALREADY_GENERATED');
+  await sleep(150);
+  const rf = await tw(cara, { part: 'face', refImageId: j.imageId }); assert.equal(rf.state, 'complete'); assert.ok(rf.imageId); assert.equal(rf.faceImageId, null); assert.equal(rf.remaining, 0);   // redo face = the free pass
+  const cnt = mockLog.length; await sleep(150);
+  const rr = await tg(cara, { part: 'full' }); assert.equal(rr.status, 402); assert.equal(rr.json.error, 'FREE_ALLOTMENT_USED'); assert.equal(mockLog.length, cnt);
+  assert.equal((await cara('GET', '/api/me')).json.telo.faceImages.length, 2);
+  ctx.caraFull = j.imageId; ctx.caraFace = rf.imageId;
+});
+
+test('telo package: face redo needs an existing full-length image; accept needs both images', async () => {
+  await sleep(150);
+  const bad = await tg(cara, { part: 'face', refImageId: 'doesnotexist12' }); assert.ok([402, 404].includes(bad.status), JSON.stringify(bad.json));
+  assert.equal((await cara('POST', '/api/onboarding/telo/accept', { imageId: ctx.caraFull })).json.error, 'FACE_IMAGE_REQUIRED');
+  const ok = await cara('POST', '/api/onboarding/telo/accept', { imageId: ctx.caraFull, faceImageId: ctx.caraFace }); assert.equal(ok.status, 200, JSON.stringify(ok.json));
+  assert.equal(ok.json.telo.acceptedImageId, ctx.caraFull); assert.equal(ok.json.telo.acceptedFaceImageId, ctx.caraFace);
+  assert.equal((await tg(bobD, { part: 'face', refImageId: ctx.caraFull })).json.error, 'PACKAGE_REQUIRED');      // nobody else can redo before making their own package
+});
+
+test('telo package: either half failing refunds the whole unit and discards both images', async () => {
+  const a0 = (await aliceD('GET', '/api/me')).json.telo.remaining, n = mockLog.length;
+  const f1 = await tw(aliceD, { fields: { description: 'FORCE_400 a man by the sea' } });                          // full-length half fails
+  assert.equal(f1.state, 'failed'); assert.equal(f1.refunded, true); assert.equal(mockLog.length - n, 1);
+  await sleep(150);
+  const f2 = await tw(aliceD, { fields: { description: 'FORCE_FACE a woman by the sea' } });                       // face half fails after the full image succeeded
+  assert.equal(f2.state, 'failed'); assert.equal(f2.refunded, true); assert.equal(f2.imageId, null);
+  const me = (await aliceD('GET', '/api/me')).json.telo;
+  assert.equal(me.remaining, a0); assert.equal(me.images.length, 0); assert.equal(me.faceImages.length, 0); assert.equal(me.hasPackage, false);
+  await sleep(150);
+  const ok = await tw(aliceD); assert.equal(ok.state, 'complete', JSON.stringify(ok));                              // a clean retry still works
 });

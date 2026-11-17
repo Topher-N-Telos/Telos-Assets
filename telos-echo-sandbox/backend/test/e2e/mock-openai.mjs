@@ -17,6 +17,7 @@ export function startMock(port = 8799) {
       const send = (status, body) => { res.statusCode = status; res.setHeader('content-type', 'application/json'); res.end(JSON.stringify(body)); };
       if (entry.auth !== 'Bearer mock-key') return send(401, { error: { message: 'bad key' } });
       if (raw.includes('FORCE_400')) return send(400, { error: { code: 'moderation_blocked', message: 'blocked by mock' } });
+      if (raw.includes('FORCE_FACE') && raw.includes('Face-detail close-up')) return send(400, { error: { code: 'moderation_blocked', message: 'face half blocked by mock' } });
       if (raw.includes('FORCE_429')) return send(429, { error: { message: 'rate' } });
       setTimeout(() => send(200, {
         data: [{ b64_json: makePng(64, 96, [90 + log.length * 7 % 120, 120, 200]).toString('base64') }],

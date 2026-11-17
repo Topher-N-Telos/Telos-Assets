@@ -135,7 +135,12 @@ export class UserState extends DurableObject {
     return {
       unlimited: unl, freeTotal: unl ? null : allowed, used, remaining: unl ? null : Math.max(0, allowed - used), acceptedImageId: this.accepted(kind),
       images: this.q('SELECT id,job_id,accepted,created_at FROM images WHERE kind=? ORDER BY created_at', kind).map((r) => ({ id: r.id, jobId: r.job_id, accepted: !!r.accepted, createdAt: r.created_at })),
-      pendingJob: this.one("SELECT id,state FROM jobs WHERE kind=? AND state IN ('created','working') ORDER BY created_at DESC LIMIT 1", kind)
+      pendingJob: this.one("SELECT id,state FROM jobs WHERE kind=? AND state IN ('created','working') ORDER BY created_at DESC LIMIT 1", kind),
+      ...(kind === 'telo' ? {
+        hasPackage: !!this.one("SELECT 1 x FROM images WHERE kind='telo'"),
+        acceptedFaceImageId: this.one("SELECT id FROM images WHERE kind='telo_face' AND accepted=1")?.id ?? null,
+        faceImages: this.q("SELECT id,job_id,accepted,created_at FROM images WHERE kind='telo_face' ORDER BY created_at").map((r) => ({ id: r.id, jobId: r.job_id, accepted: !!r.accepted, createdAt: r.created_at }))
+      } : {})
     };
   }
   me() {
@@ -152,7 +157,7 @@ export class UserState extends DurableObject {
     const j = this.one('SELECT id,kind,state,failure,refunded,result,created_at FROM jobs WHERE id=?', id);
     if (!j) throw new ApiError(404, 'NOT_FOUND');
     const r = j.result ? JSON.parse(j.result) : null;
-    return { id: j.id, kind: j.kind, state: j.state, failure: j.failure ?? null, refunded: !!j.refunded, imageId: r?.imageId ?? null, createdAt: j.created_at, remaining: this.unlimited ? null : Math.max(0, this.allowed(j.kind) - this.used(j.kind)) };
+    return { id: j.id, kind: j.kind, state: j.state, failure: j.failure ?? null, refunded: !!j.refunded, imageId: r?.imageId ?? null, faceImageId: r?.faceImageId ?? null, createdAt: j.created_at, remaining: this.unlimited ? null : Math.max(0, this.allowed(j.kind) - this.used(j.kind)) };
   }
   imageBytes(id) {
     const r = this.one('SELECT blob_id FROM images WHERE id=?', id); const b = r && this.getBlob(r.blob_id);
@@ -244,13 +249,20 @@ export class UserState extends DurableObject {
     const last = this.meta('lastSubmitAt', 0);
     if (last && now - last < cfg.minSubmitIntervalMs) throw new ApiError(429, 'TOO_SOON', { retryAfterMs: cfg.minSubmitIntervalMs - (now - last) });
     if (this.one("SELECT COUNT(*) n FROM jobs WHERE state IN ('created','working')").n >= cfg.maxQueuedUser) throw new ApiError(429, 'TOO_MANY_QUEUED');
-    if (!this.unlimited && this.callsToday(now) >= cfg.maxCallsPerDayUser) throw new ApiError(429, 'DAILY_CALL_CAP', { cap: cfg.maxCallsPerDayUser });
+    const calls = kind === 'telo' && p.part === 'package' ? 2 : 1;      // a Telō package is two provider calls under one allotment unit
+    if (!this.unlimited && this.callsToday(now) + calls > cfg.maxCallsPerDayUser) throw new ApiError(429, 'DAILY_CALL_CAP', { cap: cfg.maxCallsPerDayUser });
+    if (kind === 'telo') {
+      const has = !!this.one("SELECT 1 x FROM images WHERE kind='telo'");
+      if (p.part === 'package' && has && !this.unlimited) throw new ApiError(409, 'PACKAGE_ALREADY_GENERATED');
+      if (p.part !== 'package' && !has) throw new ApiError(400, 'PACKAGE_REQUIRED');
+      if (p.part === 'face' && this.one('SELECT kind FROM images WHERE id=?', p.refImageId)?.kind !== 'telo') throw new ApiError(404, 'REF_IMAGE_NOT_FOUND');
+    }
     for (const id of p.photoIds) { const u = this.one('SELECT certified FROM uploads WHERE id=?', id); if (!u) throw new ApiError(404, 'PHOTO_NOT_FOUND', { id }); if ((u.certified === 'rights') !== (kind === 'telo')) throw new ApiError(400, 'PHOTO_WRONG_PURPOSE', { id }); }
     if (!this.unlimited && this.used(kind) >= this.allowed(kind)) throw new ApiError(402, 'FREE_ALLOTMENT_USED');
     if (!cfg.allowPhotoUploads && p.photoIds.length) throw new ApiError(403, 'PHOTO_UPLOADS_DISABLED');
 
     const email = this.meta('email');
-    const res = await this.ledger.reserve(email, cfg.estUsdPerCall);
+    const res = await this.ledger.reserve(email, cfg.estUsdPerCall * calls);
     if (!res.ok) throw new ApiError(429, res.code);
 
     const jobId = rid();
@@ -268,8 +280,15 @@ export class UserState extends DurableObject {
   accept(kind, body) {
     const img = this.one('SELECT id,kind FROM images WHERE id=?', String(body.imageId ?? ''));
     if (!img || img.kind !== kind) throw new ApiError(404, 'NOT_FOUND');
-    if (this.accepted(kind)) { if (!this.unlimited) throw new ApiError(409, 'ALREADY_ACCEPTED'); this.run('UPDATE images SET accepted=0 WHERE kind=?', kind); }
+    let face = null;
+    if (kind === 'telo') {
+      face = body.faceImageId ? this.one('SELECT id,kind FROM images WHERE id=?', String(body.faceImageId)) : null;
+      if (body.faceImageId && face?.kind !== 'telo_face') throw new ApiError(404, 'NOT_FOUND');
+      if (!face && this.one("SELECT 1 x FROM images WHERE kind='telo_face'")) throw new ApiError(400, 'FACE_IMAGE_REQUIRED');
+    }
+    if (this.accepted(kind)) { if (!this.unlimited) throw new ApiError(409, 'ALREADY_ACCEPTED'); this.run('UPDATE images SET accepted=0 WHERE kind IN (?,?)', kind, kind + '_face'); }
     this.run('UPDATE images SET accepted=1 WHERE id=?', img.id);
+    if (face) this.run('UPDATE images SET accepted=1 WHERE id=?', face.id);
     // retention: reference photos for the chosen kind are deleted as soon as the image is chosen
     for (const u of this.q('SELECT id,blob_id,certified FROM uploads')) if ((u.certified === 'rights') === (kind === 'telo')) { this.delBlob(u.blob_id); this.run('DELETE FROM uploads WHERE id=?', u.id); }
     return this.me();
@@ -297,12 +316,12 @@ export class UserState extends DurableObject {
   async recoverStale() {
     for (const j of this.q("SELECT id,idem,ledger_id FROM jobs WHERE state='working' AND updated_at<?", Date.now() - STALE_WORKING_MS)) {
       this.run("UPDATE jobs SET state='failed',failure='INTERRUPTED',refunded=1,updated_at=? WHERE id=?", Date.now(), j.id);
-      this.run("UPDATE grants SET state='released' WHERE job_idem=? AND state='held'", j.idem);
+      this.run("UPDATE grants SET state='released' WHERE job_idem=? AND state IN ('held','committed')", j.idem);
       try { await this.ledger.cancel(j.ledger_id); } catch { /* ignore */ }
     }
   }
 
-  async runJob(jobId) {
+  async renderPart(jobId) {
     const cfg = this.cfg, self = this;
     const job = this.one('SELECT * FROM jobs WHERE id=?', jobId);
     const p = JSON.parse(job.params);
@@ -310,8 +329,11 @@ export class UserState extends DurableObject {
     const principal = { userId: (await sha(String(email))).slice(0, 32), verifiedAdult: false, age: 18 };
     const sceneId = `scene_${job.id}`;
     const pb = p.kind === PREBUILT_KIND ? prebuiltScene(p) : null;
+    const face = p.kind === 'telo' && p.part === 'face';       // face close-up half of the Telō package (built from the full-length image)
     const adult = pb ? 'adult' : (p.canon.apparentAge && (firstNumber(p.canon.apparentAge) ?? 18) >= 18) ? 'adult' : 'unknown';
-    const sceneIntro = pb ? pb.sceneIntro : p.kind === 'avatar'
+    const sceneIntro = pb ? pb.sceneIntro : face
+      ? 'Face-detail close-up of the user\'s Telōsian companion, the SAME person as the attached full-length reference: head and shoulders with the face filling most of the frame, calm neutral expression, soft even lighting, sharp skin, hair and eye detail, plain uncluttered background.'
+      : p.kind === 'avatar'
       ? 'Onboarding portrait of the user\'s own avatar: one person, head-and-shoulders to three-quarter framing, shown in their world.'
       : 'Onboarding full-length reference image of the user\'s first Telōsian companion: one person, the ENTIRE body visible from head to feet including footwear, standing upright and facing the camera in a relaxed neutral pose with arms slightly away from the body, centered with clear space around the figure, shown in their world against an uncluttered background that does not hide the silhouette.';
     let usedProvider = false;
@@ -332,6 +354,11 @@ export class UserState extends DurableObject {
       media: {
         async loadCanonReferences() {
           if (pb) return self.canonRefs(p.charId, p.form, !!p.outfit);
+          if (face) {
+            const r = self.one('SELECT blob_id FROM images WHERE id=?', p.refImageId); const b = r && self.getBlob(r.blob_id);
+            if (!b) throw new Error('CANON_REFERENCES_UNAVAILABLE');
+            return [{ bytes: b.bytes, mime: b.mime, label: 'the approved full-length image of this character (SUBJECT 1) — keep this exact person: face, skin tone, hair, build, clothing' }];
+          }
           const refs = [];
           for (const id of p.photoIds) {
             const u = self.one('SELECT blob_id FROM uploads WHERE id=?', id); const b = u && self.getBlob(u.blob_id);
@@ -342,8 +369,8 @@ export class UserState extends DurableObject {
         },
         async savePrivateImage(rec) {
           const id = rid(); const { bytes, ...m } = rec;
-          self.run('INSERT INTO images(id,job_id,kind,blob_id,meta,accepted,created_at) VALUES(?,?,?,?,?,0,?)', id, jobId, p.kind, self.putBlob(bytes, rec.mime),
-            JSON.stringify({ model: m.providerModel, quality: cfg.quality, size: cfg.size, referenceCount: m.referenceCount, endpoint: m.endpoint, moderation: m.moderation, ...(pb ? { charId: p.charId, form: p.form, mode: p.mode } : {}) }), Date.now());
+          self.run('INSERT INTO images(id,job_id,kind,blob_id,meta,accepted,created_at) VALUES(?,?,?,?,?,0,?)', id, jobId, face ? 'telo_face' : p.kind, self.putBlob(bytes, rec.mime),
+            JSON.stringify({ part: face ? 'face' : 'full', model: m.providerModel, quality: cfg.quality, size: cfg.size, referenceCount: m.referenceCount, endpoint: m.endpoint, moderation: m.moderation, ...(pb ? { charId: p.charId, form: p.form, mode: p.mode } : {}) }), Date.now());
           return { id };
         }
       },
@@ -353,7 +380,7 @@ export class UserState extends DurableObject {
           return { amount: 0, currency: 'free', userConfirmed: true, userId: pr.userId, sceneId: scene.id };   // free onboarding allotment (Master 30.2, 18.7)
         },
         async reserve({ idempotencyKey }) {
-          const g = self.one('SELECT id FROM grants WHERE job_idem=?', idempotencyKey);
+          const g = self.one('SELECT id FROM grants WHERE job_idem=?', idempotencyKey.replace(/:face$/, ''));
           if (!g) throw new Error('NO_ENTITLEMENT');
           return { id: g.id };
         },
@@ -363,7 +390,8 @@ export class UserState extends DurableObject {
       jobs: {
         async findOrCreate(uid, key) { const j = self.one('SELECT id,state,result FROM jobs WHERE idem=?', key); if (!j) throw new Error('JOB_NOT_FOUND'); return { id: j.id, state: j.state, result: j.result ? JSON.parse(j.result) : undefined }; },
         async claim(id) { if (self.one('SELECT state FROM jobs WHERE id=?', id)?.state !== 'created') return false; self.run("UPDATE jobs SET state='working',updated_at=? WHERE id=?", Date.now(), id); return true; },
-        async complete(id, result) { self.run("UPDATE jobs SET state='complete',result=?,updated_at=? WHERE id=?", JSON.stringify(result), Date.now(), id); },
+        // A Telō package parent stays 'working' until its face half also succeeds (runJob flips it to complete).
+        async complete(id, result) { self.run(`UPDATE jobs SET ${p.part === 'package' ? '' : "state='complete',"}result=?,updated_at=? WHERE id=?`, JSON.stringify(result), Date.now(), id); },
         async fail(id, code) { self.run("UPDATE jobs SET state='failed',failure=?,updated_at=? WHERE id=?", code, Date.now(), id); }
       },
       safeguards: {
@@ -393,19 +421,51 @@ export class UserState extends DurableObject {
 
     try {
       await service({ principal, trustedSurface: 'sfw',
-        request: { sceneId, idempotencyKey: job.idem, purpose: 'manual', quoteId: null, artDirection: pb ? pb.artDirection : [p.description, p.style && `Style: ${p.style}`].filter(Boolean).join('\n'), mode: pb ? pb.mode : 'portrait', quality: cfg.quality, size: cfg.size } });
+        request: { sceneId, idempotencyKey: job.idem, purpose: 'manual', quoteId: null, artDirection: pb ? pb.artDirection : [face ? 'Face close-up only; keep the same outfit neckline, hair and skin as the reference.' : '', p.description, p.style && `Style: ${p.style}`].filter(Boolean).join('\n'), mode: pb ? pb.mode : 'portrait', quality: cfg.quality, size: cfg.size } });
     } catch { /* recorded on the job row and in diag */ }
+  }
 
+  /**
+   * Runs one queued job. A Telō "package" (first onboarding image) is two provider calls under ONE allotment unit:
+   * the full-length image, then a face close-up built from it. If either half fails the whole unit is refunded and
+   * both images are discarded. A single-image redo ('full' or 'face') or an avatar/prebuilt job is one call, one unit.
+   */
+  async runJob(jobId) {
+    const job = this.one('SELECT * FROM jobs WHERE id=?', jobId);
+    const p = JSON.parse(job.params);
+    const isPackage = p.kind === 'telo' && p.part === 'package';
+    const ids = [jobId];
+    let faceFailure = null, fullOk = false;
+    await this.renderPart(jobId);
+    const first = this.one('SELECT state,result FROM jobs WHERE id=?', jobId);
+    if (isPackage) {
+      fullOk = !!first?.result && first.state === 'working';
+      if (fullOk) {
+        const fullId = JSON.parse(first.result).imageId, faceJobId = rid(), now = Date.now();
+        this.run("INSERT INTO jobs(id,idem,kind,hash,params,state,ledger_id,created_at,updated_at) VALUES(?,?,'telo','face',?,'created',?,?,?)",
+          faceJobId, job.idem + ':face', JSON.stringify({ ...p, part: 'face', refImageId: fullId }), job.ledger_id, now, now);
+        ids.push(faceJobId);
+        await this.renderPart(faceJobId);
+        const f = this.one('SELECT state,result,failure FROM jobs WHERE id=?', faceJobId);
+        if (f?.state === 'complete') {
+          this.run("UPDATE jobs SET state='complete',result=?,updated_at=? WHERE id=?", JSON.stringify({ ...JSON.parse(first.result), faceImageId: JSON.parse(f.result).imageId }), Date.now(), jobId);
+        } else {
+          faceFailure = f?.failure ?? 'FACE_GENERATION_FAILED';
+          this.run("UPDATE jobs SET state='failed',failure=?,result=NULL,updated_at=? WHERE id=?", faceFailure, Date.now(), jobId);
+        }
+      }
+    }
     // Reconcile: ANY job that did not complete refunds the free allotment (Chris, Nov 15: rejected images are refunded).
     const done = this.one('SELECT state FROM jobs WHERE id=?', jobId)?.state === 'complete';
     if (!done) {
-      this.run("UPDATE grants SET state='released' WHERE job_idem=? AND state='held'", job.idem);
+      this.run("UPDATE grants SET state='released' WHERE job_idem=? AND state IN ('held','committed')", job.idem);
       this.run('UPDATE jobs SET refunded=1 WHERE id=?', jobId);
       if (this.one('SELECT state FROM jobs WHERE id=?', jobId)?.state === 'created') this.run("UPDATE jobs SET state='failed',failure='GENERATION_FAILED',updated_at=? WHERE id=?", Date.now(), jobId);
+      if (isPackage) for (const r of this.q(`SELECT id,blob_id FROM images WHERE job_id IN (${ids.map(() => '?').join(',')})`, ...ids)) { this.delBlob(r.blob_id); this.run('DELETE FROM images WHERE id=?', r.id); }
     }
     try {
-      const u = this.one('SELECT usd,estimated FROM usage WHERE job_id=? ORDER BY ts DESC LIMIT 1', jobId);
-      if (u) await this.ledger.settle(job.ledger_id, u.usd, !!u.estimated); else await this.ledger.cancel(job.ledger_id);
+      const u = this.one(`SELECT SUM(usd) usd, MAX(estimated) est, COUNT(*) n FROM usage WHERE job_id IN (${ids.map(() => '?').join(',')})`, ...ids);
+      if (u?.n) await this.ledger.settle(job.ledger_id, u.usd, !!u.est); else await this.ledger.cancel(job.ledger_id);
     } catch (e) { console.error('ledger_settle_failed', e?.message); }
   }
   logFailure(jobId, d) {
