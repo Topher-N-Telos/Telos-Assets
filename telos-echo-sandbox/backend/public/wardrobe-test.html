@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Wardrobe layer test</title>
+<style>
+  :root { --ink: #e8dfcc; --dim: rgba(200,190,170,.5); --gold: #c9a45c; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body { margin: 0; background: #0a0a0d; color: var(--ink); font: 14px/1.5 Georgia, serif; padding: 16px 16px max(24px, env(safe-area-inset-bottom)); }
+  h1 { font: 600 13px/1 Georgia, serif; letter-spacing: 3px; color: var(--gold); margin: 4px 0 4px; }
+  .sub { color: var(--dim); font-style: italic; margin-bottom: 14px; }
+  .cut { clip-path: polygon(9px 0, calc(100% - 9px) 0, 100% 9px, 100% calc(100% - 9px), calc(100% - 9px) 100%, 9px 100%, 0 calc(100% - 9px), 0 9px); }
+  .box { background: #17161b; padding: 2px; }
+  .box > .in { background: #0d0d10; padding: 12px; }
+  .stage { position: relative; width: 100%; aspect-ratio: 2 / 3; background: #000; overflow: hidden; }
+  .stage.checker { background: conic-gradient(#555 25%, #333 0 50%, #555 0 75%, #333 0) 0 0 / 24px 24px; }
+  .stage img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: fill; display: block; }
+  .stage img.hide { display: none; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .btn { background: #2a2630; color: var(--ink); border: 0; padding: 12px 14px; font: 600 11px/1 Georgia, serif; letter-spacing: 2px; cursor: pointer; }
+  .btn.on { background: #3b3220; box-shadow: 0 0 14px rgba(201,164,92,.55); }
+  .btn[disabled] { opacity: .4; }
+  input[type=text] { width: 100%; background: #26242c; color: var(--ink); border: 0; padding: 12px; font: 14px Georgia, serif; border-radius: 0; margin-top: 6px; clip-path: polygon(9px 0, calc(100% - 9px) 0, 100% 9px, 100% calc(100% - 9px), calc(100% - 9px) 100%, 9px 100%, 0 calc(100% - 9px), 0 9px); outline: none; }
+  label { display: block; font-size: 10px; letter-spacing: 2px; color: var(--dim); margin-top: 12px; }
+  #log { white-space: pre-wrap; font: 12px/1.5 ui-monospace, Menlo, monospace; color: #b9ae94; margin-top: 12px; }
+  .chips .btn { padding: 10px 12px; }
+</style></head>
+<body>
+<h1>WARDROBE LAYER TEST</h1>
+<div class="sub">Nova. Each piece is drawn alone on a transparent layer, then stacked over her base image on this screen.</div>
+
+<div class="box cut"><div class="in cut">
+  <div class="stage cut" id="stage"><img id="base" alt="Nova base"></div>
+  <div class="row chips" id="toggles"></div>
+  <div class="row">
+    <button class="btn cut" id="bgBtn">SHOW TRANSPARENCY</button>
+    <button class="btn cut" id="soloBtn">LAYERS ONLY</button>
+  </div>
+</div></div>
+
+<div class="box cut" style="margin-top:14px"><div class="in cut">
+  <label>PIECE</label>
+  <div class="row chips" id="slots"></div>
+  <label>DESCRIPTION</label>
+  <input type="text" id="desc" maxlength="300" autocomplete="off">
+  <div class="row"><button class="btn cut" id="make">MAKE THIS PIECE</button></div>
+  <div id="log"></div>
+</div></div>
+
+<script>
+(function () {
+  var SLOTS = { top: 'fitted cream linen blouse with rolled sleeves', bottom: 'high-waisted charcoal tailored trousers', shoes: 'white leather low-top sneakers' };
+  var slot = 'top', layers = {}, busy = false, solo = false, checker = false;
+  var $ = function (id) { return document.getElementById(id); };
+  var log = function (t) { $('log').textContent = t; };
+  function key() { var a = new Uint8Array(16); crypto.getRandomValues(a); return Array.prototype.map.call(a, function (b) { return b.toString(16).padStart(2, '0'); }).join(''); }
+  async function api(method, path, body) {
+    var r = await fetch(path, { method: method, credentials: 'same-origin', headers: Object.assign({ 'x-telos': '1' }, body ? { 'content-type': 'application/json' } : {}), body: body ? JSON.stringify(body) : undefined });
+    var j = await r.json().catch(function () { return {}; }); if (!r.ok) throw { status: r.status, code: j.error || ('HTTP_' + r.status) }; return j;
+  }
+  $('base').src = '/api/prebuilt/nova/base';
+  function drawSlots() {
+    $('slots').innerHTML = '';
+    Object.keys(SLOTS).forEach(function (s) {
+      var b = document.createElement('button'); b.className = 'btn cut' + (s === slot ? ' on' : ''); b.textContent = s.toUpperCase();
+      b.onclick = function () { slot = s; $('desc').value = SLOTS[s]; drawSlots(); }; $('slots').appendChild(b);
+    });
+  }
+  function drawToggles() {
+    $('toggles').innerHTML = '';
+    Object.keys(layers).forEach(function (s) {
+      var L = layers[s]; var b = document.createElement('button'); b.className = 'btn cut' + (L.visible ? ' on' : ''); b.textContent = s.toUpperCase() + (L.visible ? ' ON' : ' OFF');
+      b.onclick = function () { L.visible = !L.visible; L.img.classList.toggle('hide', !L.visible); drawToggles(); }; $('toggles').appendChild(b);
+    });
+  }
+  function transparency(img) {   // how much of the layer is truly clear, and where the garment sits
+    var c = document.createElement('canvas'); c.width = 128; c.height = 192; var x = c.getContext('2d'); x.drawImage(img, 0, 0, 128, 192);
+    var d = x.getImageData(0, 0, 128, 192).data, clear = 0, minX = 999, minY = 999, maxX = -1, maxY = -1;
+    for (var i = 0; i < d.length; i += 4) { var px = (i / 4) % 128, py = Math.floor(i / 4 / 128); if (d[i + 3] < 12) clear++; else { if (px < minX) minX = px; if (px > maxX) maxX = px; if (py < minY) minY = py; if (py > maxY) maxY = py; } }
+    var pct = Math.round(100 * clear / (d.length / 4));
+    return { clearPct: pct, bbox: maxX < 0 ? null : [Math.round(minX / 128 * 100), Math.round(minY / 192 * 100), Math.round(maxX / 128 * 100), Math.round(maxY / 192 * 100)] };
+  }
+  $('desc').value = SLOTS.top; drawSlots();
+  $('bgBtn').onclick = function () { checker = !checker; $('stage').classList.toggle('checker', checker); $('bgBtn').classList.toggle('on', checker); };
+  $('soloBtn').onclick = function () { solo = !solo; $('base').classList.toggle('hide', solo); $('soloBtn').classList.toggle('on', solo); };
+  $('make').onclick = async function () {
+    if (busy) return; busy = true; $('make').disabled = true; var mySlot = slot;
+    try {
+      log('Making the ' + mySlot + ' layer. This can take a minute.');
+      var r = await api('POST', '/api/prebuilt/nova/generate', { mode: 'garment', slot: mySlot, outfit: $('desc').value.trim(), idempotencyKey: key() });
+      var j = r;
+      for (var n = 0; n < 120 && j.state !== 'complete' && j.state !== 'failed'; n++) { await new Promise(function (ok) { setTimeout(ok, 2000); }); j = await api('GET', '/api/jobs/' + r.id); }
+      if (j.state !== 'complete') throw { code: j.failure || 'GENERATION_FAILED', refunded: j.refunded };
+      var img = new Image(); img.alt = mySlot; img.crossOrigin = 'anonymous';
+      await new Promise(function (ok, no) { img.onload = ok; img.onerror = no; img.src = '/api/images/' + j.imageId; });
+      if (layers[mySlot]) layers[mySlot].img.remove();
+      $('stage').appendChild(img); layers[mySlot] = { img: img, visible: true, id: j.imageId };
+      var t = transparency(img);
+      log('Done: ' + mySlot + ' layer.\nClear (transparent) area: ' + t.clearPct + '%\nGarment box (left, top, right, bottom, % of canvas): ' + (t.bbox ? t.bbox.join(', ') : 'none') +
+          '\n' + (t.clearPct < 20 ? 'Warning: the layer looks like it has a solid background.' : 'Transparency looks real. Check the fit over her body above.'));
+      drawToggles();
+    } catch (e) { log('Could not make the layer: ' + (e && e.code || e) + (e && e.refunded ? '. Your free try was refunded.' : '')); }
+    busy = false; $('make').disabled = false;
+  };
+})();
+</script>
+</body></html>

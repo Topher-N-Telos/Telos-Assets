@@ -352,3 +352,25 @@ test('telo package: either half failing refunds the whole unit and discards both
   await sleep(150);
   const ok = await tw(aliceD); assert.equal(ok.state, 'complete', JSON.stringify(ok));                              // a clean retry still works
 });
+
+test('prebuilt: wardrobe garment layers are one transparent, registered reference; base route serves only the body canvas', async () => {
+  const n = mockLog.length;
+  const bad = async (id, over, status, code) => { const r = await pbGen(ownerD, id, over); assert.equal(r.status, status, JSON.stringify(r.json)); assert.equal(r.json.error, code); };
+  await bad('nova', { mode: 'garment', outfit: 'a cream linen blouse' }, 400, 'FIELD_INVALID');                        // slot required
+  await bad('nova', { mode: 'garment', slot: 'hat-trick', outfit: 'x' }, 400, 'FIELD_INVALID');
+  await bad('nova', { mode: 'garment', slot: 'top' }, 400, 'FIELD_REQUIRED');
+  await bad('seraphine', { mode: 'garment', slot: 'top', outfit: 'a silk blouse' }, 400, 'GARMENT_LAYERS_UNAVAILABLE'); // canvas only exists for Nova so far
+  await bad('nova', { mode: 'garment', slot: 'top', outfit: 'a blouse for a 15 year old' }, 400, 'BLOCKED_MINOR_TERMS');
+  assert.equal(mockLog.length, n, 'validation must fail before any provider call');
+  await sleep(150);
+  const j = await pbWait(ownerD, 'nova', { mode: 'garment', slot: 'top', outfit: 'a fitted cream linen blouse with rolled sleeves', scene: undefined });
+  assert.equal(j.state, 'complete', JSON.stringify(j)); assert.ok(j.imageId);
+  const sent = mockLog.at(-1); assert.equal(mockLog.length - n, 1);
+  assert.equal(sent.path, '/v1/images/edits'); assert.equal(sent.imageParts, 1);          // ONLY the registration canvas: no face, no look
+  assert.equal(sent.background, 'transparent'); assert.equal(sent.size, '1024x1536');
+  const other = await pbWait(ownerD, 'nova', { mode: 'scene', scene: 'Standing at a heavy wooden door at dusk, about to knock.' });
+  assert.equal(other.state, 'complete'); assert.equal(mockLog.at(-1).background, undefined);   // ordinary scenes never ask for transparency
+  const base = await ownerD('GET', '/api/prebuilt/nova/base'); assert.equal(base.status, 200); assert.equal(base.headers.get('content-type'), 'image/jpeg');
+  assert.equal((await ownerD('GET', '/api/prebuilt/seraphine/base')).status, 404);          // only characters with a canvas
+  assert.equal((await ownerD('GET', '/_refs/terra-nova/body.jpg')).status, 404);            // the raw references stay private
+});

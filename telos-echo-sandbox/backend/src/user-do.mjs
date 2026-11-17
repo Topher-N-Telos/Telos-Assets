@@ -210,10 +210,10 @@ export class UserState extends DurableObject {
     if (old?.files) for (const id of Object.values(old.files)) this.delBlob(id);
     return true;
   }
-  canonRefs(charId, form, hasOutfit) {
+  canonRefs(charId, form, hasOutfit, mode) {
     const rec = this.meta(`canon_${charId}`);
     if (rec?.version !== PREBUILT_VERSION) throw new Error('CANON_REFERENCES_UNAVAILABLE');
-    return refPlan(charId, form, hasOutfit).map((r) => {
+    return refPlan(charId, form, hasOutfit, mode).map((r) => {
       const b = rec.files[r.file] && this.getBlob(rec.files[r.file]);
       if (!b) throw new Error('CANON_REFERENCES_UNAVAILABLE');
       return { bytes: b.bytes, mime: b.mime, label: r.label };
@@ -351,7 +351,7 @@ export class UserState extends DurableObject {
       },
       media: {
         async loadCanonReferences() {
-          if (pb) return self.canonRefs(p.charId, p.form, !!p.outfit);
+          if (pb) return self.canonRefs(p.charId, p.form, !!p.outfit, p.mode);
           if (face) {
             const r = self.one('SELECT blob_id FROM images WHERE id=?', p.refImageId); const b = r && self.getBlob(r.blob_id);
             if (!b) throw new Error('CANON_REFERENCES_UNAVAILABLE');
@@ -419,7 +419,7 @@ export class UserState extends DurableObject {
 
     try {
       await service({ principal, trustedSurface: 'sfw',
-        request: { sceneId, idempotencyKey: job.idem, purpose: 'manual', quoteId: null, artDirection: pb ? pb.artDirection : [face ? 'Face close-up only; keep the same outfit neckline, hair and skin as the reference.' : '', p.description, p.style && `Style: ${p.style}`].filter(Boolean).join('\n'), mode: pb ? pb.mode : 'portrait', quality: cfg.quality, size: cfg.size } });
+        request: { sceneId, idempotencyKey: job.idem, purpose: 'manual', quoteId: null, artDirection: pb ? pb.artDirection : [face ? 'Face close-up only; keep the same outfit neckline, hair and skin as the reference.' : '', p.description, p.style && `Style: ${p.style}`].filter(Boolean).join('\n'), mode: pb ? pb.mode : 'portrait', quality: cfg.quality, size: cfg.size, ...(pb?.background ? { background: pb.background } : {}) } });
     } catch { /* recorded on the job row and in diag */ }
   }
 

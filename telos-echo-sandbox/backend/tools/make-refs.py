@@ -21,3 +21,18 @@ for d, roles in MAP.items():
         out = f'{root}/public/_refs/{d}/{role}.jpg'
         im.save(out, 'JPEG', quality=90, optimize=True)
         print(out.replace(root + '/', ''), im.size, os.path.getsize(out) // 1024, 'KB')
+
+# Garment-layer canvas: the body reference fitted into the exact 1024x1536 output canvas (padded with its own backdrop colour)
+# so a generated garment layer and this image share ONE coordinate system.
+CANVAS = {'terra-nova': 'base-body.png'}
+for d, src in CANVAS.items():
+    im = Image.open(f'{root}/refs/{d}/{src}').convert('RGB')
+    w = 1024; h = round(im.height * w / im.width)
+    im = im.resize((w, h), Image.LANCZOS)
+    px = im.load(); edge = [px[x, y] for x in range(0, w, 16) for y in (0, 1, 2)]
+    bg = tuple(sum(c[i] for c in edge) // len(edge) for i in range(3))
+    canvas = Image.new('RGB', (1024, 1536), bg)
+    canvas.paste(im, (0, (1536 - h) // 2))
+    out = f'{root}/public/_refs/{d}/canvas.jpg'
+    canvas.save(out, 'JPEG', quality=90, optimize=True)
+    print(out.replace(root + '/', ''), canvas.size, 'bg', bg)

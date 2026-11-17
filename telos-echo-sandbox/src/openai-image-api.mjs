@@ -65,7 +65,7 @@ export function createOpenAIImageAdapter({
    * Reference format: {bytes: Buffer|Uint8Array, mime:'image/png'|'image/jpeg'|'image/webp'}.
    * Takes trusted, server-retrieved assets only. Never accept arbitrary URLs from clients.
    */
-  return async function render({ prompt, referenceImages = [], surface, safetyIdentifier, quality = 'high', size = '1024x1536' }) {
+  return async function render({ prompt, referenceImages = [], surface, safetyIdentifier, quality = 'high', size = '1024x1536', background }) {
     if (!['sfw', 'adult'].includes(surface)) throw new Error('UNTRUSTED_SURFACE');
     if (!prompt || typeof prompt !== 'string') throw new Error('PROMPT_REQUIRED');
     if (referenceImages.length > MAX_REFERENCE_IMAGES) throw new Error('TOO_MANY_REFERENCES');
@@ -81,6 +81,7 @@ export function createOpenAIImageAdapter({
       quality,
       size,
       output_format: 'png',
+      ...(background === 'transparent' || background === 'opaque' ? { background } : {}),
       n: 1,
       ...(includeSafetyIdentifier && safetyIdentifier ? { safety_identifier: safetyIdentifier } : {})
     };

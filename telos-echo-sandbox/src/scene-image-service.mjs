@@ -65,7 +65,8 @@ export function createSceneImageService({ scenes, canon, media, wallet, jobs, sa
       throw new Error('UNKNOWN_IMAGE_PURPOSE');
     }
     if ((request.quality !== undefined && !IMAGE_QUALITIES.includes(request.quality)) ||
-        (request.size !== undefined && !IMAGE_SIZES.includes(request.size))) {
+        (request.size !== undefined && !IMAGE_SIZES.includes(request.size)) ||
+        (request.background !== undefined && !['transparent', 'opaque'].includes(request.background))) {
       throw new Error('INVALID_IMAGE_REQUEST');
     }
 
@@ -116,7 +117,7 @@ export function createSceneImageService({ scenes, canon, media, wallet, jobs, sa
 
       const safetyIdentifier = createHash('sha256').update(principal.userId).digest('hex');
       const result = await openaiImage({ prompt, referenceImages: refs, surface: trustedSurface, safetyIdentifier,
-        ...(request.quality ? { quality: request.quality } : {}), ...(request.size ? { size: request.size } : {}) });
+        ...(request.quality ? { quality: request.quality } : {}), ...(request.size ? { size: request.size } : {}), ...(request.background ? { background: request.background } : {}) });
 
       const evaluation = await safeguards.afterGeneration({ principal, scene, snapshots, trustedSurface, bytes: result.bytes });
       if (!evaluation?.approved) throw new Error('IMAGE_FAILED_SAFEGUARDS_OR_FIDELITY');

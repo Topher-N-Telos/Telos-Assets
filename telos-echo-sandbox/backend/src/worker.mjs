@@ -50,6 +50,13 @@ export default {
       const type = url.pathname.endsWith('.jpg') ? 'image/jpeg' : url.pathname.endsWith('.png') ? 'image/png' : 'font/woff2';
       return withSec(new Response(asset.body, { headers: { 'content-type': type } }), { 'cache-control': 'private, max-age=31536000, immutable' });
     }
+    // Wardrobe layer test page (public/wardrobe-test.html): same login gate and CSP as the app.
+    if (url.pathname === '/wardrobe-test') {
+      if (request.method !== 'GET') return err(405, 'METHOD_NOT_ALLOWED');
+      const asset = await env.ASSETS.fetch(new Request(new URL('/wardrobe-test.html', request.url)));
+      if (!asset.ok) return err(404, 'NOT_FOUND');
+      return withSec(new Response(asset.body, { headers: { 'content-type': 'text/html; charset=utf-8' } }), { 'content-security-policy': APP_CSP, 'cache-control': 'private, no-cache' });
+    }
     if (url.pathname === '/test') {
       if (request.method !== 'GET') return err(405, 'METHOD_NOT_ALLOWED');
       const nonce = btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(16))));
@@ -83,6 +90,12 @@ export default {
       return err(404, 'NOT_FOUND');
     }
 
+    // The one reference image a signed-in tester may fetch: the registration canvas the wardrobe layers are drawn on (body only, no outfit art).
+    if (parts[1] === 'prebuilt' && parts[3] === 'base' && request.method === 'GET' && PREBUILT[parts[2]]?.canvas) {
+      const a = await env.ASSETS.fetch(new Request(new URL(`/_refs/${PREBUILT[parts[2]].dir}/canvas.jpg`, request.url)));
+      if (!a.ok) return err(503, 'CANON_NOT_DEPLOYED');
+      return withSec(new Response(a.body, { headers: { 'content-type': 'image/jpeg' } }), { 'cache-control': 'private, max-age=3600' });
+    }
     const stub = env.USER_STATE.get(env.USER_STATE.idFromName(who.email));
     // Prebuilt Telōs: reference images live in the Worker's private assets (public/_refs, never served to clients). Before the first
     // generation for a character, copy them into this user's own DO over RPC (once per canon version), then forward the request as normal.

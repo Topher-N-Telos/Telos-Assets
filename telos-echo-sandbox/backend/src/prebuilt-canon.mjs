@@ -8,8 +8,9 @@
  */
 import { ApiError, containsMinorSignal } from './common.mjs';
 
-export const PREBUILT_VERSION = 'v1';
-export const PREBUILT_MODES = ['outfit', 'scene'];
+export const PREBUILT_VERSION = 'v2';   // v2: adds the garment-layer registration canvas
+export const PREBUILT_MODES = ['outfit', 'scene', 'garment'];
+export const GARMENT_SLOTS = ['top', 'bottom', 'onepiece', 'shoes', 'accessory'];
 
 const REF_LABEL = {
   face: (n) => `FACE / IDENTITY reference for ${n} (SUBJECT 1) — reproduce this exact face, skin tone and hair`,
@@ -19,7 +20,7 @@ const REF_LABEL = {
 
 export const PREBUILT = Object.freeze({
   nova: {
-    name: 'Nova', world: 'TERRA', dir: 'terra-nova', forms: ['default'], defaultForm: 'default',
+    name: 'Nova', world: 'TERRA', dir: 'terra-nova', canvas: true, forms: ['default'], defaultForm: 'default',
     world_visual: 'TERRA: contemporary Earth-like city; natural light; architecture studios, blueprints, skyline views.',
     locked: { default: {
       species: 'Human', apparentAge: 'adult woman (match the reference photos)', skinTone: 'deep brown', hair: 'voluminous natural curly afro, copper-brown with auburn highlights',
@@ -72,12 +73,16 @@ export const PREBUILT = Object.freeze({
 export const prebuiltIds = Object.keys(PREBUILT);
 
 /** Reference files (role -> path under /_refs/) for a given request. 'look' is dropped when the user asks for a new outfit. */
-export function refPlan(charId, form, hasOutfit) {
-  const c = PREBUILT[charId]; const set = c.refs[form];
+export function refPlan(charId, form, hasOutfit, mode) {
+  const c = PREBUILT[charId];
+  if (mode === 'garment') {                       // wardrobe layer: ONE reference, the body fitted into the exact output canvas
+    return [{ role: 'canvas', file: `${c.dir}/canvas.jpg`, label: `REGISTRATION CANVAS for ${c.name} (SUBJECT 1) — the garment layer must be drawn at the exact position, scale and pose it has when worn on this body in this exact canvas` }];
+  }
+  const set = c.refs[form];
   return Object.entries(set).filter(([role]) => !(role === 'look' && hasOutfit))
     .map(([role, file]) => ({ role, file: `${c.dir}/${file}.jpg`, label: REF_LABEL[role](c.name) }));
 }
-export const allRefFiles = (charId) => [...new Set(Object.values(PREBUILT[charId].refs).flatMap((s) => Object.values(s)))].map((f) => `${PREBUILT[charId].dir}/${f}.jpg`);
+export const allRefFiles = (charId) => [...new Set([...Object.values(PREBUILT[charId].refs).flatMap((s) => Object.values(s)), ...(PREBUILT[charId].canvas ? ['canvas'] : [])])].map((f) => `${PREBUILT[charId].dir}/${f}.jpg`);
 
 const text = (v, max, field) => {
   if (v === undefined || v === null || v === '') return '';
@@ -96,12 +101,17 @@ export function normalizePrebuilt(charId, body) {
   const outfit = text(body.outfit, 300, 'outfit');
   const scene = text(body.scene, 500, 'scene');
   const direction = text(body.direction, 600, 'direction');
-  if (mode === 'outfit' && !outfit) throw new ApiError(400, 'FIELD_REQUIRED', { field: 'outfit' });
+  if ((mode === 'outfit' || mode === 'garment') && !outfit) throw new ApiError(400, 'FIELD_REQUIRED', { field: 'outfit' });
+  const slot = body.slot === undefined || body.slot === null || body.slot === '' ? '' : body.slot;
+  if (mode === 'garment') {
+    if (!c.canvas) throw new ApiError(400, 'GARMENT_LAYERS_UNAVAILABLE');
+    if (!GARMENT_SLOTS.includes(slot)) throw new ApiError(400, 'FIELD_INVALID', { field: 'slot' });
+  }
   if (mode === 'scene' && !scene) throw new ApiError(400, 'FIELD_REQUIRED', { field: 'scene' });
   if (containsMinorSignal(outfit, scene, direction)) throw new ApiError(400, 'BLOCKED_MINOR_TERMS');
   const key = String(body.idempotencyKey ?? '');
   if (!/^[A-Za-z0-9_-]{16,64}$/.test(key)) throw new ApiError(400, 'FIELD_INVALID', { field: 'idempotencyKey' });
-  return { kind: 'prebuilt', charId, form, mode, outfit, scene, direction, idempotencyKey: key, photoIds: [] };
+  return { kind: 'prebuilt', charId, form, mode, outfit, scene, direction, ...(mode === 'garment' ? { slot } : {}), idempotencyKey: key, photoIds: [] };
 }
 
 /** Everything runJob needs for a prebuilt job, derived only from trusted canon + validated fields. */
@@ -110,6 +120,15 @@ export function prebuiltScene(p) {
   const locked = c.locked[p.form];
   const look = typeof c.canonLookText === 'string' ? c.canonLookText : c.canonLookText[p.form];
   const outfit = p.outfit || look || '';
+  if (p.mode === 'garment') {
+    const what = { top: 'upper-body garment (top, shirt, jacket or blouse)', bottom: 'lower-body garment (trousers, skirt or shorts)', onepiece: 'one-piece garment (dress or jumpsuit)', shoes: 'pair of shoes', accessory: 'accessory' }[p.slot];
+    return {
+      sceneIntro: `Wardrobe layer for ${c.name}: ONLY the ${what} described below, drawn on a fully transparent background. Show no person at all: no skin, no face, no hair, no hands, no mannequin, no other clothing. The garment sits at exactly the position, scale and pose it has when worn on the body in the registration canvas, same framing, same canvas, so it can be laid directly over that image.`,
+      displayName: c.name, locked, outfit: p.outfit, worldVisual: '', background: 'transparent',
+      artDirection: [`Garment (${p.slot}): ${p.outfit}`, 'Transparent background. Garment only. Keep the registration canvas geometry exactly.', p.direction].filter(Boolean).join('\n'),
+      mode: 'portrait'
+    };
+  }
   const intro = p.mode === 'outfit'
     ? `${c.name} in ${c.world}, shown full length wearing the requested new outfit, relaxed natural pose.`
     : `${c.name} in the following moment in ${c.world}: ${p.scene}`;
