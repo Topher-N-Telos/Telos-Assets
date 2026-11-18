@@ -7,7 +7,7 @@
 import { DurableObject } from 'cloudflare:workers';
 import { createSceneImageService } from '../../src/scene-image-service.mjs';
 import { createOpenAIImageAdapter } from '../../src/openai-image-api.mjs';
-import { ApiError, parseConfig, costFromUsage, dayKey, containsMinorSignal, sniffImage, firstNumber, normalizeOnboarding, KINDS } from './common.mjs';
+import { ApiError, parseConfig, costFromUsage, dayKey, containsMinorSignal, sniffImage, firstNumber, normalizeOnboarding, KINDS, isKind, baseKind } from './common.mjs';
 import { screenUpload, screenOutput } from './safety.mjs';
 import { PREBUILT, PREBUILT_VERSION, refPlan, prebuiltScene, normalizePrebuilt } from './prebuilt-canon.mjs';
 
@@ -101,14 +101,14 @@ export class UserState extends DurableObject {
     const parts = url.pathname.split('/').filter(Boolean);
     const m = request.method, [root, a, b, c] = parts;
     if (root !== 'api') throw new ApiError(404, 'NOT_FOUND');
-    if (a === 'me' && !b && m === 'GET') return json(this.me());
+    if (a === 'me' && !b && m === 'GET') return json(this.me(url.searchParams.get('telo')));
     if (a === 'me' && b === 'purge' && m === 'POST') return json(await this.purge(await this.body(request)));
     if (a === 'uploads') {
       if (m === 'POST' && !b) return json(await this.addUpload(request));
       if (m === 'GET' && b && c === 'image') return this.uploadImage(b);
       if (m === 'DELETE' && b) return json(this.deleteUpload(b));
     }
-    if (a === 'onboarding' && KINDS.includes(b)) {
+    if (a === 'onboarding' && isKind(b)) {
       if (c === 'generate' && m === 'POST') return json(await this.generate(b, await this.body(request)));
       if (c === 'accept' && m === 'POST') return json(this.accept(b, await this.body(request)));
     }
@@ -136,16 +136,18 @@ export class UserState extends DurableObject {
       unlimited: unl, freeTotal: unl ? null : allowed, used, remaining: unl ? null : Math.max(0, allowed - used), acceptedImageId: this.accepted(kind),
       images: this.q('SELECT id,job_id,accepted,created_at FROM images WHERE kind=? ORDER BY created_at', kind).map((r) => ({ id: r.id, jobId: r.job_id, accepted: !!r.accepted, createdAt: r.created_at })),
       pendingJob: this.one("SELECT id,state FROM jobs WHERE kind=? AND state IN ('created','working') ORDER BY created_at DESC LIMIT 1", kind),
-      ...(kind === 'telo' || kind === 'avatar' ? {
+      ...(baseKind(kind) === 'telo' || kind === 'avatar' ? {
         hasPackage: !!this.one('SELECT 1 x FROM images WHERE kind=?', kind),
         acceptedFaceImageId: this.one("SELECT id FROM images WHERE kind=? AND accepted=1", kind + '_face')?.id ?? null,
         faceImages: this.q('SELECT id,job_id,accepted,created_at FROM images WHERE kind=? ORDER BY created_at', kind + '_face').map((r) => ({ id: r.id, jobId: r.job_id, accepted: !!r.accepted, createdAt: r.created_at }))
       } : {})
     };
   }
-  me() {
+  me(scopedTeloId) {
     const cfg = this.cfg, now = Date.now();
+    const scoped = scopedTeloId && /^[A-Za-z0-9_-]{1,40}$/.test(scopedTeloId) ? 'telo~' + scopedTeloId : null;   // a Telō created after onboarding: its own package + redos
     return {
+      ...(scoped ? { [scoped]: this.kindView(scoped) } : {}),
       avatar: this.kindView('avatar'), telo: this.kindView('telo'), prebuilt: this.kindView(PREBUILT_KIND),
       uploads: this.q('SELECT id,certified,created_at FROM uploads ORDER BY created_at').map((r) => ({ id: r.id, certifiedAs: r.certified, createdAt: r.created_at })),
       limits: { callsToday: this.callsToday(now), callsPerDay: cfg.maxCallsPerDayUser, minIntervalMs: cfg.minSubmitIntervalMs },
@@ -249,15 +251,15 @@ export class UserState extends DurableObject {
     const last = this.meta('lastSubmitAt', 0);
     if (last && now - last < cfg.minSubmitIntervalMs) throw new ApiError(429, 'TOO_SOON', { retryAfterMs: cfg.minSubmitIntervalMs - (now - last) });
     if (this.one("SELECT COUNT(*) n FROM jobs WHERE state IN ('created','working')").n >= cfg.maxQueuedUser) throw new ApiError(429, 'TOO_MANY_QUEUED');
-    const calls = (kind === 'telo' || kind === 'avatar') && p.part === 'package' ? 2 : 1;      // a Telō package is two provider calls under one allotment unit
+    const calls = (baseKind(kind) === 'telo' || kind === 'avatar') && p.part === 'package' ? 2 : 1;      // a Telō package is two provider calls under one allotment unit
     if (!this.unlimited && this.callsToday(now) + calls > cfg.maxCallsPerDayUser) throw new ApiError(429, 'DAILY_CALL_CAP', { cap: cfg.maxCallsPerDayUser });
-    if (kind === 'telo' || kind === 'avatar') {
+    if (baseKind(kind) === 'telo' || kind === 'avatar') {
       const has = !!this.one('SELECT 1 x FROM images WHERE kind=?', kind);
       if (p.part === 'package' && has && !this.unlimited) throw new ApiError(409, 'PACKAGE_ALREADY_GENERATED');
       if (p.part !== 'package' && !has) throw new ApiError(400, 'PACKAGE_REQUIRED');
       if (p.part === 'face' && this.one('SELECT kind FROM images WHERE id=?', p.refImageId)?.kind !== kind) throw new ApiError(404, 'REF_IMAGE_NOT_FOUND');
     }
-    for (const id of p.photoIds) { const u = this.one('SELECT certified FROM uploads WHERE id=?', id); if (!u) throw new ApiError(404, 'PHOTO_NOT_FOUND', { id }); if ((u.certified === 'rights') !== (kind === 'telo')) throw new ApiError(400, 'PHOTO_WRONG_PURPOSE', { id }); }
+    for (const id of p.photoIds) { const u = this.one('SELECT certified FROM uploads WHERE id=?', id); if (!u) throw new ApiError(404, 'PHOTO_NOT_FOUND', { id }); if ((u.certified === 'rights') !== (baseKind(kind) === 'telo')) throw new ApiError(400, 'PHOTO_WRONG_PURPOSE', { id }); }
     if (!this.unlimited && this.used(kind) >= this.allowed(kind)) throw new ApiError(402, 'FREE_ALLOTMENT_USED');
     if (!cfg.allowPhotoUploads && p.photoIds.length) throw new ApiError(403, 'PHOTO_UPLOADS_DISABLED');
 
@@ -281,7 +283,7 @@ export class UserState extends DurableObject {
     const img = this.one('SELECT id,kind FROM images WHERE id=?', String(body.imageId ?? ''));
     if (!img || img.kind !== kind) throw new ApiError(404, 'NOT_FOUND');
     let face = null;
-    if (kind === 'telo' || kind === 'avatar') {
+    if (baseKind(kind) === 'telo' || kind === 'avatar') {
       face = body.faceImageId ? this.one('SELECT id,kind FROM images WHERE id=?', String(body.faceImageId)) : null;
       if (body.faceImageId && face?.kind !== kind + '_face') throw new ApiError(404, 'NOT_FOUND');
       if (!face && this.one('SELECT 1 x FROM images WHERE kind=?', kind + '_face')) throw new ApiError(400, 'FACE_IMAGE_REQUIRED');
@@ -290,7 +292,7 @@ export class UserState extends DurableObject {
     this.run('UPDATE images SET accepted=1 WHERE id=?', img.id);
     if (face) this.run('UPDATE images SET accepted=1 WHERE id=?', face.id);
     // retention: reference photos for the chosen kind are deleted as soon as the image is chosen
-    for (const u of this.q('SELECT id,blob_id,certified FROM uploads')) if ((u.certified === 'rights') === (kind === 'telo')) { this.delBlob(u.blob_id); this.run('DELETE FROM uploads WHERE id=?', u.id); }
+    for (const u of this.q('SELECT id,blob_id,certified FROM uploads')) if ((u.certified === 'rights') === (baseKind(kind) === 'telo')) { this.delBlob(u.blob_id); this.run('DELETE FROM uploads WHERE id=?', u.id); }
     return this.me();
   }
 
@@ -329,7 +331,7 @@ export class UserState extends DurableObject {
     const principal = { userId: (await sha(String(email))).slice(0, 32), verifiedAdult: false, age: 18 };
     const sceneId = `scene_${job.id}`;
     const pb = p.kind === PREBUILT_KIND ? prebuiltScene(p) : null;
-    const face = (p.kind === 'telo' || p.kind === 'avatar') && p.part === 'face';       // face close-up half of the Telō package (built from the full-length image)
+    const face = (baseKind(p.kind) === 'telo' || p.kind === 'avatar') && p.part === 'face';       // face close-up half of the Telō package (built from the full-length image)
     const adult = pb ? 'adult' : (p.canon.apparentAge && (firstNumber(p.canon.apparentAge) ?? 18) >= 18) ? 'adult' : 'unknown';
     const sceneIntro = pb ? pb.sceneIntro : face
       ? 'Face-detail close-up of ' + (p.kind === 'avatar' ? 'the user\'s own avatar' : 'the user\'s Telōsian companion') + ', the SAME person as the attached full-length reference: head and shoulders with the face filling most of the frame, calm neutral expression, soft even lighting, sharp skin, hair and eye detail, plain uncluttered background.'
@@ -361,7 +363,7 @@ export class UserState extends DurableObject {
           for (const id of p.photoIds) {
             const u = self.one('SELECT blob_id FROM uploads WHERE id=?', id); const b = u && self.getBlob(u.blob_id);
             if (!b) throw new Error('CANON_REFERENCES_UNAVAILABLE');
-            refs.push({ bytes: b.bytes, mime: b.mime, label: p.kind === 'telo' ? 'the character to render, reference image of an existing character (SUBJECT 1) — appearance' : 'the user\'s own likeness reference photo (SUBJECT 1) — face and body' });
+            refs.push({ bytes: b.bytes, mime: b.mime, label: baseKind(p.kind) === 'telo' ? 'the character to render, reference image of an existing character (SUBJECT 1) — appearance' : 'the user\'s own likeness reference photo (SUBJECT 1) — face and body' });
           }
           return refs;
         },
@@ -431,7 +433,7 @@ export class UserState extends DurableObject {
   async runJob(jobId) {
     const job = this.one('SELECT * FROM jobs WHERE id=?', jobId);
     const p = JSON.parse(job.params);
-    const isPackage = (p.kind === 'telo' || p.kind === 'avatar') && p.part === 'package';
+    const isPackage = (baseKind(p.kind) === 'telo' || p.kind === 'avatar') && p.part === 'package';
     const ids = [jobId];
     let faceFailure = null, fullOk = false;
     await this.renderPart(jobId);

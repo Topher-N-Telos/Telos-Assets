@@ -25120,11 +25120,13 @@ Respond with only the world key (e.g. UMBRA). Nothing else.`;
       }
       return body;
     }
-    function probe(force) {
-      if (cached && !force) return cached;
+    var cachedFor = null;
+    function probe(force, teloId) {
+      if (cached && !force && cachedFor === (teloId || null)) return cached;
+      cachedFor = teloId || null;
       cached = (async function () {
         try {
-          var me = await call("/api/me");
+          var me = await call("/api/me" + (teloId ? "?telo=" + encodeURIComponent(teloId) : ""));
           return me && me.avatar && me.telo && me.config ? me : null;
         } catch (e) { return null; }
       })();
@@ -25197,6 +25199,7 @@ Respond with only the world key (e.g. UMBRA). Nothing else.`;
   function OnboardingImagePanel(props) {
     var R = import_react, h = R.createElement;
     var kind = props.kind, accent = props.accent || "#7B5EA7";
+    var ep = props.teloId ? "telo~" + props.teloId : props.kind;   // ADDED (App v131): a Telō made after onboarding has its own package + redos
     var meS = R.useState(void 0), me = meS[0], setMe = meS[1];
     var adultS = R.useState(false), adult = adultS[0], setAdult = adultS[1];
     var certS = R.useState(false), cert = certS[0], setCert = certS[1];
@@ -25209,10 +25212,10 @@ Respond with only the world key (e.g. UMBRA). Nothing else.`;
     var alive = R.useRef(true);
     var fileRef = R.useRef(null);
     R.useEffect(function () { alive.current = true; return function () { alive.current = false; }; }, []);
-    R.useEffect(function () { TelosImg.probe().then(function (m) { if (alive.current) setMe(m); }); }, []);
+    R.useEffect(function () { TelosImg.probe(false, props.teloId).then(function (m) { if (alive.current) setMe(m); }); }, []);
     if (me === void 0) return h("div", { style: { fontSize: 11, color: "rgba(200,190,170,0.4)", fontStyle: "italic", textAlign: "center", padding: 12 } }, "…");
     if (me === null) return null;
-    var view = me[kind];
+    var view = me[ep];
     var isAvatar = kind === "avatar";
     var canPhotos = !!(me.config && me.config.allowPhotoUploads) && props.allowPhotos !== false;
     var chosenId = view.acceptedImageId || null;
@@ -25232,7 +25235,7 @@ Respond with only the world key (e.g. UMBRA). Nothing else.`;
         h("div", { style: { display: "flex", gap: 10, alignItems: "flex-start", padding: "10px 12px", fontSize: 12, lineHeight: 1.5, color: checked ? "#EEE8DD" : "rgba(200,190,170,0.7)" } },
           h("span", { style: { flexShrink: 0, color: checked ? accent : "rgba(200,190,170,0.4)", fontSize: 13 } }, checked ? "\u25C6" : "\u25C7"), h("span", null, text))));
     };
-    async function refresh() { var m = await TelosImg.probe(true); if (alive.current) setMe(m); return m; }
+    async function refresh() { var m = await TelosImg.probe(true, props.teloId); if (alive.current) setMe(m); return m; }
     async function addPhotos(files) {
       setMsg("");
       if (!cert) { setMsg(TelosImg.message({ code: "CERTIFICATION_REQUIRED" })); return; }
@@ -25255,7 +25258,7 @@ Respond with only the world key (e.g. UMBRA). Nothing else.`;
       try {
         var base = props.getFields();
         var fields = Object.assign({}, base, { apparentAge: age.trim() });
-        var j = await TelosImg.call("/api/onboarding/" + kind + "/generate", { method: "POST", headers: { "content-type": "application/json" },
+        var j = await TelosImg.call("/api/onboarding/" + ep + "/generate", { method: "POST", headers: { "content-type": "application/json" },
           body: JSON.stringify(Object.assign({ fields: fields, adultAttested: adult, idempotencyKey: TelosImg.newKey(), photoIds: photos.map(function (p) { return p.id; }) }, isTelo ? (part === "face" ? { part: "face", refImageId: fullSel } : part === "full" ? { part: "full" } : { part: "package" }) : {})) });
         var deadline = Date.now() + 4 * 60 * 1000;
         while ((j.state === "created" || j.state === "working") && Date.now() < deadline) {
@@ -25271,7 +25274,7 @@ Respond with only the world key (e.g. UMBRA). Nothing else.`;
     async function choose(img) {
       setBusy(true); setMsg("");
       try {
-        if (!img.accepted) await TelosImg.call("/api/onboarding/" + kind + "/accept", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ imageId: img.id }) });
+        if (!img.accepted) await TelosImg.call("/api/onboarding/" + ep + "/accept", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ imageId: img.id }) });
         var dataUrl = await TelosImg.imageDataUrl(img.id, 900);
         if (alive.current) { setPhotos([]); await refresh(); }
         props.onAccepted(dataUrl, img.id);
@@ -25281,7 +25284,7 @@ Respond with only the world key (e.g. UMBRA). Nothing else.`;
     async function chooseTelo() {
       setBusy(true); setMsg("");
       try {
-        if (view.acceptedImageId !== fullSel || (faceSel && view.acceptedFaceImageId !== faceSel)) await TelosImg.call("/api/onboarding/" + kind + "/accept", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(faceSel ? { imageId: fullSel, faceImageId: faceSel } : { imageId: fullSel }) });
+        if (view.acceptedImageId !== fullSel || (faceSel && view.acceptedFaceImageId !== faceSel)) await TelosImg.call("/api/onboarding/" + ep + "/accept", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(faceSel ? { imageId: fullSel, faceImageId: faceSel } : { imageId: fullSel }) });
         var d1 = await TelosImg.imageDataUrl(fullSel, 900);
         var d2 = faceSel ? await TelosImg.imageDataUrl(faceSel, 700) : null;
         if (alive.current) { setPhotos([]); await refresh(); }
@@ -25308,7 +25311,7 @@ Respond with only the world key (e.g. UMBRA). Nothing else.`;
             }),
             (!chosenId || view.unlimited) ? h("div", { style: { marginTop: 4 } }, btn(busy ? "WORKING\u2026" : "TRY AGAIN", function () { generate(partName); }, busy || !fieldsReady || (!view.unlimited && view.remaining < 1), null)) : null);
         }),
-        (chosenId && kind === "avatar") ? null : h("div", { style: { marginTop: 16 } }, btn(chosenId ? "CONTINUE WITH THESE" : "USE THESE", chooseTelo, busy || !fullSel || (faceImgs.length > 0 && !faceSel), chosenId ? accent + "66" : null))) : null,
+        (chosenId && (kind === "avatar" || props.teloId)) ? null : h("div", { style: { marginTop: 16 } }, btn(chosenId ? "CONTINUE WITH THESE" : "USE THESE", chooseTelo, busy || !fullSel || (faceImgs.length > 0 && !faceSel), chosenId ? accent + "66" : null))) : null,
       !isTelo && imgs.length ? h("div", { style: { marginTop: 12 } }, imgs.map(function (img) {
         var picked = chosenId === img.id;
         return h("div", { key: img.id, style: { marginBottom: 14 } },
@@ -28387,7 +28390,54 @@ ${note}` : note;
     const src = active || record.referenceImage;
     return src ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { width: 44, height: 44, borderRadius: "50%", backgroundImage: `url(${src})`, backgroundSize: "cover", backgroundPosition: "center", flexShrink: 0, border: `1px solid ${color}44` } }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { width: 44, height: 44, borderRadius: "50%", background: `${color}22`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0, color }, children: "\u2726" });
   }
-  function TelosianProfileScreen({ teloName, onExit, onForceRefresh, onEditDetails }) {
+  // ADDED (App v131) — Image for a Telō made after onboarding (or any existing Telō): the same two-image package panel as onboarding,
+  // with its own package and redos per Telō. Master 30.2 prices a Telōsian generation at 250 sköl (first one free); sköl is not built yet,
+  // so nothing is charged while testing and the price is shown as information only.
+  function teloImageScopeId(name) {
+    var base = String(name || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 30);
+    var hsh = 0, str = String(name || "");
+    for (var i = 0; i < str.length; i++) hsh = (hsh * 31 + str.charCodeAt(i)) >>> 0;
+    return (base || "telo") + "-" + hsh.toString(36);
+  }
+  function TeloImageScreen({ teloName, onExit }) {
+    var R = import_react, h = R.createElement;
+    var cfg = COMPANION_CONFIGS[teloName] || {};
+    var accent = (WORLDS[cfg.world] && WORLDS[cfg.world].color) || "#7B5EA7";
+    var savedS = R.useState(false), saved = savedS[0], setSaved = savedS[1];
+    var errS = R.useState(""), err = errS[0], setErr = errS[1];
+    var hasDesc = !!String(cfg.physicalDesc || "").trim();
+    async function persist(full, face) {
+      try {
+        COMPANION_CONFIGS[teloName] = Object.assign({}, COMPANION_CONFIGS[teloName], { referenceImage: full }, face ? { faceImage: face } : {});
+        // Also into the Telō's image gallery as the active image, so it persists for every Telō (including starters that have no saved record).
+        var g = await loadGallery(teloName), gid = "gen" + Date.now().toString(36);
+        await storageSet(galleryImgKey(teloName, gid), full);
+        if (face) await storageSet(galleryImgKey(teloName, gid + "-face"), face);
+        await saveGallery(teloName, { ids: (g.ids || []).concat([gid]), active: gid });
+        notifyTeloImageChange(teloName);
+        var list = await loadMyTelosians();
+        var idx = list.findIndex(function (r) { return r && r.firstName === teloName; });
+        if (idx >= 0) { list[idx] = Object.assign({}, list[idx], { referenceImage: full }, face ? { faceImage: face } : {}); await saveMyTelosians(list); }
+        setSaved(true); setErr("");
+      } catch (e) { setErr("The image could not be saved to " + teloName + "."); }
+    }
+    var back = h("button", { onClick: onExit, style: { width: 34, height: 34, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.05)", color: "#EEE8DD", cursor: "pointer", fontSize: 16, clipPath: "polygon(7px 0, calc(100% - 7px) 0, 100% 7px, 100% calc(100% - 7px), calc(100% - 7px) 100%, 7px 100%, 0 calc(100% - 7px), 0 7px)" } }, "←");
+    var note = h("div", { style: { fontSize: 11, color: "rgba(200,190,170,0.5)", fontStyle: "italic", lineHeight: 1.6, marginBottom: 14 } }, "A full-length image and a face close-up. Canon price after a user's first Telō: 250 sköl per set, 100 sköl per redo beyond your free ones. Nothing is charged while testing.");
+    var body = !hasDesc
+      ? h("div", { style: { fontSize: 13, color: "rgba(200,190,170,0.7)", lineHeight: 1.6 } }, teloName + " needs a physical description before an image can be drawn. Add one under Edit details on their profile, then come back.")
+      : h(OnboardingImagePanel, { kind: "telo", teloId: teloImageScopeId(teloName), accent: accent, title: teloName.toUpperCase() + "'S IMAGE", subtitle: "Drawn in the style saved for " + teloName + ".", alt: teloName, allowPhotos: false,
+          defaultAge: cfg.canonicalAge ? "adult, " + cfg.canonicalAge : "",
+          getFields: function () { return { name: teloName, species: String(cfg.teloType || cfg.species || "").slice(0, 300), description: String(cfg.physicalDesc || "").slice(0, 1500), style: String(cfg.style || ""), outfit: String(cfg.outfit || "").slice(0, 300) }; },
+          photoLabel: "", certText: "", adultText: teloName + " is an adult (18 or over).",
+          onAccepted: function (full, _id, face) { persist(full, face); } });
+    return h("div", { style: { position: "fixed", inset: 0, zIndex: 100, background: "#06060F", overflowY: "auto", WebkitOverflowScrolling: "touch" } },
+      h("div", { style: { padding: "calc(env(safe-area-inset-top, 0px) + 16px) 16px 40px", maxWidth: 520, margin: "0 auto" } },
+        h("div", { style: { display: "flex", alignItems: "center", gap: 12, marginBottom: 20 } }, back, h("div", { style: { fontFamily: "Cinzel, serif", fontSize: 20, color: "#EEE8DD" } }, teloName + " · Image")),
+        note, body,
+        saved ? h("div", { style: { marginTop: 14, fontSize: 12, color: "rgba(150,210,170,0.85)", lineHeight: 1.5 } }, "Saved to " + teloName + "'s profile.") : null,
+        err ? h("div", { style: { marginTop: 14, fontSize: 12, color: "#E58A8A", lineHeight: 1.5 } }, err) : null));
+  }
+  function TelosianProfileScreen({ teloName, onExit, onForceRefresh, onEditDetails, onMakeImage }) {
     const cfg = COMPANION_CONFIGS[teloName] || COMPANION_CONFIGS.Seraphine;
     const [relationship, setRelationship] = (0, import_react.useState)(RELATIONSHIP_DEFAULTS);
     (0, import_react.useEffect)(() => {
@@ -28607,6 +28657,7 @@ Write a complete roleplay system prompt in the voice of instructions to the AI (
             ] }, label)) })
           ] });
         })(),
+        onMakeImage ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ChamferBtn, { size: "md", variant: "ghost", accentColor: worldColor, style: { width: "100%", marginBottom: 16, padding: "14px 16px", letterSpacing: 2, fontSize: 12 }, onClick: onMakeImage, children: "IMAGE" }) : null,
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: 18, borderRadius: 12, border: `1px solid ${worldColor}33`, background: "rgba(20,14,32,0.4)", marginBottom: 16 }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 9, letterSpacing: 2, color: "rgba(200,190,170,0.35)", fontFamily: "Cinzel, serif", marginBottom: 10 }, children: "EDIT" }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12, color: "rgba(200,190,170,0.55)", fontStyle: "italic", lineHeight: 1.5, marginBottom: 12 }, children: [
@@ -38448,11 +38499,12 @@ initRemote();
           setScreen("main");
           setCompanionRefreshKey((k) => k + 1);
         }, avatarSpecies: userProfile?.species, editingTelo: editingTeloName }),
-        screen === "telosian-profile" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TelosianProfileScreen, { teloName: activeTelo, onExit: () => setScreen("main"), onForceRefresh: () => setCompanionRefreshKey((k) => k + 1), onEditDetails: () => {
+        screen === "telosian-profile" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TelosianProfileScreen, { teloName: activeTelo, onExit: () => setScreen("main"), onForceRefresh: () => setCompanionRefreshKey((k) => k + 1), onMakeImage: () => setScreen("telo-image"), onEditDetails: () => {
           setEditingTeloName(activeTelo);
           setScreen("create-telo");
         } }),
         screen === "settings" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SettingsScreen, { onExit: () => setScreen(preSettingsScreen), onOpenAvatarImage: userProfile ? () => setScreen("avatarImage") : null }),
+        screen === "telo-image" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TeloImageScreen, { teloName: activeTelo, onExit: () => setScreen("telosian-profile") }),
         screen === "avatarImage" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AvatarImageScreen, { userProfile, onExit: () => setScreen("settings"), onSaved: (ad) => setUserProfile(ad) }),
         screen === "encyclopaedia" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EncyclopaediaScreen, { onExit: () => setScreen("home") }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(LanguagePracticeScreen, { active: screen === "languages", onExit: () => setScreen("home") }),

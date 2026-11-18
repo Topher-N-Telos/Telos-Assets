@@ -375,3 +375,22 @@ test('prebuilt: wardrobe garment layers are one transparent, registered referenc
   assert.equal((await ownerD('GET', '/api/prebuilt/seraphine/base')).status, 404);          // only characters with a canvas
   assert.equal((await ownerD('GET', '/_refs/terra-nova/body.jpg')).status, 404);            // the raw references stay private
 });
+
+test('Telō made after onboarding: its own package, redos and accepted image, independent of the onboarding Telō and of other Telōs', async () => {
+  await sleep(150);
+  const before = (await cara('GET', '/api/me')).json.telo;
+  assert.equal((await cara('GET', '/api/me?telo=wren-1')).json['telo~wren-1'].remaining, 2);          // its own free unit + redo
+  assert.equal((await cara('POST', '/api/onboarding/telo~bad%20id/generate', body())).status, 404);   // only simple ids are accepted
+  const n = mockLog.length;
+  const j = await genWait(cara, 'telo~wren-1'); assert.equal(j.state, 'complete', JSON.stringify(j)); assert.ok(j.imageId && j.faceImageId);
+  assert.equal(mockLog.length - n, 2);                                                               // full-length + face close-up, one unit
+  const v = (await cara('GET', '/api/me?telo=wren-1')).json['telo~wren-1']; assert.equal(v.hasPackage, true); assert.equal(v.remaining, 1);
+  assert.deepEqual((await cara('GET', '/api/me')).json.telo, before);                                 // onboarding Telō untouched
+  await sleep(150);
+  const dup = await gen(cara, 'telo~wren-1'); assert.equal(dup.status, 409, JSON.stringify(dup.json)); assert.equal(dup.json.error, 'PACKAGE_ALREADY_GENERATED');
+  await sleep(150);
+  const other = await genWait(cara, 'telo~sol-9'); assert.equal(other.state, 'complete');            // a different Telō gets its own package
+  const acc = await cara('POST', '/api/onboarding/telo~wren-1/accept', { imageId: j.imageId, faceImageId: j.faceImageId }); assert.equal(acc.status, 200, JSON.stringify(acc.json));
+  assert.equal(acc.json['telo~wren-1']?.acceptedImageId ?? (await cara('GET', '/api/me?telo=wren-1')).json['telo~wren-1'].acceptedImageId, j.imageId);
+  assert.equal((await alice('GET', '/api/images/' + j.imageId)).status, 404);                        // images stay private to their owner
+});

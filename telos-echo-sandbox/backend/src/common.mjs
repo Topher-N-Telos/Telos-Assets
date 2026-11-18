@@ -83,6 +83,11 @@ export function sniffImage(b) {
 export const firstNumber = (s) => { const m = String(s ?? '').match(/(\d{1,3})/); return m ? Number(m[1]) : null; };
 
 export const KINDS = ['avatar', 'telo'];
+// A Telō created AFTER onboarding gets its own image package under the scoped kind 'telo~<teloId>' (own free unit and redos, own images).
+// Behaves exactly like 'telo' everywhere except storage/allotment, which key on the full string. baseKind() gives the behavioural kind.
+export const TELO_SCOPED = /^telo~[A-Za-z0-9_-]{1,40}$/;
+export const isKind = (k) => KINDS.includes(k) || TELO_SCOPED.test(k);
+export const baseKind = (k) => (TELO_SCOPED.test(k) ? 'telo' : k);
 
 const FIELDS = ['species', 'apparentAge', 'height', 'bodyType', 'skinTone', 'facialFeatures', 'eyes', 'hair', 'facialHair', 'bodyHair', 'marks', 'physique', 'mobilityAids'];
 const str = (v, max, field, required = false) => {
@@ -96,7 +101,7 @@ const str = (v, max, field, required = false) => {
  * depicted is an adult AND give an apparent age with no number under 18. This is a backstop, not age verification.
  */
 export function normalizeOnboarding(kind, body) {
-  if (!KINDS.includes(kind)) throw new ApiError(404, 'NOT_FOUND');
+  if (!isKind(kind)) throw new ApiError(404, 'NOT_FOUND');
   const f = body?.fields;
   if (!f || typeof f !== 'object' || Array.isArray(f)) throw new ApiError(400, 'FIELD_INVALID', { field: 'fields' });
   const canon = {};
@@ -115,7 +120,7 @@ export function normalizeOnboarding(kind, body) {
   const photoIds = body.photoIds ?? [];
   if (!Array.isArray(photoIds) || photoIds.length > 3 || photoIds.some((i) => typeof i !== 'string' || !/^[A-Za-z0-9_-]{6,64}$/.test(i))) throw new ApiError(400, 'FIELD_INVALID', { field: 'photoIds' });
   // Telō and avatar onboarding are a two-image package (full-length + face close-up, one free allotment unit). 'full' / 'face' redo ONE image (one unit each).
-  const part = (kind === 'telo' || kind === 'avatar') ? (body.part ?? 'package') : 'full';
+  const part = (baseKind(kind) === 'telo' || kind === 'avatar') ? (body.part ?? 'package') : 'full';
   if (!['package', 'full', 'face'].includes(part)) throw new ApiError(400, 'FIELD_INVALID', { field: 'part' });
   const refImageId = body.refImageId ?? '';
   if (part === 'face' && !/^[A-Za-z0-9_-]{6,64}$/.test(String(refImageId))) throw new ApiError(400, 'FIELD_INVALID', { field: 'refImageId' });
