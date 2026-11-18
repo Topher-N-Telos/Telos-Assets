@@ -25281,7 +25281,7 @@ Respond with only the world key (e.g. UMBRA). Nothing else.`;
     async function chooseTelo() {
       setBusy(true); setMsg("");
       try {
-        if (view.acceptedImageId !== fullSel || (faceSel && view.acceptedFaceImageId !== faceSel)) await TelosImg.call("/api/onboarding/telo/accept", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(faceSel ? { imageId: fullSel, faceImageId: faceSel } : { imageId: fullSel }) });
+        if (view.acceptedImageId !== fullSel || (faceSel && view.acceptedFaceImageId !== faceSel)) await TelosImg.call("/api/onboarding/" + kind + "/accept", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(faceSel ? { imageId: fullSel, faceImageId: faceSel } : { imageId: fullSel }) });
         var d1 = await TelosImg.imageDataUrl(fullSel, 900);
         var d2 = faceSel ? await TelosImg.imageDataUrl(faceSel, 700) : null;
         if (alive.current) { setPhotos([]); await refresh(); }
@@ -25383,6 +25383,7 @@ Respond with only the world key (e.g. UMBRA). Nothing else.`;
     const [fullExpanded, setFullExpanded] = (0, import_react.useState)(null);
     const [fullExpanding, setFullExpanding] = (0, import_react.useState)(false);
     const [photoRef, setPhotoRef] = (0, import_react.useState)(null);
+    const [avatarFaceImage, setAvatarFaceImage] = (0, import_react.useState)(null); // ADDED (App v130): the avatar package's face close-up
     const [avatarImage, setAvatarImage] = (0, import_react.useState)(null); // ADDED (App v129): accepted avatar image (data URL), only when the image service is reachable
     const [teloImageSpecies, setTeloImageSpecies] = (0, import_react.useState)(""); // ADDED (App v129): species chosen in the Full Build Telo creator, for the Telo image step
     const touchStartX = (0, import_react.useRef)(null);
@@ -26799,7 +26800,7 @@ Write a complete roleplay system prompt in the voice of instructions to the AI (
                 ] })
               ] })
             ] }) }),
-            import_react.createElement(OnboardingImagePanel, { kind: "avatar", accent: stepWorldColor, title: "YOUR AVATAR IMAGE", subtitle: "A full-length image and a face close-up of you in TEL\u014CS. Optional.", alt: "Your avatar", defaultAge: avatarAgeDefault, getFields: () => ({ name: avatarName, species: species || "", description: buildAvatarImageDescription().slice(0, 1500), style: style, outfit: String(expandedClothing || avatarClothing || "").slice(0, 300) }), photoLabel: "YOUR PHOTO (OPTIONAL, UP TO 3)", certText: "These photos are of me, or I have the person's permission, and they are an adult.", adultText: "My avatar shows an adult (18 or over).", onAccepted: (d) => setAvatarImage(d) }),
+            import_react.createElement(OnboardingImagePanel, { kind: "avatar", accent: stepWorldColor, title: "YOUR AVATAR IMAGE", subtitle: "A full-length image and a face close-up of you in TEL\u014CS. Optional.", alt: "Your avatar", defaultAge: avatarAgeDefault, getFields: () => ({ name: avatarName, species: species || "", description: buildAvatarImageDescription().slice(0, 1500), style: style, outfit: String(expandedClothing || avatarClothing || "").slice(0, 300) }), photoLabel: "YOUR PHOTO (OPTIONAL, UP TO 3)", certText: "These photos are of me, or I have the person's permission, and they are an adult.", adultText: "My avatar shows an adult (18 or over).", onAccepted: (d, _id, f) => { setAvatarImage(d); setAvatarFaceImage(f || null); } }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: "rgba(200,190,170,0.3)", fontStyle: "italic", textAlign: "center", lineHeight: 1.6 }, children: "Your world will be revealed based on who you are." })
           ] })
         ] }),
@@ -27010,6 +27011,7 @@ Write a complete roleplay system prompt in the voice of instructions to the AI (
                 clothing: expandedClothing || avatarClothing,
                 style,
                 image: avatarImage || null,
+                faceImage: avatarFaceImage || null,
                 // Personality/Voice/Flaw (App v32) — undefined when path === "quick"
                 // (Quick Start skips these per 18.7), which is correct: these are
                 // Full-Build-only fields, no fallback needed for the fast path.
@@ -27059,6 +27061,7 @@ Write a complete roleplay system prompt in the voice of instructions to the AI (
                 clothing: expandedClothing || avatarClothing,
                 style,
                 image: avatarImage || null,
+                faceImage: avatarFaceImage || null,
                 // Personality/Voice/Flaw (App v32) — undefined when path === "quick"
                 // (Quick Start skips these per 18.7), which is correct: these are
                 // Full-Build-only fields, no fallback needed for the fast path.
@@ -35176,7 +35179,46 @@ He glances toward the window where the Aston Martin is parked crooked at the cur
       console.warn("Pierre recovery failed \u2014 will retry on next load:", err);
     }
   }
-  function SettingsScreen({ onExit }) {
+  // ADDED (App v130) — Avatar image, created after onboarding. Same two-image package (full-length + face close-up) as onboarding, for anyone
+  // who skipped the optional step. Adds the accepted images to the saved avatar; nothing else in the saved onboarding record changes.
+  function AvatarImageScreen({ userProfile, onExit, onSaved }) {
+    var R = import_react, h = R.createElement;
+    var accent = "#7B5EA7";
+    var savedS = R.useState(false), saved = savedS[0], setSaved = savedS[1];
+    var errS = R.useState(""), err = errS[0], setErr = errS[1];
+    var p = userProfile || {};
+    var has = !!p.image;
+    async function persist(full, face) {
+      try {
+        var res = await loadOnboarding();
+        if (res.status !== "found" || !res.data) { setErr("Your saved profile could not be read, so the image was not attached. Nothing was changed."); return; }
+        var next = Object.assign({}, res.data, { avatarData: Object.assign({}, res.data.avatarData || {}, { image: full, faceImage: face || null }) });
+        var ok = await saveOnboarding(next);
+        if (ok === false) { setErr("The image could not be saved to your profile."); return; }
+        setSaved(true); setErr(""); onSaved(next.avatarData);
+      } catch (e) { setErr("The image could not be saved to your profile."); }
+    }
+    var back = h("button", { onClick: onExit, style: { width: 34, height: 34, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.05)", color: "#EEE8DD", cursor: "pointer", fontSize: 16, clipPath: "polygon(7px 0, calc(100% - 7px) 0, 100% 7px, 100% calc(100% - 7px), calc(100% - 7px) 100%, 7px 100%, 0 calc(100% - 7px), 0 7px)" } }, "←");
+    var body;
+    if (has) {
+      body = h("div", null,
+        h("div", { style: { fontSize: 12, color: "rgba(200,190,170,0.7)", lineHeight: 1.6, marginBottom: 14 } }, saved ? "Saved to your profile." : "Your avatar image is set. Changing it later is part of Metamorphosis."),
+        h("div", { style: { display: "flex", gap: 10 } },
+          h("img", { src: p.image, alt: "Your avatar, full length", style: { flex: "3 1 0", minWidth: 0, width: "100%", aspectRatio: "2 / 3", objectFit: "cover", display: "block", clipPath: "polygon(9px 0, calc(100% - 9px) 0, 100% 9px, 100% calc(100% - 9px), calc(100% - 9px) 100%, 9px 100%, 0 calc(100% - 9px), 0 9px)" } }),
+          p.faceImage ? h("img", { src: p.faceImage, alt: "Your avatar, face", style: { flex: "2 1 0", minWidth: 0, width: "100%", aspectRatio: "1 / 1", objectFit: "cover", display: "block", alignSelf: "flex-start", clipPath: "polygon(9px 0, calc(100% - 9px) 0, 100% 9px, 100% calc(100% - 9px), calc(100% - 9px) 100%, 9px 100%, 0 calc(100% - 9px), 0 9px)" } }) : null));
+    } else {
+      body = h(OnboardingImagePanel, { kind: "avatar", accent: accent, title: "YOUR AVATAR IMAGE", subtitle: "A full-length image and a face close-up of you in TELŌS.", alt: "Your avatar", defaultAge: ({ "Young Adult": "young adult", "Adult": "adult", "Mature Adult": "mature adult", "Elder": "elder adult", "Ageless": "adult, ageless" })[p.ageAppearance] || "",
+        getFields: function () { return { name: p.name || "", species: p.species || "", description: String(p.description || "").slice(0, 1500), style: p.style || "", outfit: String(p.clothing || "").slice(0, 300) }; },
+        photoLabel: "YOUR PHOTO (OPTIONAL, UP TO 3)", certText: "These photos are of me, or I have the person's permission, and they are an adult.", adultText: "My avatar shows an adult (18 or over).",
+        onAccepted: function (full, _id, face) { persist(full, face); } });
+    }
+    return h("div", { style: { position: "fixed", inset: 0, zIndex: 100, background: "#06060F", overflowY: "auto", WebkitOverflowScrolling: "touch" } },
+      h("div", { style: { padding: "calc(env(safe-area-inset-top, 0px) + 16px) 16px 40px", maxWidth: 520, margin: "0 auto" } },
+        h("div", { style: { display: "flex", alignItems: "center", gap: 12, marginBottom: 20 } }, back, h("div", { style: { fontFamily: "Cinzel, serif", fontSize: 20, color: "#EEE8DD" } }, "Avatar image")),
+        body,
+        err ? h("div", { style: { marginTop: 14, fontSize: 12, color: "#E58A8A", lineHeight: 1.5 } }, err) : null));
+  }
+  function SettingsScreen({ onExit, onOpenAvatarImage }) {
     const [busy, setBusy] = (0, import_react.useState)(false);
     const [sivaad, setSivaad] = (0, import_react.useState)(null);
     (0, import_react.useEffect)(() => {
@@ -35258,6 +35300,7 @@ He glances toward the window where the Aston Martin is parked crooked at the cur
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: onExit, style: { width: 34, height: 34, borderRadius: "50%", border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.05)", color: "rgba(230,222,205,0.8)", fontSize: 16, cursor: "pointer" }, children: "\u2190" }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontFamily: "Cinzel, serif", fontSize: 20, color: "#EEE8DD" }, children: "Settings" })
       ] }),
+      onOpenAvatarImage ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ChamferBtn, { size: "md", variant: "ghost", accentColor: "#7B5EA7", style: { width: "100%", marginBottom: 16, padding: "14px 16px", letterSpacing: 2, fontSize: 12 }, onClick: onOpenAvatarImage, children: "AVATAR IMAGE" }) : null,
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: 16, background: "rgba(255,255,255,0.03)", borderRadius: 10, border: "1px solid rgba(255,255,255,0.08)", marginBottom: 16 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 9, letterSpacing: 2, color: "rgba(200,190,170,0.4)", fontFamily: "Cinzel, serif", marginBottom: 8 }, children: "DATA BACKUP" }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: "rgba(230,222,205,0.8)", lineHeight: 1.5, marginBottom: 16 }, children: "Everything saved here \u2014 your Tel\u014Ds, memories, relationships, onboarding status \u2014 is tied to this specific session's storage. It doesn't automatically follow the code if you move to a new session. Export a backup here, then import it there." }),
@@ -38409,7 +38452,8 @@ initRemote();
           setEditingTeloName(activeTelo);
           setScreen("create-telo");
         } }),
-        screen === "settings" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SettingsScreen, { onExit: () => setScreen(preSettingsScreen) }),
+        screen === "settings" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SettingsScreen, { onExit: () => setScreen(preSettingsScreen), onOpenAvatarImage: userProfile ? () => setScreen("avatarImage") : null }),
+        screen === "avatarImage" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AvatarImageScreen, { userProfile, onExit: () => setScreen("settings"), onSaved: (ad) => setUserProfile(ad) }),
         screen === "encyclopaedia" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EncyclopaediaScreen, { onExit: () => setScreen("home") }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(LanguagePracticeScreen, { active: screen === "languages", onExit: () => setScreen("home") }),
         viewingTownSquareWorld && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
