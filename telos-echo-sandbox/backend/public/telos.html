@@ -34051,6 +34051,9 @@ Convert this into a precise, structured clothing/outfit description optimized fo
     const [lastName, setLastName] = (0, import_react.useState)("");
     const [faceRefs, setFaceRefs] = (0, import_react.useState)([]);
     const [referenceImageData, setReferenceImageData] = (0, import_react.useState)(null);
+    const [genFull, setGenFull] = (0, import_react.useState)(null);   // ADDED (App v132): the generated full-length image, made at the END of creation
+    const [genFace, setGenFace] = (0, import_react.useState)(null);
+    const [noImage, setNoImage] = (0, import_react.useState)(false);
     const [teloHeight, setTeloHeight] = (0, import_react.useState)("");
     const [teloSkinTone, setTeloSkinTone] = (0, import_react.useState)("");
     const [teloSkinDetails, setTeloSkinDetails] = (0, import_react.useState)("");
@@ -34175,6 +34178,8 @@ Convert this into a precise, structured clothing/outfit description optimized fo
         if (images) {
           if (images.faceRefs !== void 0) setFaceRefs(images.faceRefs);
           if (images.referenceImageData !== void 0) setReferenceImageData(images.referenceImageData);
+          if (images.genFull) setGenFull(images.genFull);
+          if (images.genFace) setGenFace(images.genFace);
         }
       });
     }, []);
@@ -34326,8 +34331,8 @@ Convert this into a precise, structured clothing/outfit description optimized fo
     }, []);
     (0, import_react.useEffect)(() => {
       if (!draftRestoredRef.current || editingTelo) return;
-      saveTeloImageDraft({ faceRefs, referenceImageData });
-    }, [faceRefs, referenceImageData]);
+      saveTeloImageDraft({ faceRefs, referenceImageData, genFull, genFace });
+    }, [faceRefs, referenceImageData, genFull, genFace]);
     const isNonHuman = teloType && teloType !== "Human";
     const gate1 = {
       name: firstName.trim().length >= 2,
@@ -34513,7 +34518,8 @@ Write a complete roleplay system prompt in the voice of instructions to the AI (
           createdAt: (/* @__PURE__ */ new Date()).toISOString(),
           // Actual reference image, not just its filename (App v49) — used as this Telō's
           // chat background and My Telōs thumbnail once created.
-          referenceImage: referenceImageData || null,
+          referenceImage: genFull || referenceImageData || null,
+          faceImage: genFace || null,
           teloType,
           firstName,
           lastName,
@@ -34606,6 +34612,7 @@ Write a complete roleplay system prompt in the voice of instructions to the AI (
             // Real uploaded photo, not AI-generated (App v49) — used directly as this
             // Telō's chat background and My Telōs thumbnail.
             referenceImage: record.referenceImage || null,
+            faceImage: record.faceImage || null,
             // Profile-page fields (App v57) — sourced from this function's own local
             // state directly, same as occupation/nativeLanguage above, since this path
             // builds record locally rather than receiving it as a parameter.
@@ -34677,11 +34684,11 @@ Write a complete roleplay system prompt in the voice of instructions to the AI (
           editingTelo ? `EDITING ${editingTelo.toUpperCase()}` : "NEW TEL\u014CSIAN",
           " \xB7 STEP ",
           step,
-          " OF 3"
+          editingTelo ? " OF 3" : " OF 4"
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { width: 18 } })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 4, padding: "0 20px", marginTop: 10, flexShrink: 0 }, children: [1, 2, 3].map((i) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { flex: 1, height: 2, borderRadius: 1, background: i <= step ? "rgba(180,140,220,0.7)" : "rgba(255,255,255,0.08)" } }, i)) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 4, padding: "0 20px", marginTop: 10, flexShrink: 0 }, children: (editingTelo ? [1, 2, 3] : [1, 2, 3, 4]).map((i) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { flex: 1, height: 2, borderRadius: 1, background: i <= step ? "rgba(180,140,220,0.7)" : "rgba(255,255,255,0.08)" } }, i)) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, overflowY: "auto", padding: "20px 20px 100px" }, children: [
         step === 1 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { animation: "fadeUp 0.3s ease" }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontFamily: "Cinzel, serif", fontSize: 20, color: "#EEE8DD", marginBottom: 18 }, children: "Identity & Appearance" }),
@@ -34943,6 +34950,17 @@ Write a complete roleplay system prompt in the voice of instructions to the AI (
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ChamferField, { size: "sm", borderColor: teloWordCount(openingAction) >= 30 ? "rgba(120,180,140,0.4)" : "rgba(255,255,255,0.1)", activeBorderColor: "rgba(180,140,220,0.6)", fillColor: "rgba(25,16,45,0.5)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("textarea", { value: openingAction, onChange: (e) => setOpeningAction(e.target.value), rows: 3, placeholder: "Physical action + emotional register + environmental context", style: { ...TELO_INPUT_STYLE, resize: "none" } }) })
           ] })
         ] }),
+        !editingTelo && step === 4 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { animation: "fadeUp 0.3s ease" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontFamily: "Cinzel, serif", fontSize: 20, color: "#EEE8DD", marginBottom: 8 }, children: "Their image" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11, color: "rgba(200,190,170,0.5)", fontStyle: "italic", lineHeight: 1.6, marginBottom: 14 }, children: "Everything about " + (firstName.trim() || "them") + " is set. Now they get their face and form, drawn from who you have made. When you are happy, move them into TEL\u014CS." }),
+          genFull && !noImage ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11, color: "rgba(150,210,170,0.85)", lineHeight: 1.5, marginBottom: 14 }, children: "Image chosen. Use the button below to move them in." }) : null,
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(OnboardingImagePanel, { kind: "telo", teloId: teloImageScopeId(firstName), accent: "#7B5EA7", title: (firstName.trim() || "THEIR").toUpperCase() + "'S IMAGE", subtitle: "A full-length image and a face close-up.", alt: firstName, allowPhotos: false,
+            defaultAge: ageMode === "canonical" && canonicalAge ? "adult, " + canonicalAge : "",
+            getFields: () => ({ name: firstName.trim(), species: String(teloType || "").slice(0, 300), description: String(physicalDesc || "").slice(0, 1500), style: "", outfit: String(expandedOutfit || teloOutfit || "").slice(0, 300), personality: [primaryTrait, (coreTraits || []).join(", "), flaw ? "flaw: " + flaw : ""].filter(Boolean).join("; ").slice(0, 300) }),
+            photoLabel: "", certText: "", adultText: firstName.trim() + " is an adult (18 or over).",
+            onAccepted: (full, _id, face) => { setGenFull(full); setGenFace(face || null); setNoImage(false); } }),
+          !genFull ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginTop: 18 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ChamferBtn, { variant: "ghost", onClick: () => setNoImage(true), style: { width: "100%", opacity: noImage ? 0.5 : 1 }, children: noImage ? "NO IMAGE FOR NOW \u2014 ADD ONE LATER FROM THEIR PROFILE" : "SKIP THE IMAGE FOR NOW" }) }) : null
+        ] }),
         step === 3 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { animation: "fadeUp 0.3s ease" }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontFamily: "Cinzel, serif", fontSize: 20, color: "#EEE8DD", marginBottom: 18 }, children: "World, Skills & Visibility" }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldLabel, { children: "STORY DRIVE" }),
@@ -35051,7 +35069,7 @@ Write a complete roleplay system prompt in the voice of instructions to the AI (
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { position: "sticky", bottom: 0, padding: "14px 20px", background: "rgba(6,6,15,0.96)", backdropFilter: "blur(20px)", borderTop: "1px solid rgba(255,255,255,0.05)", display: "flex", gap: 10 }, children: [
         step > 1 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ChamferBtn, { variant: "ghost", onClick: () => setStep((s) => s - 1), style: { flex: 1 }, children: "BACK" }),
-        step < 3 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ChamferBtn, { variant: "primary", disabled: !canAdvance(), onClick: () => setStep((s) => s + 1), style: { flex: 2 }, children: "CONTINUE \u2192" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ChamferBtn, { variant: "primary", disabled: !gate1Pass || saving || updatingExisting, onClick: editingTelo ? handleUpdateExisting : handlePublish, style: { flex: 2 }, children: editingTelo ? updatingExisting ? "SAVING\u2026" : "SAVE CHANGES" : saving ? "CREATING\u2026" : "CREATE TEL\u014CSIAN" })
+        step < (editingTelo ? 3 : 4) ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ChamferBtn, { variant: "primary", disabled: !canAdvance(), onClick: () => setStep((s) => s + 1), style: { flex: 2 }, children: "CONTINUE \u2192" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ChamferBtn, { variant: "primary", disabled: !gate1Pass || saving || updatingExisting || (!editingTelo && !genFull && !noImage), onClick: editingTelo ? handleUpdateExisting : handlePublish, style: { flex: 2 }, children: editingTelo ? updatingExisting ? "SAVING\u2026" : "SAVE CHANGES" : saving ? "MOVING IN\u2026" : "MOVE " + (firstName.trim() || "THEM").toUpperCase() + " INTO TEL\u014CS" })
       ] })
     ] });
   }

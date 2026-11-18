@@ -111,10 +111,11 @@ export function normalizeOnboarding(kind, body) {
   const style = str(f.style, 200, 'fields.style');
   const world = str(f.world, 500, 'fields.world');
   const outfit = str(f.outfit, 300, 'fields.outfit');
+  const personality = str(f.personality, 300, 'fields.personality');   // a Telō's temperament, so the image can carry who they are (posture, expression)
   if (body.adultAttested !== true) throw new ApiError(400, 'ADULT_ATTESTATION_REQUIRED');
   const age = firstNumber(canon.apparentAge);
   if (age !== null && age < 18) throw new ApiError(400, 'CHARACTER_AGE_NOT_ADULT');
-  if (containsMinorSignal(name, description, style, world, outfit, ...Object.values(canon))) throw new ApiError(400, 'BLOCKED_MINOR_TERMS');
+  if (containsMinorSignal(name, description, style, world, outfit, personality, ...Object.values(canon))) throw new ApiError(400, 'BLOCKED_MINOR_TERMS');
   const key = String(body.idempotencyKey ?? '');
   if (!/^[A-Za-z0-9_-]{16,64}$/.test(key)) throw new ApiError(400, 'FIELD_INVALID', { field: 'idempotencyKey' });
   const photoIds = body.photoIds ?? [];
@@ -124,5 +125,5 @@ export function normalizeOnboarding(kind, body) {
   if (!['package', 'full', 'face'].includes(part)) throw new ApiError(400, 'FIELD_INVALID', { field: 'part' });
   const refImageId = body.refImageId ?? '';
   if (part === 'face' && !/^[A-Za-z0-9_-]{6,64}$/.test(String(refImageId))) throw new ApiError(400, 'FIELD_INVALID', { field: 'refImageId' });
-  return { kind, name, canon, description, style, world, outfit, photoIds, idempotencyKey: key, part, ...(part === 'face' ? { refImageId: String(refImageId) } : {}) };
+  return { kind, name, canon, description, style, world, outfit, ...(personality ? { personality } : {}), photoIds, idempotencyKey: key, part, ...(part === 'face' ? { refImageId: String(refImageId) } : {}) };
 }

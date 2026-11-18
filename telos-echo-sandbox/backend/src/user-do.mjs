@@ -396,7 +396,7 @@ export class UserState extends DurableObject {
       },
       safeguards: {
         async beforeGeneration({ snapshots }) {
-          if (containsMinorSignal(p.name, p.description, p.style, p.world, p.outfit, p.scene, p.direction, ...Object.values(p.canon ?? {}))) throw new Error('BLOCKED_MINOR_TERMS');
+          if (containsMinorSignal(p.name, p.description, p.style, p.world, p.outfit, p.personality, p.scene, p.direction, ...Object.values(p.canon ?? {}))) throw new Error('BLOCKED_MINOR_TERMS');
           if (!snapshots.every((s) => s.canonAgeClass === 'adult')) throw new Error('MINOR_OR_AMBIGUOUS_CHARACTER_BLOCKED');
         },
         async afterGeneration({ bytes }) {
@@ -421,7 +421,7 @@ export class UserState extends DurableObject {
 
     try {
       await service({ principal, trustedSurface: 'sfw',
-        request: { sceneId, idempotencyKey: job.idem, purpose: 'manual', quoteId: null, artDirection: pb ? pb.artDirection : [face ? 'Face close-up only; keep the same outfit neckline, hair and skin as the reference.' : '', p.description, p.style && `Style: ${p.style}`].filter(Boolean).join('\n'), mode: pb ? pb.mode : 'portrait', quality: cfg.quality, size: cfg.size, } });
+        request: { sceneId, idempotencyKey: job.idem, purpose: 'manual', quoteId: null, artDirection: pb ? pb.artDirection : [face ? 'Face close-up only; keep the same outfit neckline, hair and skin as the reference.' : '', p.description, p.personality && `Temperament and bearing (let it shape posture and expression only, never the clothing or setting): ${p.personality}`, p.style && `Style: ${p.style}`].filter(Boolean).join('\n'), mode: pb ? pb.mode : 'portrait', quality: cfg.quality, size: cfg.size, } });
     } catch { /* recorded on the job row and in diag */ }
   }
 
