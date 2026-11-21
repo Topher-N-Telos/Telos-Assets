@@ -35722,7 +35722,9 @@ He glances toward the window where the Aston Martin is parked crooked at the cur
         const text = await file.text();
         const parsed = JSON.parse(text);
         const data = parsed.data || parsed;
-        const keys = Object.keys(data);
+        const failed = [];
+        // Write the small items first so the account record is never lost to a big image filling storage.
+        const keys = Object.keys(data).sort((x, y) => JSON.stringify(data[x] ?? "").length - JSON.stringify(data[y] ?? "").length);
         for (const key of keys) {
           let v = data[key];
           if (typeof v === "string") {
@@ -35731,8 +35733,13 @@ He glances toward the window where the Aston Martin is parked crooked at the cur
             } catch {
             }
           }
-          await storageSet(key, v);
+          // Smaller items first below; here each write is checked, because browser storage can be full and then a save quietly fails.
+          if (!(await storageSet(key, v))) failed.push(key);
         }
+        const onboardingBack = (await storageGetWithStatus("telos-v1-onboarding-complete")).status === "found";
+        if (failed.length || !onboardingBack) {
+          setMessage({ type: "error", text: `Restored ${keys.length - failed.length} of ${keys.length} items. ${failed.length ? "Could not save: " + failed.slice(0, 6).join(", ") + (failed.length > 6 ? " and " + (failed.length - 6) + " more" : "") + ". Your phone\u2019s browser storage may be full. " : ""}${onboardingBack ? "" : "Your account record is not in this backup, so the app will start over. "}` });
+        } else
         setMessage({ type: "success", text: `Restored ${keys.length} saved item${keys.length === 1 ? "" : "s"}. Reload the app to see them.` });
       } catch (err) {
         setMessage({ type: "error", text: "Import failed: " + (err?.message || "invalid file") });
