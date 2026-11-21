@@ -322,6 +322,23 @@ export class UserState extends DurableObject {
         aspect: m.aspect ?? 'portrait', refinedFrom: m.refinedFrom ?? null, scene: m.scene ?? '', captions: Array.isArray(m.captions) ? m.captions : [], moderation: m.moderation ?? null };
     });
   }
+  // Test-account Sköl allowance. No wallet or earning exists yet, so every account gets enough Sköl for
+  // SKOL_TEST_COLLAGES (default 3) nine-panel collages per image window. The window is the same calendar day
+  // that resets the daily image-call cap. Balance is DERIVED (cap minus today's unrefunded charges), so it resets
+  // and tops off on its own when the day rolls over, and a failed job refunds itself.
+  skolWallet(now = Date.now()) {
+    const prices = skolPrices(this.env);
+    if (!prices.collage || String(this.env.SKOL_TEST_ALLOWANCE ?? '') === 'off') return null;
+    const n = Number(this.env.SKOL_TEST_COLLAGES), collages = Number.isSafeInteger(n) && n > 0 ? n : 3;
+    const cap = collages * prices.collage[9], tz = this.cfg.timeZone, today = dayKey(now, tz);
+    let spent = 0;
+    for (const j of this.q("SELECT params,created_at FROM jobs WHERE kind='echo' AND refunded=0 AND created_at>?", now - 2 * 864e5)) {
+      if (dayKey(j.created_at, tz) !== today) continue;
+      try { spent += Number(JSON.parse(j.params).skolQuoted) || 0; } catch { /* purged params carry no charge */ }
+    }
+    let resetsAt = now + 60e3; while (dayKey(resetsAt, tz) === today && resetsAt < now + 26 * 3600e3) resetsAt += 60e3;
+    return { cap, balance: Math.max(0, cap - spent), resetsAt: new Date(resetsAt).toISOString() };
+  }
   echoImageMeta(id) {
     const r = this.one("SELECT meta FROM images WHERE id=? AND kind='echo'", id);
     if (!r) throw new ApiError(404, 'NOT_FOUND');
@@ -331,7 +348,8 @@ export class UserState extends DurableObject {
     const cfg = this.cfg, prices = skolPrices(this.env);
     return {
       styles: STYLES.map(({ id, label, tier }) => ({ id, label, tier })), worlds: WORLD_IDS, subWorlds: SUB_WORLDS, marisDeepSpecies: MARIS_DEEP_SPECIES, collageCounts: COLLAGE_COUNTS, rows: COLLAGE_ROWS, maxRefs: MAX_ECHO_REFS,
-      pricing: { currency: 'Sköl', collageConfigured: !!prices.collage, charged: false },
+      pricing: { currency: 'Sköl', collageConfigured: !!prices.collage, charged: !!this.skolWallet() },
+      wallet: this.skolWallet(),
       moderation: this.echoModeration(), refs: this.echoRefList(), images: this.echoImages(),
       limits: { callsToday: this.callsToday(Date.now()), callsPerDay: cfg.maxCallsPerDayUser },
       config: { generationEnabled: cfg.generationEnabled, keyConfigured: !!this.env.OPENAI_API_KEY || this.devMock, allowPhotoUploads: cfg.allowPhotoUploads }
@@ -397,11 +415,13 @@ export class UserState extends DurableObject {
     const amount = priceFor(skolPrices(this.env), f.format, f.panelCount);
     if (!amount) throw new ApiError(503, 'IMAGE_PRICING_UNAVAILABLE');
     const now = Date.now();
+    const wallet = this.skolWallet(now);
+    if (wallet && amount > wallet.balance) throw new ApiError(402, 'INSUFFICIENT_SKOL', { balance: wallet.balance, price: amount, resetsAt: wallet.resetsAt });
     this.run('DELETE FROM quotes WHERE expires_at<?', now - 3600e3);
     this.run("UPDATE quotes SET state='superseded' WHERE state='open'");   // only the newest quote is ever valid; earlier ones cannot be redeemed
     const id = rid() + rid().slice(0, 6), bind = await sha(JSON.stringify(stable({ format: f.format, panelCount: f.panelCount, showPanelNumbers: f.showPanelNumbers })));
     this.run("INSERT INTO quotes(id,bind,amount,state,expires_at,created_at) VALUES(?,?,?,'open',?,?)", id, bind, amount, now + QUOTE_TTL_MS, now);
-    return { quoteId: id, expiresAt: new Date(now + QUOTE_TTL_MS).toISOString(), amountSkol: amount, currency: 'Sköl', usageUnits: 1, format: f.format, panelCount: f.panelCount, showPanelNumbers: f.showPanelNumbers, charged: false };
+    return { quoteId: id, expiresAt: new Date(now + QUOTE_TTL_MS).toISOString(), amountSkol: amount, currency: 'Sköl', usageUnits: 1, format: f.format, panelCount: f.panelCount, showPanelNumbers: f.showPanelNumbers, charged: !!wallet, balance: wallet ? wallet.balance : null, balanceAfter: wallet ? wallet.balance - amount : null, resetsAt: wallet ? wallet.resetsAt : null };
   }
   async admitEcho(body) {
     const cfg = this.cfg, now = Date.now();
@@ -425,6 +445,8 @@ export class UserState extends DurableObject {
     const bind = await sha(JSON.stringify(stable({ format: p.format, panelCount: p.panelCount, showPanelNumbers: p.showPanelNumbers })));
     const q = this.one('SELECT bind,amount,state,expires_at FROM quotes WHERE id=?', p.quoteId);
     if (!amount || !q || q.state !== 'open' || q.expires_at < now || q.bind !== bind || q.amount !== amount) throw new ApiError(403, 'IMAGE_QUOTE_INVALID');
+    const wallet = this.skolWallet(now);
+    if (wallet && amount > wallet.balance) throw new ApiError(402, 'INSUFFICIENT_SKOL', { balance: wallet.balance, price: amount, resetsAt: wallet.resetsAt });
     const res = await this.ledger.reserve(this.meta('email'), cfg.estUsdPerCall);   // ONE provider request, whatever the panel count
     if (!res.ok) throw new ApiError(429, res.code);
     const jobId = rid(), params = { ...p, size: sizeFor(p), skolQuoted: amount, moderationMode: this.echoModeration().mode };

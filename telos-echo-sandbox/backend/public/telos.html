@@ -25116,6 +25116,7 @@ Respond with only the world key (e.g. UMBRA). Nothing else.`;
         var e = new Error((body && body.error) || "HTTP_" + r.status);
         e.code = (body && body.error) || "HTTP_" + r.status;
         e.status = r.status;
+        e.body = body;
         throw e;
       }
       return body;
@@ -35435,7 +35436,11 @@ He glances toward the window where the Aston Martin is parked crooked at the cur
     WORLD_NOT_COMPATIBLE: "Someone in this picture cannot enter that world. Choose one they can all visit.",
     WORLD_CONFLICT: "Your description names a different world. Choose that world instead, or remove its name."
   };
-  function echoMsg(e) { return (e && ECHO_MSG[e.code]) || TelosImg.message(e); }
+  function echoResetText(iso) { try { var d = new Date(iso); return isNaN(d) ? "" : d.toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" }); } catch (x) { return ""; } }
+  function echoMsg(e) {
+    if (e && e.code === "INSUFFICIENT_SKOL" && e.body) return "You have " + Number(e.body.balance).toLocaleString() + " Sköl left and this costs " + Number(e.body.price).toLocaleString() + ". Your Sköl refills when your image allowance resets" + (e.body.resetsAt ? ", around " + echoResetText(e.body.resetsAt) : "") + ".";
+    return (e && ECHO_MSG[e.code]) || TelosImg.message(e);
+  }
   var ECHO_CUT = "polygon(5px 0, calc(100% - 5px) 0, 100% 5px, 100% calc(100% - 5px), calc(100% - 5px) 100%, 5px 100%, 0 calc(100% - 5px), 0 5px)";
   var ECHO_CUT_LG = "polygon(9px 0, calc(100% - 9px) 0, 100% 9px, 100% calc(100% - 9px), calc(100% - 9px) 100%, 9px 100%, 0 calc(100% - 9px), 0 9px)";
   function echoRects(rows) {
@@ -35743,7 +35748,7 @@ He glances toward the window where the Aston Martin is parked crooked at the cur
             : h("div", null,
               h("div", { style: { marginTop: 8, fontFamily: "Cinzel, serif", fontSize: 20, color: "#E8D9A8" } }, quote.amountSkol.toLocaleString() + " Sköl"),
               h("div", { style: { marginTop: 2, fontSize: 11, color: "rgba(200,190,170,0.6)" } }, (isCollage ? (refineImg ? refineImg.panelCount : cnt) + "-panel collage" : "Single image") + " · one image use"),
-              h("div", { style: { marginTop: 8, fontSize: 10, color: "rgba(200,190,170,0.45)", lineHeight: 1.5 } }, "Test build: no Sköl is taken yet. The price is recorded so you can see what it will cost. Daily and monthly spending limits still apply."),
+              quote.charged ? h("div", { style: { marginTop: 8, fontSize: 11, color: "rgba(225,215,195,0.75)", lineHeight: 1.5 } }, "Your Sköl: " + quote.balance.toLocaleString() + " now, " + quote.balanceAfter.toLocaleString() + " after this image. It refills when your image allowance resets" + (quote.resetsAt ? ", around " + echoResetText(quote.resetsAt) : "") + ". Unused Sköl tops off at that point, it does not pile up.") : h("div", { style: { marginTop: 8, fontSize: 10, color: "rgba(200,190,170,0.45)", lineHeight: 1.5 } }, "Test build: no Sköl is taken yet. The price is recorded so you can see what it will cost. Daily and monthly spending limits still apply."),
               h("div", { style: { marginTop: 12, display: "flex", gap: 10, alignItems: "flex-start", cursor: "pointer", fontSize: 12, color: "rgba(230,222,205,0.85)", lineHeight: 1.5 }, onClick: function () { setConf(!conf); } },
                 h("span", { style: { flexShrink: 0, color: conf ? accent : "rgba(200,190,170,0.4)", fontSize: 13 } }, conf ? "◆" : "◇"), h("span", null, "I approve " + quote.amountSkol.toLocaleString() + " Sköl for this image."))))),
         m && m.enabled ? h("div", { style: { marginTop: 10, fontSize: 10, color: "rgba(200,190,170,0.4)", letterSpacing: 1 } }, "OPENAI MODERATION: " + m.mode.toUpperCase() + " (CHANGE IN SETTINGS)") : null,

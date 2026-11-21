@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { startMock } from './mock-openai.mjs';
 import { makePng } from './png.mjs';
 
-const A = 'http://localhost:8787', B = 'http://localhost:8788', C = 'http://localhost:8789', D = 'http://localhost:8790', E = 'http://localhost:8791', MOCK = 8799;
+const A = 'http://localhost:8787', B = 'http://localhost:8788', C = 'http://localhost:8789', D = 'http://localhost:8790', E = 'http://localhost:8791', W = 'http://localhost:8792', MOCK = 8799;
 let mock, procs = [];
 const OWNER = 'owner@example.com', ALICE = 'alice@example.com', BOB = 'bob@example.com', EVE = 'eve@example.com', CARA = 'cara@example.com';
 const BASE = { OWNER_EMAIL: OWNER, ALLOWED_EMAILS: `${ALICE},${BOB},${CARA}`, DEV_BYPASS_AUTH: 'true', OPENAI_API_BASE: `http://127.0.0.1:${MOCK}/v1`, OPENAI_API_KEY: 'mock-key', MIN_SUBMIT_INTERVAL_MS: 100 };
@@ -32,7 +32,8 @@ before(async () => {
     launch(8788, {}),                                                                   // no auth config at all
     launch(8789, { ...BASE, MAX_USD_PER_DAY: 0.65, EST_USD_PER_CALL: 0.1 }),          // tiny global cap
     launch(8790, { ...BASE, MAX_USD_PER_DAY: 50, MAX_USD_PER_MONTH: 500, MAX_CALLS_PER_DAY_USER: 60 }),           // roomy caps: prebuilt-Telō tests
-    launch(8791, { ...BASE, MAX_USD_PER_DAY: 50, MAX_USD_PER_MONTH: 500, MAX_CALLS_PER_DAY_USER: 60, ADULT_BETA_EMAILS: ALICE, COLLAGE_SKOL_PRICES: JSON.stringify({ 4: 100, 5: 120, 6: 150, 7: 200, 8: 275, 9: 400 }) })   // Echō collage tests (ladder = TEST numbers only)
+    launch(8791, { ...BASE, MAX_USD_PER_DAY: 50, MAX_USD_PER_MONTH: 500, MAX_CALLS_PER_DAY_USER: 60, ADULT_BETA_EMAILS: ALICE, SKOL_TEST_ALLOWANCE: 'off', COLLAGE_SKOL_PRICES: JSON.stringify({ 4: 100, 5: 120, 6: 150, 7: 200, 8: 275, 9: 400 }) }),
+    launch(8792, { ...BASE, MAX_USD_PER_DAY: 50, MAX_USD_PER_MONTH: 500, MAX_CALLS_PER_DAY_USER: 60, ADULT_BETA_EMAILS: ALICE, COLLAGE_SKOL_PRICES: JSON.stringify({ 4: 100, 5: 120, 6: 150, 7: 200, 8: 275, 9: 400 }) })   // Sköl test-allowance wallet (3 nine-panel collages = 1200)   // Echō collage tests (ladder = TEST numbers only)
   ]);
 });
 after(() => { for (const p of procs) { try { process.kill(-p.pid, 'SIGKILL'); } catch {} } mock?.server.close(); });
@@ -576,4 +577,22 @@ test('echo: Maris Outpost and Solis skies are their own sub-tags; Solis never ge
   assert.ok(solis.every((x) => /NEVER HAS A DARK NIGHT SKY/.test(x)));
   const terra = all.filter((x) => /LOCK \(TERRA/.test(x)).join('\n');
   assert.ok(terra.length && !/burgundy|midnight sun|champagne/.test(terra));
+});
+
+test('echo: test Sköl allowance = 3 nine-panel collages per image window, charged on accept, refunded on failure, never negative', async () => {
+  const w = as(ALICE, W), bw = as(BOB, W);
+  const o = (await w('GET', '/api/echo/options')).json;
+  assert.equal(o.wallet.cap, 1200); assert.equal(o.wallet.balance, 1200); assert.equal(o.pricing.charged, true); assert.ok(Date.parse(o.wallet.resetsAt) > Date.now() && Date.parse(o.wallet.resetsAt) <= Date.now() + 26 * 3600e3);
+  const go = async (over, qover = {}) => { await sleep(150); const q = await quoteFor(w, { panelCount: 9, ...qover }); const r = await w('POST', '/api/echo/generate', echoBody(q, { panelCount: 9, ...over })); return { q, r }; };
+  const g1 = await go({}); assert.equal(g1.q.charged, true); assert.equal(g1.q.balance, 1200); assert.equal(g1.q.balanceAfter, 800); assert.equal(g1.r.status, 200, JSON.stringify(g1.r.json)); await wait(w, g1.r.json.id);
+  assert.equal((await w('GET', '/api/echo/options')).json.wallet.balance, 800);
+  const g2 = await go({}); assert.equal(g2.r.status, 200); await wait(w, g2.r.json.id);
+  const bf = await go({ prompt: 'FORCE_400 market scene' }); assert.equal(bf.r.status, 200); await wait(w, bf.r.json.id);          // fails -> refunded
+  assert.equal((await w('GET', '/api/echo/options')).json.wallet.balance, 400);
+  const g3 = await go({}); assert.equal(g3.r.status, 200); await wait(w, g3.r.json.id);
+  const o3 = (await w('GET', '/api/echo/options')).json.wallet; assert.equal(o3.balance, 0);
+  await sleep(150); const q4 = await w('POST', '/api/echo/quote', { format: 'collage', panelCount: 4, showPanelNumbers: false });
+  assert.equal(q4.status, 402); assert.equal(q4.json.error, 'INSUFFICIENT_SKOL'); assert.equal(q4.json.balance, 0); assert.ok(q4.json.resetsAt);
+  assert.equal((await w('POST', '/api/echo/quote', { format: 'single' })).json.error, 'INSUFFICIENT_SKOL');
+  const ob = (await bw('GET', '/api/echo/options')).json.wallet; assert.equal(ob.balance, 1200);                                   // another account has its own allowance
 });
