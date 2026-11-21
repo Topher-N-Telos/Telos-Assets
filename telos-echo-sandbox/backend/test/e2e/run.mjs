@@ -570,7 +570,7 @@ test('echo: Maris Outpost and Solis skies are their own sub-tags; Solis never ge
   assert.match(maris, /MARIS \/ OUTPOST/); assert.match(maris, /glass geodesic domes/);
   const solis = all.filter((x) => /LOCK \(SOLIS/.test(x));
   assert.ok(solis.some((x) => /SOLIS \/ NIGHT/.test(x) && /midnight sun/.test(x)));
-  assert.ok(solis.some((x) => /SOLIS \/ POLAR/.test(x) && /low red sun and a burgundy sky\. This sky belongs/.test(x)));
+  assert.ok(!solis.some((x) => /SOLIS \/ POLAR/.test(x)));   // regional maps not uploaded: polar Solis does not exist yet, even when the scene says polar
   assert.ok(solis.some((x) => /SOLIS \/ DAY/.test(x) && /champagne-gold sky with a blue horizon/.test(x)));
   assert.ok(solis.filter((x) => /SOLIS \/ (DAY|NIGHT)/.test(x)).every((x) => /never used here/.test(x)));   // day and night prompts forbid the polar sky
   assert.ok(solis.every((x) => /NEVER HAS A DARK NIGHT SKY/.test(x)));

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { COLLAGE_COUNTS, COLLAGE_ROWS, panelRects, skolPrices, priceFor, collagePrompt, styleId, STYLES, normalizeFormat, eligibleForLowModeration, allowedWorlds, worldLock, WORLD_IDS, subWorldsFor, worldCanon, solisSky } from '../../src/echo.mjs';
+import { COLLAGE_COUNTS, COLLAGE_ROWS, panelRects, skolPrices, priceFor, collagePrompt, styleId, STYLES, normalizeFormat, eligibleForLowModeration, allowedWorlds, worldLock, WORLD_IDS, subWorldsFor, worldCanon, solisSky, REGIONAL_MAPS_READY } from '../../src/echo.mjs';
 
 test('every collage size has full-width rows and a rectangle per panel, ending at the last number', () => {
   for (const n of COLLAGE_COUNTS) {
@@ -53,10 +53,13 @@ test('sub-worlds: Deep only for deep species; Solis has exactly three skies and 
   assert.notEqual(worldCanon('MARIS', 'outpost'), worldCanon('MARIS', 'deep'));
 });
 
-test('Solis sky is inferred from the scene; polar only when the scene is polar', () => {
+test('Solis sky is inferred from the scene; polar stays off until the regional maps exist', () => {
+  assert.equal(REGIONAL_MAPS_READY, false);
   assert.equal(solisSky('A market in the morning'), 'day'); assert.equal(solisSky('A market'), 'day');
   assert.equal(solisSky('Friends on a balcony at midnight'), 'night'); assert.equal(solisSky('Sunset over the forge'), 'night');
-  assert.equal(solisSky('Crossing the glacier'), 'polar'); assert.equal(solisSky('An arctic camp at dusk'), 'polar');
-  assert.equal(solisSky('An arctic camp at noon'), 'day'); assert.equal(solisSky('make it brighter', 'polar'), 'polar'); assert.equal(solisSky('make it brighter', 'night'), 'night');
+  assert.equal(solisSky('Crossing the glacier'), 'day'); assert.equal(solisSky('An arctic camp at dusk'), 'night');     // no polar region yet: base skies only
+  assert.equal(solisSky('make it brighter', 'polar'), 'day');
+  // behaviour once the regional maps are switched on
+  assert.equal(solisSky('Crossing the glacier', null, true), 'polar'); assert.equal(solisSky('An arctic camp at noon', null, true), 'day'); assert.equal(solisSky('make it brighter', 'polar', true), 'polar');
   assert.match(worldCanon('SOLIS', 'day'), /belong only to polar Solis/); assert.doesNotMatch(worldCanon('TERRA', null), /burgundy/);
 });

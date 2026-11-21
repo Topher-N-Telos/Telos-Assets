@@ -123,8 +123,10 @@ const POLAR_RE = /\b(polar|arctic|glacier|glacial|iceberg|icebergs|ice sheet|ice
 const NIGHT_RE = /\b(night|nighttime|midnight|overnight|after dark|late at night|dusk|evening|twilight|sunset)\b/i;
 const DAY_RE = /\b(day|daytime|noon|midday|morning|afternoon|sunrise|dawn)\b/i;
 /** Backend-only Solis sky. day = champagne gold; night = midnight sun; polar = low red sun, ONLY for polar Solis (the scene must be in the polar region). `inherited` carries a refined image's earlier sky. */
-export function solisSky(text, inherited = null) {
-  const t = String(text ?? ''), polar = POLAR_RE.test(t) || inherited === 'polar', night = NIGHT_RE.test(t), day = DAY_RE.test(t);
+/** Regional climate maps are not uploaded yet, so polar Solis does not exist as a place. Until they are, every Solis scene uses the base day or night sky. Flip to true when the regional maps land. */
+export const REGIONAL_MAPS_READY = false;
+export function solisSky(text, inherited = null, regions = REGIONAL_MAPS_READY) {
+  const t = String(text ?? ''), polar = regions && (POLAR_RE.test(t) || inherited === 'polar'), night = NIGHT_RE.test(t), day = DAY_RE.test(t);
   if (polar) return day && !night ? 'day' : 'polar';
   return night ? 'night' : day ? 'day' : (inherited === 'night' ? 'night' : 'day');
 }
