@@ -1231,6 +1231,7 @@
           return defaultValue;
         };
         exports.createElement = function(type, config, children) {
+          config = tintProps(config);
           for (var i = 2; i < arguments.length; i++)
             validateChildKeys(arguments[i]);
           var propName;
@@ -23918,6 +23919,7 @@
         var didWarnAboutKeySpread = {};
         exports.Fragment = REACT_FRAGMENT_TYPE;
         exports.jsx = function(type, config, maybeKey) {
+          config = tintProps(config);
           var trackActualOwner = 1e4 > ReactSharedInternals.recentlyCreatedOwnerStacks++;
           if (trackActualOwner) {
             var previousStackTraceLimit = Error.stackTraceLimit;
@@ -23935,6 +23937,7 @@
           );
         };
         exports.jsxs = function(type, config, maybeKey) {
+          config = tintProps(config);
           var trackActualOwner = 1e4 > ReactSharedInternals.recentlyCreatedOwnerStacks++;
           if (trackActualOwner) {
             var previousStackTraceLimit = Error.stackTraceLimit;
@@ -32424,6 +32427,37 @@ Convert this into a precise, structured clothing/outfit description optimized fo
     const o = DASH.rgb.map((c) => Math.round(c * (1 - k) + 255 * k));
     return hex ? "#" + o.map((v) => v.toString(16).padStart(2, "0")).join("") : o.join(",");
   }
+  // App v149 — every screen reached from the dashboard wears the dashboard’s world colour. Any purple-family chrome colour in a style or SVG paint prop is remapped at render time; UMBRA’s own purple (#9B7EC8) is left alone so UMBRA content stays distinct.
+  var TINT_CACHE = {};
+  function tintOne(r, g, b, a) {
+    var mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+    if (mx < 90 || (mx - mn) / mx < 0.2) return null;
+    if (r === 155 && g === 126 && b === 200) return null;
+    var d = mx - mn, hue = mx === r ? ((g - b) / d + 6) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; hue *= 60;
+    if (hue < 255 || hue > 295) return null;
+    var o = T(r + "," + g + "," + b).split(",");
+    return a === undefined ? "#" + o.map(function (v) { return (+v).toString(16).padStart(2, "0"); }).join("") : "rgba(" + o.join(",") + "," + a + ")";
+  }
+  function tintStr(v) {
+    var key = DASH.rgb.join(",") + "|" + v, c = TINT_CACHE[key]; if (c !== undefined) return c;
+    var out = v.replace(/#([0-9a-fA-F]{6})([0-9a-fA-F]{2})?(?![0-9a-fA-F])/g, function (m, hx, al) { var t = tintOne(parseInt(hx.slice(0, 2), 16), parseInt(hx.slice(2, 4), 16), parseInt(hx.slice(4, 6), 16)); return t ? t + (al || "") : m; })
+      .replace(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*([\d.]+)\s*)?\)/g, function (m, r, g, b, a) { var t = tintOne(+r, +g, +b, a === undefined ? 1 : a); return t || m; });
+    if (Object.keys(TINT_CACHE).length > 4000) TINT_CACHE = {};
+    TINT_CACHE[key] = out; return out;
+  }
+  function dashIsPurple() { var r = DASH.rgb[0], g = DASH.rgb[1], b = DASH.rgb[2], mx = Math.max(r, g, b), mn = Math.min(r, g, b); if (mx === mn) return false; var d = mx - mn, hue = (mx === r ? ((g - b) / d + 6) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4) * 60; return hue >= 255 && hue <= 295; }
+  var TINT_PAINT = { stroke: 1, fill: 1, color: 1, stopColor: 1, floodColor: 1 };
+  function tintProps(cfg) {
+    if (!cfg || !DASH || !DASH.on || dashIsPurple()) return cfg;
+    var out = cfg, k, v;
+    if (cfg.style && typeof cfg.style === "object") {
+      var st = cfg.style, ns = null;
+      for (k in st) { v = st[k]; if (typeof v === "string" && (v.indexOf("#") >= 0 || v.indexOf("rgb") >= 0)) { var t = tintStr(v); if (t !== v) { if (!ns) ns = Object.assign({}, st); ns[k] = t; } } }
+      if (ns) out = Object.assign({}, cfg, { style: ns });
+    }
+    for (k in TINT_PAINT) { v = cfg[k]; if (typeof v === "string" && v.charAt(0) === "#") { var t2 = tintStr(v); if (t2 !== v) { if (out === cfg) out = Object.assign({}, cfg); out[k] = t2; } } }
+    return out;
+  }
   function worldTint(world) { const w = WORLDS[world]; const h = DASH_COLOR_OVERRIDE[world] || (w && w.accent); return h && /^#[0-9a-f]{6}$/i.test(h) ? h : null; }
   function dashGlow() { return "drop-shadow(0 0 5px rgba(" + T("210,190,235") + ",0.7)) drop-shadow(0 0 1.5px rgba(" + T("230,215,245") + ",0.45))"; }
   function DashboardGlyph({ id }) {
@@ -35539,6 +35573,15 @@ He glances toward the window where the Aston Martin is parked crooked at the cur
     }
     async function remove() { setBusy(true); try { await TelosImg.call("/api/images/" + encodeURIComponent(img.id), { method: "DELETE" }); props.onDeleted(img.id); } catch (e) { setMsg(echoMsg(e)); setBusy(false); } }
     var btn = function (label, onClick, disabled, variant) { return h(ChamferBtn, { size: "md", variant: variant || "ghost", accentColor: accent, disabled: disabled || busy, onClick: onClick, style: { fontSize: 11, flex: "1 1 40%" } }, label); };
+    var echoOpenS = R.useState(false), echoOpen = echoOpenS[0], setEchoOpen = echoOpenS[1];
+    var echoCapS = R.useState(""), echoCap = echoCapS[0], setEchoCap = echoCapS[1];
+    var echoedS = R.useState(false), echoed = echoedS[0], setEchoed = echoedS[1];
+    async function sendEcho() {
+      setBusy(true); setMsg("");
+      try { await TelosImg.call("/api/echo/posts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ imageId: img.id, caption: echoCap }) }); setEchoed(true); setEchoOpen(false); setMsg("Your Echō is out there."); }
+      catch (e) { if (e && e.body && e.body.error === "ALREADY_ECHOED") { setEchoed(true); setEchoOpen(false); setMsg("This one is already on your Echō profile."); } else setMsg(echoMsg(e)); }
+      setBusy(false);
+    }
     var stage = function (inFull) {
       return h("div", { style: { position: "relative", width: "100%", lineHeight: 0, clipPath: ECHO_CUT_LG } },
         h("img", { src: "/api/images/" + encodeURIComponent(shownId), alt: collage ? "Collage of " + img.panelCount + " panels" : "Echō image", style: { width: "100%", display: "block", maxHeight: inFull ? "100%" : "none", objectFit: "contain" } }),
@@ -35573,11 +35616,132 @@ He glances toward the window where the Aston Martin is parked crooked at the cur
           btn("SAVE TO DEVICE", function () { save(false); }, false, "primary"),
           collage && rows ? btn("SAVE WITH NUMBERS", function () { save(true); }) : null,
           btn("VIEW FULL SIZE", function () { setFull(true); }),
-          btn("REFINE", function () { props.onRefine(img.id); })),
+          btn("REFINE", function () { props.onRefine(img.id); }),
+          echoed ? null : btn("ECHŌ THIS", function () { setEchoOpen(function (v) { return !v; }); }, false, "primary")),
+        echoOpen ? h("div", { style: { marginTop: 12 } },
+          h("div", { style: { fontFamily: "Cinzel, serif", fontSize: 11, letterSpacing: 2, color: "rgba(200,190,170,0.55)", marginBottom: 6 } }, "CAPTION"),
+          h(ChamferField, { size: "sm", activeBorderColor: accent + "AA" }, h("textarea", { value: echoCap, maxLength: 2200, rows: 3, onChange: function (e) { setEchoCap(e.target.value); }, placeholder: "Say something about this moment (optional)", style: { width: "100%", padding: "10px 12px", background: "transparent", border: "none", outline: "none", color: "#EEE8DD", fontSize: 14, resize: "none", fontFamily: "inherit", boxSizing: "border-box" } })),
+          h("div", { style: { marginTop: 10 } }, h(ChamferBtn, { size: "md", variant: "primary", accentColor: accent, disabled: busy, onClick: sendEcho, style: { width: "100%", fontSize: 11 } }, "SEND AN ECHŌ"))) : null,
         h("div", { style: { marginTop: 14 } }, del
           ? h("div", { style: { display: "flex", gap: 8, alignItems: "center" } }, h("div", { style: { flex: 1, fontSize: 11, color: "#E58A8A" } }, "Delete this image for good?"), h(ChamferBtn, { size: "sm", variant: "ghost", onClick: function () { setDel(false); }, style: { fontSize: 11 } }, "KEEP"), h(ChamferBtn, { size: "sm", variant: "ghost", accentColor: "#C25A5A", disabled: busy, onClick: remove, style: { fontSize: 11 } }, "DELETE"))
           : h(ChamferBtn, { size: "sm", variant: "ghost", onClick: function () { setDel(true); }, style: { fontSize: 10, opacity: 0.7 } }, "DELETE")),
         msg ? h("div", { role: "status", style: { marginTop: 12, fontSize: 12, color: "#E8D9A8", lineHeight: 1.5 } }, skolRich(msg)) : null));
+  }
+
+  function EchoProfileScreen(props) {
+    var R = import_react, h = R.createElement, accent = T("123,94,167", true), up = props.userProfile || {};
+    var S = function (v) { return R.useState(v); };
+    var pS = S(null), prof = pS[0], setProf = pS[1];
+    var errS = S(false), err = errS[0], setErr = errS[1];
+    var viewS = S(null), viewId = viewS[0], setViewId = viewS[1];
+    var editS = S(false), edit = editS[0], setEdit = editS[1];
+    var hS = S(""), handle = hS[0], setHandle = hS[1];
+    var bS = S(""), bio = bS[0], setBio = bS[1];
+    var newS = S(false), newOpen = newS[0], setNewOpen = newS[1];
+    var fileS = S(null), file = fileS[0], setFile = fileS[1];
+    var prevS = S(null), preview = prevS[0], setPreview = prevS[1];
+    var capS = S(""), cap = capS[0], setCap = capS[1];
+    var certS = S(false), cert = certS[0], setCert = certS[1];
+    var busyS = S(false), busy = busyS[0], setBusy = busyS[1];
+    var msgS = S(""), msg = msgS[0], setMsg = msgS[1];
+    var delS = S(false), del = delS[0], setDel = delS[1];
+    var ecS = S(""), editCap = ecS[0], setEditCap = ecS[1];
+    var fileRef = R.useRef(null), alive = R.useRef(true);
+    R.useEffect(function () { alive.current = true; return function () { alive.current = false; }; }, []);
+    async function load() { try { var p = await TelosImg.call("/api/echo/profile"); if (alive.current) { setProf(p); setErr(false); } } catch (e) { if (alive.current) setErr(true); } }
+    R.useEffect(function () { load(); }, []);
+    var name = up.name || "You";
+    var shownHandle = prof && prof.handle ? prof.handle : String(name).toLowerCase().replace(/[^a-z0-9._]/g, "") || "you";
+    var posts = prof ? prof.posts : [];
+    var viewPost = viewId ? posts.filter(function (p) { return p.id === viewId; })[0] : null;
+    var label = function (t) { return h("div", { style: { fontFamily: "Cinzel, serif", fontSize: 11, letterSpacing: 2, color: "rgba(200,190,170,0.55)", marginBottom: 6 } }, t); };
+    var avatarBox = function (size) {
+      var inner = prof && prof.avatarImageId
+        ? h("img", { src: "/api/images/" + encodeURIComponent(prof.avatarImageId), alt: "", style: { width: "100%", height: "100%", objectFit: "cover", display: "block" } })
+        : h("div", { style: { width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Cinzel, serif", fontSize: size / 2.4, color: "#EEE8DD" } }, String(name).charAt(0).toUpperCase());
+      return h("div", { style: { flexShrink: 0, filter: "drop-shadow(0 0 8px " + accent + "99)" } }, h("div", { style: { width: size + 6, height: size + 6, padding: 3, background: accent, boxSizing: "border-box", clipPath: "polygon(14px 0, calc(100% - 14px) 0, 100% 14px, 100% calc(100% - 14px), calc(100% - 14px) 100%, 14px 100%, 0 calc(100% - 14px), 0 14px)" } },
+        h("div", { style: { width: "100%", height: "100%", background: "#0B0A16", overflow: "hidden", clipPath: "polygon(12px 0, calc(100% - 12px) 0, 100% 12px, 100% calc(100% - 12px), calc(100% - 12px) 100%, 12px 100%, 0 calc(100% - 12px), 0 12px)" } }, inner)));
+    };
+    var stat = function (n, l) { return h("div", { style: { textAlign: "center", flex: 1 } }, h("div", { style: { fontFamily: "Cinzel, serif", fontSize: 18, color: "#EEE8DD" } }, n), h("div", { style: { fontSize: 11, color: "rgba(200,190,170,0.6)", marginTop: 2 } }, l)); };
+    var btn = function (lbl, onClick, variant, extra) { return h(ChamferBtn, { size: "md", variant: variant || "ghost", accentColor: accent, disabled: busy, onClick: onClick, style: Object.assign({ fontSize: 11, flex: 1 }, extra || {}) }, lbl); };
+    async function saveProfile() {
+      setBusy(true); setMsg("");
+      try { var p = await TelosImg.call("/api/echo/profile", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ handle: handle || undefined, bio: bio }) }); setProf(p); setEdit(false); }
+      catch (e) { setMsg(e && e.body && e.body.error === "HANDLE_INVALID" ? "Usernames are 3 to 30 letters, numbers, dots or underscores." : echoMsg(e)); }
+      setBusy(false);
+    }
+    function pick(f) { if (!f) return; setFile(f); setPreview(URL.createObjectURL(f)); }
+    async function sendUpload() {
+      if (!file || !cert) return;
+      setBusy(true); setMsg("");
+      try {
+        var blob = await TelosImg.prepPhoto(file);
+        await TelosImg.call("/api/echo/posts/upload", { method: "POST", headers: { "x-certify": "sfw-rights", "x-caption": encodeURIComponent(cap), "content-type": "image/jpeg" }, body: blob });
+        setNewOpen(false); setFile(null); setPreview(null); setCap(""); setCert(false); setMsg("Your Echō is out there."); await load();
+      } catch (e) { setMsg(echoMsg(e)); }
+      setBusy(false);
+    }
+    async function saveCaption() { setBusy(true); try { await TelosImg.call("/api/echo/posts/" + encodeURIComponent(viewId), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ caption: editCap }) }); await load(); setMsg("Caption saved."); } catch (e) { setMsg(echoMsg(e)); } setBusy(false); }
+    async function removePost() { setBusy(true); try { await TelosImg.call("/api/echo/posts/" + encodeURIComponent(viewId), { method: "DELETE" }); setViewId(null); setDel(false); await load(); } catch (e) { setMsg(echoMsg(e)); } setBusy(false); }
+    var shell = function (children) { return h("div", { style: { position: "fixed", inset: 0, zIndex: 110, background: "#06060F", overflowY: "auto", WebkitOverflowScrolling: "touch", color: "#EEE8DD" } }, h("div", { style: { padding: "calc(env(safe-area-inset-top, 0px) + 14px) 0 40px", maxWidth: 520, margin: "0 auto" } }, children)); };
+    if (viewPost) {
+      return shell([
+        h("div", { key: "hd", style: { display: "flex", alignItems: "center", gap: 12, padding: "0 16px", marginBottom: 14 } }, echoBack(function () { setViewId(null); setDel(false); setMsg(""); }), h("div", { style: { fontFamily: "Cinzel, serif", fontSize: 18 } }, "Echō")),
+        h("div", { key: "im", style: { margin: "0 16px", lineHeight: 0, clipPath: ECHO_CUT_LG } }, h("img", { src: "/api/echo/posts/" + encodeURIComponent(viewPost.id) + "/image", alt: "", style: { width: "100%", display: "block" } })),
+        h("div", { key: "bd", style: { padding: "12px 16px" } },
+          h("div", { style: { fontSize: 10, letterSpacing: 1, color: "rgba(200,190,170,0.45)" } }, "MADE IN TELŌS" + (viewPost.world ? " · " + viewPost.world : "")),
+          label("CAPTION"),
+          h(ChamferField, { size: "sm", activeBorderColor: accent + "AA" }, h("textarea", { value: editCap, maxLength: 2200, rows: 3, onChange: function (e) { setEditCap(e.target.value); }, style: { width: "100%", padding: "10px 12px", background: "transparent", border: "none", outline: "none", color: "#EEE8DD", fontSize: 14, resize: "none", fontFamily: "inherit", boxSizing: "border-box" } })),
+          h("div", { style: { display: "flex", gap: 8, marginTop: 10 } }, btn("SAVE CAPTION", saveCaption, "primary")),
+          h("div", { style: { marginTop: 14 } }, del
+            ? h("div", { style: { display: "flex", gap: 8, alignItems: "center" } }, h("div", { style: { flex: 1, fontSize: 11, color: "#E58A8A" } }, "Remove this Echō from your profile?"), h(ChamferBtn, { size: "sm", variant: "ghost", onClick: function () { setDel(false); }, style: { fontSize: 11 } }, "KEEP"), h(ChamferBtn, { size: "sm", variant: "ghost", disabled: busy, onClick: removePost, style: { fontSize: 11 } }, "REMOVE"))
+            : h(ChamferBtn, { size: "sm", variant: "ghost", onClick: function () { setDel(true); }, style: { fontSize: 10, opacity: 0.7 } }, "REMOVE")),
+          msg ? h("div", { role: "status", style: { marginTop: 12, fontSize: 12, color: "#E8D9A8" } }, msg) : null)
+      ]);
+    }
+    return shell([
+      h("div", { key: "top", style: { display: "flex", alignItems: "center", gap: 12, padding: "0 16px", marginBottom: 14 } },
+        echoBack(props.onExit),
+        h("div", { style: { flex: 1, fontFamily: "Cinzel, serif", fontSize: 17, textAlign: "center", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, shownHandle),
+        h("div", { style: { width: 34 } })),
+      err ? h("div", { key: "er", style: { padding: 16, fontSize: 13, color: "#E58A8A" } }, "Your Echō profile could not be loaded.", h("div", { style: { marginTop: 10 } }, btn("TRY AGAIN", load))) : null,
+      h("div", { key: "hd", style: { display: "flex", alignItems: "center", gap: 18, padding: "0 16px" } },
+        avatarBox(84),
+        h("div", { style: { flex: 1, display: "flex" } }, stat(prof ? prof.counts.posts : 0, "echoes"), stat(prof ? prof.counts.followers : 0, "followers"), stat(prof ? prof.counts.following : 0, "following"))),
+      h("div", { key: "bio", style: { padding: "12px 16px 0" } },
+        h("div", { style: { fontSize: 14, fontWeight: 600 } }, name),
+        prof && prof.bio ? h("div", { style: { fontSize: 13, color: "rgba(238,232,221,0.85)", marginTop: 2, lineHeight: 1.45, whiteSpace: "pre-wrap" } }, prof.bio) : null),
+      edit ? h("div", { key: "ed", style: { padding: "12px 16px 0" } },
+        label("USERNAME"),
+        h(ChamferField, { size: "sm", activeBorderColor: accent + "AA" }, h("input", { value: handle, maxLength: 30, onChange: function (e) { setHandle(e.target.value); }, placeholder: shownHandle, autoCapitalize: "none", style: { width: "100%", padding: "10px 12px", background: "transparent", border: "none", outline: "none", color: "#EEE8DD", fontSize: 14, boxSizing: "border-box" } })),
+        h("div", { style: { height: 10 } }), label("BIO"),
+        h(ChamferField, { size: "sm", activeBorderColor: accent + "AA" }, h("textarea", { value: bio, maxLength: 150, rows: 3, onChange: function (e) { setBio(e.target.value); }, style: { width: "100%", padding: "10px 12px", background: "transparent", border: "none", outline: "none", color: "#EEE8DD", fontSize: 14, resize: "none", fontFamily: "inherit", boxSizing: "border-box" } })),
+        h("div", { style: { display: "flex", gap: 8, marginTop: 10 } }, btn("CANCEL", function () { setEdit(false); }), btn("SAVE", saveProfile, "primary"))) : null,
+      h("div", { key: "bt", style: { display: "flex", gap: 8, padding: "14px 16px 0" } },
+        btn("EDIT PROFILE", function () { setHandle(prof && prof.handle || ""); setBio(prof && prof.bio || ""); setEdit(true); setNewOpen(false); }),
+        btn("NEW ECHŌ", function () { setNewOpen(function (v) { return !v; }); setEdit(false); }, "primary")),
+      newOpen ? h("div", { key: "nw", style: { padding: "14px 16px 0" } },
+        h("div", { style: { display: "flex", gap: 8 } },
+          btn("CREATE NEW IMAGE", props.onCreate),
+          btn(file ? "CHANGE PICTURE" : "UPLOAD A PICTURE", function () { fileRef.current && fileRef.current.click(); })),
+        h("input", { ref: fileRef, type: "file", accept: "image/*", style: { display: "none" }, onChange: function (e) { pick(e.target.files && e.target.files[0]); e.target.value = ""; } }),
+        preview ? h("div", { style: { marginTop: 12 } },
+          h("div", { style: { lineHeight: 0, clipPath: ECHO_CUT_LG, maxHeight: 360, overflow: "hidden" } }, h("img", { src: preview, alt: "", style: { width: "100%", display: "block", objectFit: "cover" } })),
+          h("div", { style: { marginTop: 12 } }, label("CAPTION"),
+            h(ChamferField, { size: "sm", activeBorderColor: accent + "AA" }, h("textarea", { value: cap, maxLength: 2200, rows: 3, onChange: function (e) { setCap(e.target.value); }, placeholder: "Say something about this moment (optional)", style: { width: "100%", padding: "10px 12px", background: "transparent", border: "none", outline: "none", color: "#EEE8DD", fontSize: 14, resize: "none", fontFamily: "inherit", boxSizing: "border-box" } }))),
+          h("label", { style: { display: "flex", gap: 10, alignItems: "flex-start", marginTop: 12, fontSize: 12, color: "rgba(238,232,221,0.8)", lineHeight: 1.5, cursor: "pointer" } },
+            h("input", { type: "checkbox", checked: cert, onChange: function (e) { setCert(e.target.checked); }, style: { marginTop: 3 } }),
+            h("span", null, "I own this picture or have the right to share it, anyone in it has agreed, and it is suitable for everyone.")),
+          h("div", { style: { marginTop: 12 } }, btn("SEND AN ECHŌ", sendUpload, "primary", { width: "100%", opacity: cert ? 1 : 0.45 }))) : null) : null,
+      msg ? h("div", { key: "ms", role: "status", style: { padding: "12px 16px 0", fontSize: 12, color: "#E8D9A8", lineHeight: 1.5 } }, msg) : null,
+      h("div", { key: "tabs", style: { display: "flex", marginTop: 18, borderTop: "1px solid rgba(255,255,255,0.08)" } },
+        h("div", { style: { flex: 1, textAlign: "center", padding: "10px 0", borderTop: "2px solid " + accent, marginTop: -1 } },
+          h("svg", { width: 20, height: 20, viewBox: "0 0 20 20", fill: "none", stroke: accent, strokeWidth: 1.6 }, [2, 8, 14].map(function (x) { return [2, 8, 14].map(function (y) { return h("rect", { key: x + "-" + y, x: x, y: y, width: 4, height: 4 }); }); })))),
+      prof && posts.length === 0 ? h("div", { key: "em", style: { padding: "36px 24px", textAlign: "center", fontSize: 13, color: "rgba(200,190,170,0.6)", lineHeight: 1.6 } }, "Nothing is echoing yet. Be the first to send something from your world.") : null,
+      h("div", { key: "gr", style: { display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 2 } },
+        posts.map(function (p) { return h("div", { key: p.id, onClick: function () { setViewId(p.id); setEditCap(p.caption || ""); setMsg(""); }, style: { aspectRatio: "1 / 1", overflow: "hidden", cursor: "pointer", background: "#0B0A16" } },
+          h("img", { src: "/api/echo/posts/" + encodeURIComponent(p.id) + "/image", alt: "", loading: "lazy", style: { width: "100%", height: "100%", objectFit: "cover", display: "block" } })); }))
+    ]);
   }
 
   function EchoImageScreen(props) {
@@ -39058,7 +39222,8 @@ initRemote();
         } }),
         screen === "settings" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SettingsScreen, { onExit: () => setScreen(preSettingsScreen), onOpenAvatarImage: userProfile ? () => setScreen("avatarImage") : null, onOpenEcho: () => { setEchoReturn("settings"); setScreen("echoImage"); } }),
         screen === "telo-image" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TeloImageScreen, { teloName: activeTelo, onExit: () => setScreen("telosian-profile") }),
-        screen === "echoImage" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EchoImageScreen, { userProfile, onExit: () => { if (echoReturn === "archives") { setScreen("main"); setActiveTab("archives"); } else setScreen(echoReturn === "home" ? "home" : "settings"); } }),
+        screen === "echoProfile" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EchoProfileScreen, { userProfile, onExit: () => setScreen("home"), onCreate: () => { setEchoReturn("profile"); setScreen("echoImage"); } }),
+        screen === "echoImage" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EchoImageScreen, { userProfile, onExit: () => { if (echoReturn === "profile") setScreen("echoProfile"); else if (echoReturn === "archives") { setScreen("main"); setActiveTab("archives"); } else setScreen(echoReturn === "home" ? "home" : "settings"); } }),
         screen === "avatarImage" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AvatarImageScreen, { userProfile, onExit: () => setScreen("settings"), onSaved: (ad) => setUserProfile(ad) }),
         screen === "encyclopaedia" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EncyclopaediaScreen, { onExit: () => setScreen("home") }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(LanguagePracticeScreen, { active: screen === "languages", onExit: () => setScreen("home") }),
@@ -39107,7 +39272,7 @@ initRemote();
                   break;
                 case "echo":
                   setEchoReturn("home");
-                  setScreen("echoImage");
+                  setScreen("echoProfile");
                   break;
                 // FIXED (App v95) — this set activeTab to "design", but the Home Builder only
                 // renders when activeTab === "home" (the bottom nav's Design button uses id

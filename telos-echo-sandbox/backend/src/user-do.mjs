@@ -14,6 +14,8 @@ import { STYLES, WORLD_IDS, WORLD_VISUAL, worldCanon, SUB_WORLDS, MARIS_DEEP_SPE
 
 const CHUNK = 900_000;
 const MAX_JSON_BYTES = 32 * 1024;
+const MAX_ECHO_POSTS = 500, MAX_ECHO_UPLOADS_PER_DAY = 30;
+function cleanCaption(c) { const t = String(c ?? '').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, ' ').trim(); if (t.length > 2200) throw new ApiError(400, 'CAPTION_TOO_LONG'); return t; }
 const PREBUILT_KIND = 'prebuilt';
 const STALE_WORKING_MS = 10 * 60 * 1000;
 const rid = () => crypto.randomUUID().replace(/-/g, '').slice(0, 22);
@@ -49,6 +51,7 @@ export class UserState extends DurableObject {
       'CREATE TABLE IF NOT EXISTS usage(id TEXT PRIMARY KEY, job_id TEXT, ts INTEGER, model TEXT, usd REAL, estimated INTEGER, raw TEXT)',
       'CREATE TABLE IF NOT EXISTS diag(job_id TEXT PRIMARY KEY, ts INTEGER, code TEXT, detail TEXT)',
       'CREATE TABLE IF NOT EXISTS echo_refs(id TEXT PRIMARY KEY, blob_id TEXT NOT NULL, certified TEXT NOT NULL, screening TEXT, created_at INTEGER)',
+      'CREATE TABLE IF NOT EXISTS echo_posts(id TEXT PRIMARY KEY, source TEXT NOT NULL, image_id TEXT, blob_id TEXT, certified TEXT, caption TEXT NOT NULL DEFAULT \'\', world TEXT, created_at INTEGER)',
       'CREATE TABLE IF NOT EXISTS quotes(id TEXT PRIMARY KEY, bind TEXT NOT NULL, amount INTEGER NOT NULL, state TEXT NOT NULL, expires_at INTEGER NOT NULL, created_at INTEGER)'
     ]) this.sql.exec(s);
   }
@@ -365,6 +368,23 @@ export class UserState extends DurableObject {
       this.setMeta('echoModeration', j.mode);
       return json(this.echoModeration());
     }
+    if (b === 'profile') {
+      if (m === 'GET') return json(this.echoProfile());
+      if (m === 'POST') return json(this.setEchoProfile(await this.body(request)));
+    }
+    if (b === 'posts') {
+      if (m === 'GET' && !c) return json({ posts: this.echoPostList() });
+      if (m === 'POST' && !c) return json(this.addEchoPost(await this.body(request)));
+      if (m === 'POST' && c === 'upload') return json(await this.addEchoUploadPost(request));
+      if (m === 'GET' && c && d === 'image') {
+        const r = this.one('SELECT source,image_id,blob_id FROM echo_posts WHERE id=?', c);
+        const row = r && (r.source === 'upload' ? { blob_id: r.blob_id } : this.one("SELECT blob_id FROM images WHERE id=? AND kind='echo'", r.image_id));
+        const bl = row && this.getBlob(row.blob_id); if (!bl) throw new ApiError(404, 'NOT_FOUND');
+        return new Response(bl.bytes, { headers: { 'content-type': bl.mime, 'cache-control': 'private, no-store', 'x-content-type-options': 'nosniff' } });
+      }
+      if (m === 'POST' && c && !d) { const j = await this.body(request); if (!this.one('SELECT 1 x FROM echo_posts WHERE id=?', c)) throw new ApiError(404, 'NOT_FOUND'); this.run('UPDATE echo_posts SET caption=? WHERE id=?', cleanCaption(j.caption), c); return json({ ok: true }); }
+      if (m === 'DELETE' && c) { const r = this.one('SELECT source,blob_id FROM echo_posts WHERE id=?', c); if (!r) throw new ApiError(404, 'NOT_FOUND'); if (r.source === 'upload' && r.blob_id) this.delBlob(r.blob_id); this.run('DELETE FROM echo_posts WHERE id=?', c); return json({ ok: true }); }
+    }
     if (b === 'quote' && m === 'POST') return json(await this.echoQuote(await this.body(request)));
     if (b === 'generate' && m === 'POST') return json(await this.admitEcho(await this.body(request)));
     if (b === 'captions' && m === 'POST') return json(this.echoCaptions(await this.body(request)));
@@ -374,6 +394,58 @@ export class UserState extends DurableObject {
       if (m === 'DELETE' && c) { const r = this.one('SELECT blob_id FROM echo_refs WHERE id=?', c); if (!r) throw new ApiError(404, 'NOT_FOUND'); this.delBlob(r.blob_id); this.run('DELETE FROM echo_refs WHERE id=?', c); return json({ ok: true }); }
     }
     throw new ApiError(404, 'NOT_FOUND');
+  }
+  // ---- Echō profile and moments (private to the owner for now: no followers or other accounts exist yet) ----
+  echoProfile() {
+    let prof = {}; try { prof = JSON.parse(this.meta('echoProfile') || '{}') || {}; } catch { prof = {}; }
+    const posts = this.echoPostList();
+    const av = this.one("SELECT id FROM images WHERE kind='avatar_face' AND accepted=1 ORDER BY created_at DESC LIMIT 1") || this.one("SELECT id FROM images WHERE kind='avatar' AND accepted=1 ORDER BY created_at DESC LIMIT 1");
+    return { handle: prof.handle ?? null, bio: prof.bio ?? '', avatarImageId: av ? av.id : null, counts: { posts: posts.length, followers: 0, following: 0 }, posts, maxPosts: MAX_ECHO_POSTS };
+  }
+  setEchoProfile(j) {
+    const out = {};
+    if (j.handle !== undefined) { const h = String(j.handle).trim().toLowerCase(); if (!/^[a-z0-9._]{3,30}$/.test(h)) throw new ApiError(400, 'HANDLE_INVALID'); out.handle = h; }
+    if (j.bio !== undefined) { const b = String(j.bio).replace(/[\u0000-\u001f\u007f]/g, ' ').trim(); if (b.length > 150) throw new ApiError(400, 'BIO_TOO_LONG'); out.bio = b; }
+    let cur = {}; try { cur = JSON.parse(this.meta('echoProfile') || '{}') || {}; } catch { cur = {}; }
+    this.setMeta('echoProfile', JSON.stringify({ ...cur, ...out }));
+    return this.echoProfile();
+  }
+  echoPostList() {
+    return this.q('SELECT id,source,image_id,caption,world,created_at FROM echo_posts ORDER BY created_at DESC').filter((r) => r.source === 'upload' || this.one("SELECT 1 x FROM images WHERE id=? AND kind='echo'", r.image_id))
+      .map((r) => ({ id: r.id, source: r.source, caption: r.caption, world: r.world, createdAt: new Date(r.created_at).toISOString() }));
+  }
+  addEchoPost(j) {
+    const imageId = String(j.imageId ?? '');
+    const img = this.one("SELECT id,meta FROM images WHERE id=? AND kind='echo'", imageId);
+    if (!img) throw new ApiError(404, 'NOT_FOUND');
+    const dup = this.one("SELECT id FROM echo_posts WHERE source='image' AND image_id=?", imageId);
+    if (dup) throw new ApiError(409, 'ALREADY_ECHOED', { id: dup.id });
+    if (this.one('SELECT COUNT(*) n FROM echo_posts').n >= MAX_ECHO_POSTS) throw new ApiError(400, 'TOO_MANY_ECHOES', { max: MAX_ECHO_POSTS });
+    let world = null; try { world = JSON.parse(img.meta)?.world ?? null; } catch { world = null; }
+    const id = rid();
+    this.run("INSERT INTO echo_posts(id,source,image_id,blob_id,certified,caption,world,created_at) VALUES(?,?,?,?,?,?,?,?)", id, 'image', imageId, null, null, cleanCaption(j.caption), world, Date.now());
+    return { id };
+  }
+  async addEchoUploadPost(request) {
+    const cfg = this.cfg;
+    if (!cfg.allowPhotoUploads) throw new ApiError(403, 'PHOTO_UPLOADS_DISABLED');
+    if (request.headers.get('x-certify') !== 'sfw-rights') throw new ApiError(400, 'CERTIFICATION_REQUIRED');
+    if (this.one('SELECT COUNT(*) n FROM echo_posts').n >= MAX_ECHO_POSTS) throw new ApiError(400, 'TOO_MANY_ECHOES', { max: MAX_ECHO_POSTS });
+    const dayAgo = Date.now() - 864e5;
+    if (this.one("SELECT COUNT(*) n FROM echo_posts WHERE source='upload' AND created_at>?", dayAgo).n >= MAX_ECHO_UPLOADS_PER_DAY) throw new ApiError(429, 'ECHO_UPLOAD_LIMIT', { max: MAX_ECHO_UPLOADS_PER_DAY });
+    const len = Number(request.headers.get('content-length') || 0);
+    if (len > cfg.maxPhotoBytes) throw new ApiError(413, 'IMAGE_TOO_LARGE', { maxBytes: cfg.maxPhotoBytes });
+    const bytes = new Uint8Array(await request.arrayBuffer());
+    if (!bytes.length || bytes.length > cfg.maxPhotoBytes) throw new ApiError(413, 'IMAGE_TOO_LARGE', { maxBytes: cfg.maxPhotoBytes });
+    const mime = sniffImage(bytes);
+    if (!mime) throw new ApiError(415, 'UNSUPPORTED_IMAGE_TYPE');
+    const screen = await screenUpload({ bytes, mime }, this.env);
+    if (!screen.ok) throw new ApiError(422, screen.code);
+    let caption = ''; try { caption = decodeURIComponent(request.headers.get('x-caption') || ''); } catch { caption = ''; }
+    const w = request.headers.get('x-world'); const world = WORLD_IDS.includes(w) ? w : null;
+    const id = rid();
+    this.run('INSERT INTO echo_posts(id,source,image_id,blob_id,certified,caption,world,created_at) VALUES(?,?,?,?,?,?,?,?)', id, 'upload', null, this.putBlob(bytes, mime), 'sfw-rights', cleanCaption(caption), world, Date.now());
+    return { id };
   }
   async addEchoRef(request) {
     const cfg = this.cfg;
@@ -486,6 +558,8 @@ export class UserState extends DurableObject {
     for (const u of this.q('SELECT blob_id FROM uploads')) this.delBlob(u.blob_id);
     for (const i of this.q('SELECT blob_id FROM images')) this.delBlob(i.blob_id);
     for (const u of this.q('SELECT blob_id FROM echo_refs')) this.delBlob(u.blob_id);
+    for (const u of this.q("SELECT blob_id FROM echo_posts WHERE source='upload'")) this.delBlob(u.blob_id);
+    this.run('DELETE FROM echo_posts');
     this.run('DELETE FROM uploads'); this.run('DELETE FROM images'); this.run('DELETE FROM echo_refs'); this.run('DELETE FROM quotes');
     this.run("UPDATE jobs SET params='{}', result=NULL");
     return this.me();

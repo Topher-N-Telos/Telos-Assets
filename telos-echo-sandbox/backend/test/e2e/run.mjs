@@ -596,3 +596,30 @@ test('echo: test Sköl allowance = 3 nine-panel collages per image window, charg
   assert.equal((await w('POST', '/api/echo/quote', { format: 'single' })).json.error, 'INSUFFICIENT_SKOL');
   const ob = (await bw('GET', '/api/echo/options')).json.wallet; assert.equal(ob.balance, 1200);                                   // another account has its own allowance
 });
+
+test('echo profile: moments from a generated image or an uploaded photo, private, captioned, editable, deletable', async () => {
+  const q = await quoteFor(eAlice, { panelCount: 4 }); const r = await eAlice('POST', '/api/echo/generate', echoBody(q)); const d = await wait(eAlice, r.json.id); assert.equal(d.state, 'complete'); const img = d.imageId; assert.ok(img);
+  const p0 = (await eAlice('GET', '/api/echo/profile')).json; assert.equal(p0.counts.posts, 0); assert.equal(p0.counts.followers, 0); assert.equal(p0.counts.following, 0);
+  const prof = await eAlice('POST', '/api/echo/profile', { handle: 'Chris.Telos', bio: 'Nine worlds, one planet.' }); assert.equal(prof.status, 200); assert.equal(prof.json.handle, 'chris.telos');
+  assert.equal((await eAlice('POST', '/api/echo/profile', { handle: 'a b' })).json.error, 'HANDLE_INVALID');
+  assert.equal((await eAlice('POST', '/api/echo/profile', { bio: 'x'.repeat(151) })).json.error, 'BIO_TOO_LONG');
+  const a = await eAlice('POST', '/api/echo/posts', { imageId: img, caption: 'First light in the market.' }); assert.equal(a.status, 200, JSON.stringify(a.json));
+  assert.equal((await eAlice('POST', '/api/echo/posts', { imageId: img, caption: 'again' })).json.error, 'ALREADY_ECHOED');
+  assert.equal((await eAlice('POST', '/api/echo/posts', { imageId: 'nope' })).status, 404);
+  assert.equal((await eBob('POST', '/api/echo/posts', { imageId: img })).status, 404);                              // someone else's image can never be echoed
+  assert.equal((await eAlice('POST', '/api/echo/posts', { imageId: img + 'x', caption: 'y' })).status, 404);
+  assert.equal((await eAlice('GET', `/api/echo/posts/${a.json.id}/image`)).status, 200);
+  assert.equal((await eBob('GET', `/api/echo/posts/${a.json.id}/image`)).status, 404);
+  const png = makePng(64, 96, [30, 90, 160]);
+  assert.equal((await eAlice('POST', '/api/echo/posts/upload', png)).json.error, 'CERTIFICATION_REQUIRED');
+  assert.equal((await eAlice('POST', '/api/echo/posts/upload', Buffer.from('<svg onload=alert(1)>'), { 'x-certify': 'sfw-rights' })).status, 415);
+  const u = await eAlice('POST', '/api/echo/posts/upload', png, { 'x-certify': 'sfw-rights', 'x-caption': encodeURIComponent('Me, on the roof'), 'x-world': 'SOLIS' }); assert.equal(u.status, 200, JSON.stringify(u.json));
+  const p1 = (await eAlice('GET', '/api/echo/profile')).json; assert.equal(p1.counts.posts, 2); assert.equal(p1.posts[0].id, u.json.id); assert.equal(p1.posts[0].caption, 'Me, on the roof'); assert.equal(p1.posts[0].world, 'SOLIS'); assert.equal(p1.posts[1].caption, 'First light in the market.');
+  assert.equal((await eBob('GET', '/api/echo/profile')).json.counts.posts, 0);
+  assert.equal((await eAlice('POST', `/api/echo/posts/${a.json.id}`, { caption: 'Edited' })).status, 200);
+  assert.equal((await eAlice('POST', `/api/echo/posts/${a.json.id}`, { caption: 'z'.repeat(2201) })).json.error, 'CAPTION_TOO_LONG');
+  assert.equal((await eAlice('GET', '/api/echo/profile')).json.posts.find((x) => x.id === a.json.id).caption, 'Edited');
+  assert.equal((await eAlice('DELETE', `/api/echo/posts/${u.json.id}`)).json.ok, true); assert.equal((await eAlice('GET', `/api/echo/posts/${u.json.id}/image`)).status, 404);
+  assert.equal((await eAlice('DELETE', `/api/echo/posts/${a.json.id}`)).json.ok, true);
+  assert.equal((await eAlice('GET', '/api/echo/profile')).json.counts.posts, 0);
+});
