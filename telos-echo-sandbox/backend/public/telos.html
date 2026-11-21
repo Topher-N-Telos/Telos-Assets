@@ -32330,12 +32330,22 @@ Convert this into a precise, structured clothing/outfit description optimized fo
     const rec = await storageGet(LANGUAGE_UNLOCK_SANDBOX_KEY, null);
     return !!(rec && rec.active);
   }
-  var DASH_GLYPH_GLOW = "drop-shadow(0 0 5px rgba(210,190,235,0.7)) drop-shadow(0 0 1.5px rgba(230,215,245,0.45))";
+  // App v140 — the dashboard takes the colour of the world the user chose. T() turns one of the original lavender shades into the same shade of the world's colour; with hex=true it returns a #rrggbb.
+  var DASH = { rgb: [155, 126, 200], on: false };
+  function setDashWorld(world) { const w = WORLDS[world]; const h = w && w.accent; if (h && /^#[0-9a-f]{6}$/i.test(h)) { DASH.rgb = [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)]; DASH.on = true; } else { DASH.on = false; } }
+  function T(triple, hex) {
+    const t = triple.split(",").map(Number);
+    if (!DASH.on) return hex ? "#" + t.map((v) => v.toString(16).padStart(2, "0")).join("") : triple;
+    const k = Math.max(0, Math.min(1, ((t[0] + t[1] + t[2]) / 3 - 120) / 130)) * 0.5;
+    const o = DASH.rgb.map((c) => Math.round(c * (1 - k) + 255 * k));
+    return hex ? "#" + o.map((v) => v.toString(16).padStart(2, "0")).join("") : o.join(",");
+  }
+  function dashGlow() { return "drop-shadow(0 0 5px rgba(" + T("210,190,235") + ",0.7)) drop-shadow(0 0 1.5px rgba(" + T("230,215,245") + ",0.45))"; }
   function DashboardGlyph({ id }) {
-    const s = { width: 26, height: 26, color: "#E4D7F5", filter: DASH_GLYPH_GLOW };
+    const s = { width: 26, height: 26, color: T("228,215,245", true), filter: dashGlow() };
     switch (id) {
       case "village":
-        return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("svg", { viewBox: "0 0 100 100", style: { width: 29, height: 29, color: "#E4D7F5", filter: DASH_GLYPH_GLOW }, fill: "none", stroke: "currentColor", strokeWidth: "3", strokeLinejoin: "round", children: [
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("svg", { viewBox: "0 0 100 100", style: { width: 29, height: 29, color: T("228,215,245", true), filter: dashGlow() }, fill: "none", stroke: "currentColor", strokeWidth: "3", strokeLinejoin: "round", children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", { d: "M8 88 L8 55 L24 40 L40 55 L40 88 Z" }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", { d: "M36 88 L36 42 L58 22 L80 42 L80 88 Z" }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", { d: "M76 88 L76 58 L90 46 L92 48 L92 88 Z" }),
@@ -32360,15 +32370,15 @@ Convert this into a precise, structured clothing/outfit description optimized fo
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", { d: "M50 50L50 22M50 50L76 37M50 50L76 63M50 50L50 78M50 50L24 63M50 50L24 37" })
         ] });
       case "challenge":
-        return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("svg", { viewBox: "0 0 100 100", style: { width: 28, height: 28, filter: DASH_GLYPH_GLOW }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("g", { stroke: "#E4D7F5", strokeWidth: "6.5", strokeLinecap: "round", children: [
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("svg", { viewBox: "0 0 100 100", style: { width: 28, height: 28, filter: dashGlow() }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("g", { stroke: T("228,215,245", true), strokeWidth: "6.5", strokeLinecap: "round", children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", { d: "M22 22 L70 70" }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", { d: "M78 22 L30 70" }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", { d: "M46 46 L38 38" }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", { d: "M54 46 L62 38" })
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("circle", { cx: "70", cy: "70", r: "5", fill: "#E4D7F5" }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("circle", { cx: "30", cy: "70", r: "5", fill: "#E4D7F5" })
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("circle", { cx: "70", cy: "70", r: "5", fill: T("228,215,245", true) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("circle", { cx: "30", cy: "70", r: "5", fill: T("228,215,245", true) })
         ] });
       case "create":
         return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("svg", { viewBox: "0 0 100 100", style: s, fill: "none", stroke: "currentColor", strokeWidth: "3", strokeLinecap: "round", strokeLinejoin: "round", children: [
@@ -32390,12 +32400,12 @@ Convert this into a precise, structured clothing/outfit description optimized fo
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("circle", { cx: "50", cy: "60", r: "2", fill: "currentColor", stroke: "none" })
         ] });
       case "design":
-        return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("svg", { viewBox: "0 0 20 20", style: { width: 26, height: 26, filter: DASH_GLYPH_GLOW }, fill: "none", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", { d: "M10 2L2 8H4V17H8V13H12V17H16V8H18L10 2Z", stroke: "#E4D7F5", strokeWidth: "1.4", strokeLinecap: "round", strokeLinejoin: "round" }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", { d: "M1 19L1 13L6 19Z", stroke: "#E4D7F5", strokeWidth: "1.2", strokeLinecap: "round", strokeLinejoin: "round" })
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("svg", { viewBox: "0 0 20 20", style: { width: 26, height: 26, filter: dashGlow() }, fill: "none", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", { d: "M10 2L2 8H4V17H8V13H12V17H16V8H18L10 2Z", stroke: T("228,215,245", true), strokeWidth: "1.4", strokeLinecap: "round", strokeLinejoin: "round" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", { d: "M1 19L1 13L6 19Z", stroke: T("228,215,245", true), strokeWidth: "1.2", strokeLinecap: "round", strokeLinejoin: "round" })
         ] });
       case "creator-studio":
-        return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("svg", { viewBox: "0 0 100 100", style: { width: 27, height: 27, color: "#E4D7F5", filter: DASH_GLYPH_GLOW }, fill: "none", stroke: "currentColor", strokeWidth: "3", strokeLinecap: "round", strokeLinejoin: "round", children: [
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("svg", { viewBox: "0 0 100 100", style: { width: 27, height: 27, color: T("228,215,245", true), filter: dashGlow() }, fill: "none", stroke: "currentColor", strokeWidth: "3", strokeLinecap: "round", strokeLinejoin: "round", children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", { d: "M50 18 C25 18 12 34 12 50 C12 62 20 68 30 66 C36 65 40 68 39 74 C38 80 44 84 52 82 C74 78 88 62 88 44 C88 28 72 18 50 18 Z" }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("circle", { cx: "30", cy: "70", r: "7" }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("circle", { cx: "40", cy: "32", r: "3.2", fill: "currentColor", stroke: "none" }),
@@ -32423,7 +32433,7 @@ Convert this into a precise, structured clothing/outfit description optimized fo
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", { d: "M72 50 C73 58 75 60 83 61 C75 62 73 64 72 72 C71 64 69 62 61 61 C69 60 71 58 72 50 Z" })
         ] });
       case "wellness":
-        return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("svg", { viewBox: "0 0 20 20", style: { width: 26, height: 26, filter: DASH_GLYPH_GLOW }, fill: "none", stroke: "#E4D7F5", strokeWidth: "1.4", strokeLinecap: "round", strokeLinejoin: "round", children: [
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("svg", { viewBox: "0 0 20 20", style: { width: 26, height: 26, filter: dashGlow() }, fill: "none", stroke: T("228,215,245", true), strokeWidth: "1.4", strokeLinecap: "round", strokeLinejoin: "round", children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", { d: "M7 2H13M8 2V8L4 15C3.4 16 4.1 17.5 5.5 17.5H14.5C15.9 17.5 16.6 16 16 15L12 8V2" }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", { d: "M6 13H14", strokeWidth: "1.2" })
         ] });
@@ -32457,7 +32467,8 @@ Convert this into a precise, structured clothing/outfit description optimized fo
         return null;
     }
   }
-  function HomeDashboardScreen({ onNavigate, userProfile }) {
+  function HomeDashboardScreen({ onNavigate, userProfile, world }) {
+    setDashWorld(world);
     const [sivaadMember, setSivaadMember] = (0, import_react.useState)(false);
     (0, import_react.useEffect)(() => {
       let c = false;
@@ -32469,9 +32480,9 @@ Convert this into a precise, structured clothing/outfit description optimized fo
       };
     }, []);
     return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", position: "relative" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { position: "absolute", inset: 0, zIndex: 0, background: `radial-gradient(ellipse 550px 450px at 25% 8%, rgba(40,50,78,0.48) 0%, transparent 60%),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { position: "absolute", inset: 0, zIndex: 0, background: `radial-gradient(ellipse 550px 450px at 25% 8%, rgba(${DASH.on ? DASH.rgb.join(",") : "40,50,78"},${DASH.on ? 0.22 : 0.48}) 0%, transparent 60%),
          radial-gradient(ellipse 450px 550px at 90% 30%, rgba(32,42,65,0.38) 0%, transparent 55%),
-         radial-gradient(ellipse 500px 400px at 20% 80%, rgba(50,36,64,0.25) 0%, transparent 60%),
+         radial-gradient(ellipse 500px 400px at 20% 80%, rgba(${DASH.on ? DASH.rgb.join(",") : "50,36,64"},${DASH.on ? 0.12 : 0.25}) 0%, transparent 60%),
          radial-gradient(circle at 65% 60%, rgba(200,195,220,0.05) 0%, transparent 3%),
          radial-gradient(circle at 15% 45%, rgba(220,215,235,0.07) 0%, transparent 2%),
          radial-gradient(circle at 78% 15%, rgba(210,205,225,0.06) 0%, transparent 2%),
@@ -32479,7 +32490,7 @@ Convert this into a precise, structured clothing/outfit description optimized fo
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { position: "absolute", inset: 0, zIndex: 1, background: "linear-gradient(180deg, rgba(6,6,15,0.22) 0%, rgba(6,6,15,0.58) 55%, rgba(6,6,15,0.94) 100%)" } }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, overflowY: "auto", padding: "24px 20px 20px", position: "relative", zIndex: 2 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontFamily: "Cinzel, serif", fontSize: 21, letterSpacing: 7, color: "#E8DCF5", textShadow: "0 0 12px rgba(190,165,225,0.35)" }, children: "TEL\u014CS" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontFamily: "Cinzel, serif", fontSize: 21, letterSpacing: 7, color: T("232,220,245", true), textShadow: "0 0 12px rgba(" + T("190,165,225") + ",0.35)" }, children: "TEL\u014CS" }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => onNavigate("settings"), style: { width: 32, height: 32, borderRadius: "50%", border: "1px solid rgba(200,190,170,0.3)", background: "rgba(255,255,255,0.05)", display: "flex", alignItems: "center", justifyContent: "center", color: "rgba(220,210,230,0.75)", fontSize: 13, cursor: "pointer" }, children: "\u25CF" })
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { textAlign: "center", margin: "20px 4px 26px" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontFamily: "Cinzel, serif", fontSize: 17, letterSpacing: 2, color: "rgba(230,222,238,0.85)" }, children: [
@@ -32489,9 +32500,9 @@ Convert this into a precise, structured clothing/outfit description optimized fo
         ] }) }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 11, marginBottom: 22 }, children: DASHBOARD_CARDS.slice(0, 8).map((card) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(DashboardCard, { card, onNavigate }, card.id)) }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 12, margin: "4px 4px 16px" }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { flex: 1, height: 1, background: "linear-gradient(90deg, transparent, rgba(180,160,210,0.35), transparent)" } }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { flex: 1, height: 1, background: "linear-gradient(90deg, transparent, rgba(" + T("180,160,210") + ",0.35), transparent)" } }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontFamily: "Cinzel, serif", fontSize: 13, letterSpacing: 3, color: "rgba(216,206,186,0.75)", whiteSpace: "nowrap" }, children: "TEL\u014C SCHOLAR SKILLS" }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { flex: 1, height: 1, background: "linear-gradient(90deg, transparent, rgba(180,160,210,0.35), transparent)" } })
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { flex: 1, height: 1, background: "linear-gradient(90deg, transparent, rgba(" + T("180,160,210") + ",0.35), transparent)" } })
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 11 }, children: DASHBOARD_CARDS.slice(8).map((card) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(DashboardCard, { card, onNavigate, locked: card.gate === "sivaad" && !sivaadMember, wide: card.id === "concierge" }, card.id)) })
       ] })
@@ -32506,8 +32517,8 @@ Convert this into a precise, structured clothing/outfit description optimized fo
     const face = { position: "absolute", inset: 0, backfaceVisibility: "hidden", WebkitBackfaceVisibility: "hidden" };
     const mini = (sub) => {
       const live = sub.built;
-      return h("div", { key: sub.id, onClick: (e) => { e.stopPropagation(); if (live) onNavigate(sub.id); }, style: { height: 38, clipPath: clip(8), background: "linear-gradient(135deg, rgba(210,190,235,0.1), rgba(160,135,195,0.03))", boxShadow: "0 0 10px rgba(190,165,225,0.2)", cursor: live ? "pointer" : "default", WebkitTapHighlightColor: "transparent" } },
-        h("div", { style: { clipPath: clip(7), margin: 1.5, height: "calc(100% - 3px)", background: "rgba(120,105,145,0.09)", display: "flex", alignItems: "center", gap: 8, padding: "0 10px", position: "relative" } },
+      return h("div", { key: sub.id, onClick: (e) => { e.stopPropagation(); if (live) onNavigate(sub.id); }, style: { height: 38, clipPath: clip(8), background: "linear-gradient(135deg, rgba(" + T("210,190,235") + ",0.1), rgba(" + T("160,135,195") + ",0.03))", boxShadow: "0 0 10px rgba(" + T("190,165,225") + ",0.2)", cursor: live ? "pointer" : "default", WebkitTapHighlightColor: "transparent" } },
+        h("div", { style: { clipPath: clip(7), margin: 1.5, height: "calc(100% - 3px)", background: "rgba(" + T("120,105,145") + ",0.09)", display: "flex", alignItems: "center", gap: 8, padding: "0 10px", position: "relative" } },
           h("div", { style: { width: 22, height: 22, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transform: "scale(0.82)" } }, h(DashboardGlyph, { id: sub.id })),
           h("div", { style: { fontFamily: "Cinzel, serif", fontSize: 11, color: "#EEE8DD", whiteSpace: "nowrap" } }, sub.label),
           !live ? h("div", { style: { position: "absolute", bottom: 4, right: 8, fontSize: 6.5, letterSpacing: 1, fontFamily: "Cinzel, serif", color: "rgba(200,190,170,0.4)" } }, "SOON") : null));
@@ -32516,11 +32527,11 @@ Convert this into a precise, structured clothing/outfit description optimized fo
       h("div", { style: { position: "absolute", inset: 0, transformStyle: "preserve-3d", WebkitTransformStyle: "preserve-3d", transition: "transform 0.55s cubic-bezier(0.4, 0.1, 0.2, 1)", transform: flipped ? "rotateY(180deg)" : "none" } },
         h("div", { style: Object.assign({}, face, { pointerEvents: flipped ? "none" : "auto" }) }, h(DashboardCard, { card: Object.assign({}, card, { flip: null }), onNavigate: () => setFlipped(true) })),
         h("div", { style: Object.assign({}, face, { transform: "rotateY(180deg)", pointerEvents: flipped ? "auto" : "none" }) },
-          h("div", { style: { height: "100%", clipPath: clip(cut), background: "linear-gradient(135deg, rgba(210,190,235,0.06), rgba(160,135,195,0.02))", boxShadow: "0 0 16px rgba(190,165,225,0.18)" } },
-            h("div", { style: { clipPath: clip(ci), margin: 1.5, height: "calc(100% - 3px)", background: "rgba(120,105,145,0.07)", padding: "5px 8px 8px", display: "flex", flexDirection: "column", gap: 5, boxSizing: "border-box" } },
+          h("div", { style: { height: "100%", clipPath: clip(cut), background: "linear-gradient(135deg, rgba(" + T("210,190,235") + ",0.06), rgba(" + T("160,135,195") + ",0.02))", boxShadow: "0 0 16px rgba(" + T("190,165,225") + ",0.18)" } },
+            h("div", { style: { clipPath: clip(ci), margin: 1.5, height: "calc(100% - 3px)", background: "rgba(" + T("120,105,145") + ",0.07)", padding: "5px 8px 8px", display: "flex", flexDirection: "column", gap: 5, boxSizing: "border-box" } },
               h("div", { onClick: () => setFlipped(false), role: "button", "aria-label": "Turn the card back", style: { height: 20, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 4px", cursor: "pointer", WebkitTapHighlightColor: "transparent" } },
                 h("div", { style: { fontFamily: "Cinzel, serif", fontSize: 9, letterSpacing: 2, color: "rgba(200,190,170,0.6)" } }, "CREATE"),
-                h("div", { style: { fontSize: 13, color: "rgba(228,215,245,0.85)", lineHeight: 1 } }, "\u21BA")),
+                h("div", { style: { fontSize: 13, color: "rgba(" + T("228,215,245") + ",0.85)", lineHeight: 1 } }, "\u21BA")),
               card.flip.map(mini)))))); 
   }
   function DashboardCard({ card, onNavigate, locked = false, wide = false }) {
@@ -32542,14 +32553,14 @@ Convert this into a precise, structured clothing/outfit description optimized fo
           height: "100%",
           position: "relative",
           clipPath: outerClip,
-          background: pressed ? "linear-gradient(135deg, rgba(235,222,250,0.92), rgba(210,190,235,0.75))" : "linear-gradient(135deg, rgba(210,190,235,0.06), rgba(160,135,195,0.02))",
-          boxShadow: pressed ? "0 0 32px rgba(210,190,240,0.75), 0 0 10px rgba(225,210,245,0.85)" : "0 0 16px rgba(190,165,225,0.18), 0 0 2px rgba(190,165,225,0.28)",
+          background: pressed ? "linear-gradient(135deg, rgba(" + T("235,222,250") + ",0.92), rgba(" + T("210,190,235") + ",0.75))" : "linear-gradient(135deg, rgba(" + T("210,190,235") + ",0.06), rgba(" + T("160,135,195") + ",0.02))",
+          boxShadow: pressed ? "0 0 32px rgba(" + T("210,190,240") + ",0.75), 0 0 10px rgba(" + T("225,210,245") + ",0.85)" : "0 0 16px rgba(" + T("190,165,225") + ",0.18), 0 0 2px rgba(" + T("190,165,225") + ",0.28)",
           transition: "box-shadow 0.12s ease, background 0.12s ease"
         }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: {
           position: "relative",
           clipPath: innerClip,
           margin: pressed ? 4 : 1.5,
-          background: "rgba(120,105,145,0.07)",
+          background: "rgba(" + T("120,105,145") + ",0.07)",
           height: `calc(100% - ${pressed ? 8 : 3}px)`,
           display: "flex",
           flexDirection: "column",
@@ -38971,6 +38982,7 @@ initRemote();
           HomeDashboardScreen,
           {
             userProfile,
+            world: userWorld,
             onNavigate: (cardId) => {
               switch (cardId) {
                 case "village": {
