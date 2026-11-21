@@ -4,6 +4,12 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>TELŌS</title>
+<link rel="apple-touch-icon" href="/_blob/80489da7382aa41a3d64a8414cb00729.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-title" content="TELŌS" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black" />
+<meta name="theme-color" content="#06060F" />
 <style>html,body{margin:0;padding:0;background:#06060F;}</style>
 <style id="telos-local-fonts">/* cinzel-latin-ext-wght-normal */
 @font-face {
@@ -39173,14 +39179,14 @@ initRemote();
             }
           }
         ),
-        screen === "my-telos" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", borderTop: `1px solid ${navAccent.color}22`, background: "rgba(6,6,15,0.96)", backdropFilter: "blur(24px)", paddingBottom: "max(10px, env(safe-area-inset-bottom))", paddingTop: 6, flexShrink: 0 }, children: NAV.map((n) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => {
+        screen === "my-telos" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", paddingBottom: "env(safe-area-inset-bottom, 0px)", borderTop: `1px solid ${navAccent.color}22`, background: "rgba(6,6,15,0.96)", backdropFilter: "blur(24px)", paddingBottom: "max(10px, env(safe-area-inset-bottom))", paddingTop: 6, flexShrink: 0 }, children: NAV.map((n) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => {
           setActiveTab(n.id);
           setScreen("main");
         }, style: { flex: 1, padding: "8px 0 6px", border: "none", background: "transparent", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, cursor: "pointer", position: "relative", WebkitTapHighlightColor: "transparent" }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(NavIcon, { id: n.id, active: false, color: navAccent.color }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 7.5, letterSpacing: 1.2, fontFamily: "Cinzel, serif", color: "rgba(200,190,170,0.22)", lineHeight: 1 }, children: n.label.toUpperCase() })
         ] }, n.id)) }),
-        screen === "home" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", borderTop: `1px solid ${navAccent.color}22`, background: "rgba(6,6,15,0.96)", backdropFilter: "blur(24px)", paddingBottom: "max(10px, env(safe-area-inset-bottom))", paddingTop: 6, flexShrink: 0 }, children: NAV.map((n) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => {
+        screen === "home" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", paddingBottom: "env(safe-area-inset-bottom, 0px)", borderTop: `1px solid ${navAccent.color}22`, background: "rgba(6,6,15,0.96)", backdropFilter: "blur(24px)", paddingBottom: "max(10px, env(safe-area-inset-bottom))", paddingTop: 6, flexShrink: 0 }, children: NAV.map((n) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => {
           setActiveTab(n.id);
           setScreen("main");
         }, style: { flex: 1, padding: "8px 0 6px", border: "none", background: "transparent", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, cursor: "pointer", position: "relative", WebkitTapHighlightColor: "transparent" }, children: [
@@ -39236,7 +39242,7 @@ initRemote();
             activeTab === "home" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(HomeBuilderScreen, {}),
             activeTab === "worlds" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(WorldsScreen, { onConvene: (p) => setAssemblageParticipants(p), onViewTownSquare: (w) => setViewingTownSquareWorld(w), avatarSpecies: userProfile?.species })
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", borderTop: `1px solid ${navAccent.color}22`, background: "rgba(6,6,15,0.96)", backdropFilter: "blur(24px)", paddingBottom: "max(10px, env(safe-area-inset-bottom))", paddingTop: 2, flexShrink: 0 }, children: NAV.map((n) => {
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", paddingBottom: "env(safe-area-inset-bottom, 0px)", borderTop: `1px solid ${navAccent.color}22`, background: "rgba(6,6,15,0.96)", backdropFilter: "blur(24px)", paddingBottom: "max(10px, env(safe-area-inset-bottom))", paddingTop: 2, flexShrink: 0 }, children: NAV.map((n) => {
             const isActive = activeTab === n.id;
             return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => setActiveTab(n.id), style: { flex: 1, padding: "8px 0 6px", border: "none", background: "transparent", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, cursor: "pointer", position: "relative", WebkitTapHighlightColor: "transparent" }, children: [
               isActive && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { position: "absolute", top: 4, left: "50%", transform: "translateX(-50%)", width: 36, height: 36, borderRadius: "50%", background: `${navAccent.color}14`, pointerEvents: "none" } }),
