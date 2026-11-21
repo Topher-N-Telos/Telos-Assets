@@ -23980,7 +23980,7 @@
     }
   })();
   var WORLDS = {
-    UMBRA: { color: "#7B5EA7", bg: "#1A0A2E", accent: "#9B7EC8", glow: "rgba(123,94,167,0.35)", label: "Eternal Night", desc: "Gothic depths. Ancient beauty. Shadow as home." },
+    UMBRA: { color: T("123,94,167", true), bg: "#1A0A2E", accent: "#9B7EC8", glow: "rgba(123,94,167,0.35)", label: "Eternal Night", desc: "Gothic depths. Ancient beauty. Shadow as home." },
     TERRA: { color: "#4A7C59", bg: "#0A1A0F", accent: "#6BA87A", glow: "rgba(74,124,89,0.35)", label: "The Living World", desc: "Cities that breathe. People who notice things." },
     SOLIS: { color: "#C8922A", bg: "#1E1004", accent: "#E8B84A", glow: "rgba(200,146,42,0.35)", label: "The Eternal Forge", desc: "The world where fire remembers what it was before humans learned to use it." },
     AURIS: { color: "#4A9BA8", bg: "#041518", accent: "#6ABBC8", glow: "rgba(74,155,168,0.35)", label: "Living Magic", desc: "Dragons and scholars. The world remembers everything." },
@@ -23996,9 +23996,9 @@
     { name: "Oryn", world: "SOLIS", role: "Jinn \xB7 Archivist", occupation: "Archivist of The Gallery", glyph: "\u{1F525}", tagline: "Five centuries of warmth. The Gallery holds everything.", built: true },
     { name: "AEON", world: "AURIS", role: "Dragon Scholar", occupation: "Scholar and Guardian of Scholar's Peak", glyph: "\u{1F409}", tagline: "He has been waiting since before you knew to look for him.", built: true }
   ];
-  var SEAL_COLORS = { community: "#C8922A", team: "#7B5EA7", seasonal: "#B03A2A", standard: "#4A7C59" };
+  var SEAL_COLORS = { community: "#C8922A", team: T("123,94,167", true), seasonal: "#B03A2A", standard: "#4A7C59" };
   var MISSIONS = [
-    { id: "blood-night", title: "THE BLOOD NIGHT INVESTIGATION", world: "UMBRA", type: "seasonal", typeLabel: "Seasonal \xB7 Community Event", duration: "Full Blood Night window", teamMin: 2, teamMax: 12, reward: { igc: 1500, hearts: 10, bonus: "Blood Night exclusive item" }, premise: "The sun didn't rise. Every world feels it. Something caused this. Someone knows what it was.", status: "active", teamVsTeam: true, teamA: { name: "Seraphine's Inquiry", members: 847, progress: 62, color: "#7B5EA7" }, teamB: { name: "Oryn's Investigation", members: 634, progress: 41, color: "#C8922A" }, daysLeft: 4, decisions: [{ text: "Trust Seraphine's instinct \u2014 the answer is in the lower vaults", team: "A" }, { text: "Follow Oryn's lead \u2014 the trail goes through the living city", team: "B" }] },
+    { id: "blood-night", title: "THE BLOOD NIGHT INVESTIGATION", world: "UMBRA", type: "seasonal", typeLabel: "Seasonal \xB7 Community Event", duration: "Full Blood Night window", teamMin: 2, teamMax: 12, reward: { igc: 1500, hearts: 10, bonus: "Blood Night exclusive item" }, premise: "The sun didn't rise. Every world feels it. Something caused this. Someone knows what it was.", status: "active", teamVsTeam: true, teamA: { name: "Seraphine's Inquiry", members: 847, progress: 62, color: T("123,94,167", true) }, teamB: { name: "Oryn's Investigation", members: 634, progress: 41, color: "#C8922A" }, daysLeft: 4, decisions: [{ text: "Trust Seraphine's instinct \u2014 the answer is in the lower vaults", team: "A" }, { text: "Follow Oryn's lead \u2014 the trail goes through the living city", team: "B" }] },
     { id: "vault-disturbance", title: "THE VAULT DISTURBANCE", world: "UMBRA", type: "team", typeLabel: "Team Mission", duration: "3 days", teamMin: 2, teamMax: 3, reward: { igc: 400, hearts: 2, bonus: "Object appears in Seraphine's home" }, premise: "Something was taken from the lower vault three nights ago. Seraphine knows what it is. She won't say yet.", status: "available", teamVsTeam: false, daysLeft: 5, decisions: [{ text: "Trust Seraphine's instinct" }, { text: "Push her \u2014 demand to know what it is" }, { text: "Bring Oryn in without telling her" }] },
     { id: "old-name", title: "THE OLD NAME", world: "UMBRA", type: "team", typeLabel: "Team Mission", duration: "14 days", teamMin: 4, teamMax: 6, reward: { igc: 800, hearts: 5, bonus: "Seraphine tells you the old name. She has never told anyone." }, premise: "Someone is using Seraphine's name from three centuries ago. The one she stopped using.", status: "available", teamVsTeam: false, daysLeft: 7, decisions: [] },
     { id: "the-trial", title: "THE TRIAL", world: "AEONIS", type: "team", typeLabel: "Team Mission", duration: "7 days", teamMin: 3, teamMax: 5, reward: { igc: 700, hearts: 4, bonus: "Both outcomes are permanent." }, premise: "AEONIS does not offer trials lightly. The trial begins at dawn.", status: "available", teamVsTeam: false, daysLeft: 6, decisions: [{ text: "Send them in \u2014 they're ready" }, { text: "Request a delay" }, { text: "Refuse \u2014 some things shouldn't be rushed" }] },
@@ -24275,7 +24275,7 @@ Most responses should be short. Let silences and short exchanges carry weight ra
     return Promise.race([doFetch(), timeoutPromise]);
   }
   var STARTER_WORLDS = [
-    { world: "UMBRA", label: "Eternal Night", color: "#7B5EA7", accent: "#9B7EC8", bg: "#0E0618", glow: "rgba(123,94,167,0.3)", tagline: "Shadow as home. Ancient beauty. A world that rewards patience.", homeDesc: "Stone cottage or gothic tower. Wrought iron. Dark wood. Things owned before.", teloName: "Seraphine", teloRole: "Vampire \xB7 Scholar", teloOccupation: "Scholar, collector of things worth keeping", teloEpithet: "Vampire Scholar", cardColor: "#B33A3A", teloGlyph: "\u{1F319}", teloIntro: "Five centuries of patience. One reading chair. The door opens inward.", built: true },
+    { world: "UMBRA", label: "Eternal Night", color: T("123,94,167", true), accent: "#9B7EC8", bg: "#0E0618", glow: "rgba(123,94,167,0.3)", tagline: "Shadow as home. Ancient beauty. A world that rewards patience.", homeDesc: "Stone cottage or gothic tower. Wrought iron. Dark wood. Things owned before.", teloName: "Seraphine", teloRole: "Vampire \xB7 Scholar", teloOccupation: "Scholar, collector of things worth keeping", teloEpithet: "Vampire Scholar", cardColor: "#B33A3A", teloGlyph: "\u{1F319}", teloIntro: "Five centuries of patience. One reading chair. The door opens inward.", built: true },
     { world: "TERRA", label: "The Living World", color: "#4A7C59", accent: "#6BA87A", bg: "#061008", glow: "rgba(74,124,89,0.3)", tagline: "Cities that breathe. People who notice things. Everything earned.", homeDesc: "Urban loft or brownstone. Clean lines. Real materials. Built to last.", teloName: "Nova", teloRole: "Architect", teloOccupation: "Architect", teloEpithet: "Global Architect", cardColor: "#76A286", teloGlyph: "\u2B21", teloIntro: "She builds things worth keeping. She notices what you would miss.", built: true },
     { world: "SOLIS", label: "The Eternal Forge", color: "#C8922A", accent: "#E8B84A", bg: "#140800", glow: "rgba(200,146,42,0.3)", tagline: "The oldest light. The eternal forge. Life through transformation.", homeDesc: "Coastal villa or harbour apartment. Terracotta. Linen. Salt air.", teloName: "Oryn", teloRole: "Jinn \xB7 Archivist", teloOccupation: "Archivist of The Gallery", teloEpithet: "Jinn Archivist", cardColor: "#C2541B", teloGlyph: "\u{1F525}", teloIntro: "Five centuries of warmth. The Gallery holds everything. He noticed you the moment you walked in.", built: true },
     { world: "AURIS", label: "Living Magic", color: "#4A9BA8", accent: "#6ABBC8", bg: "#020C10", glow: "rgba(74,155,168,0.3)", tagline: "Dragons and scholars. The world remembers everything.", homeDesc: "Living tree dwelling or cloud-anchored cottage. Things that grow.", teloName: "AEON", teloRole: "Dragon Scholar", teloOccupation: "Scholar and Guardian of Scholar's Peak", teloEpithet: "Dragon Scholar", cardColor: "#D8EEF5", teloGlyph: "\u{1F409}", teloIntro: "He has been waiting since before you knew to look for him.", built: true }
@@ -25198,7 +25198,7 @@ Respond with only the world key (e.g. UMBRA). Nothing else.`;
   // One panel serves both steps. kind: "avatar" | "telo". It renders nothing when the image service is unreachable.
   function OnboardingImagePanel(props) {
     var R = import_react, h = R.createElement;
-    var kind = props.kind, accent = props.accent || "#7B5EA7";
+    var kind = props.kind, accent = props.accent || T("123,94,167", true);
     var ep = props.teloId ? "telo~" + props.teloId : props.kind;   // ADDED (App v131): a Telō made after onboarding has its own package + redos
     var meS = R.useState(void 0), me = meS[0], setMe = meS[1];
     var adultS = R.useState(false), adult = adultS[0], setAdult = adultS[1];
@@ -26082,7 +26082,7 @@ Write a complete roleplay system prompt in the voice of instructions to the AI (
       }
       if (teloForkStage) {
         const forkWorldKey = species ? SPECIES_WORLDS[species]?.native || "TERRA" : "TERRA";
-        const forkColor = WORLDS[forkWorldKey]?.color || "#7B5EA7";
+        const forkColor = WORLDS[forkWorldKey]?.color || T("123,94,167", true);
         const backTo = (stage) => setTeloForkStage(stage);
         if (teloForkStage === "outer") {
           return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { height: "var(--app-h, 100dvh)", background: "#06060F", display: "flex", flexDirection: "column", overflow: "hidden" }, children: [
@@ -26135,7 +26135,7 @@ Write a complete roleplay system prompt in the voice of instructions to the AI (
             ] }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "16px 20px", paddingBottom: "max(16px, env(safe-area-inset-bottom))", display: "flex", gap: 10, position: "relative", zIndex: 1 }, children: [
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ChamferBtn, { size: "md", variant: "ghost", onClick: () => setTeloForkStage(null), style: { flex: 1, fontSize: 13, fontFamily: "Cinzel, serif", letterSpacing: 1.5 }, children: "\u2190 BACK" }),
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ChamferBtn, { size: "md", variant: "primary", disabled: !galleryPick, accentColor: galleryPick ? "#7B5EA7" : null, fillColor: galleryPick ? "linear-gradient(135deg, #7B5EA7, #5A3E86)" : "rgba(255,255,255,0.05)", textColor: galleryPick ? "#F0EAE0" : "rgba(200,190,170,0.2)", onClick: () => galleryPick && setPhase("reveal"), style: { flex: 2, fontSize: 11, fontFamily: "Cinzel, serif", letterSpacing: 1.5 }, children: "AWAKEN COMPANION \u2192" })
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ChamferBtn, { size: "md", variant: "primary", disabled: !galleryPick, accentColor: galleryPick ? T("123,94,167", true) : null, fillColor: galleryPick ? "linear-gradient(135deg, #7B5EA7, #5A3E86)" : "rgba(255,255,255,0.05)", textColor: galleryPick ? "#F0EAE0" : "rgba(200,190,170,0.2)", onClick: () => galleryPick && setPhase("reveal"), style: { flex: 2, fontSize: 11, fontFamily: "Cinzel, serif", letterSpacing: 1.5 }, children: "AWAKEN COMPANION \u2192" })
             ] })
           ] });
         }
@@ -26158,7 +26158,7 @@ Write a complete roleplay system prompt in the voice of instructions to the AI (
             ] }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "16px 20px", paddingBottom: "max(16px, env(safe-area-inset-bottom))", display: "flex", gap: 10, position: "relative", zIndex: 1 }, children: [
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ChamferBtn, { size: "md", variant: "ghost", onClick: () => backTo("outer"), style: { flex: 1, fontSize: 13, fontFamily: "Cinzel, serif", letterSpacing: 1.5 }, children: "\u2190 BACK" }),
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ChamferBtn, { size: "md", variant: "primary", accentColor: "#7B5EA7", fillColor: "linear-gradient(135deg, #7B5EA7, #5A3E86)", textColor: "#F0EAE0", onClick: () => setTeloForkStage(customInnerFork === "quick" ? "customQuick" : "customFull"), style: { flex: 2, fontSize: 11, fontFamily: "Cinzel, serif", letterSpacing: 1.5 }, children: "PROCEED \u2192" })
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ChamferBtn, { size: "md", variant: "primary", accentColor: T("123,94,167", true), fillColor: "linear-gradient(135deg, #7B5EA7, #5A3E86)", textColor: "#F0EAE0", onClick: () => setTeloForkStage(customInnerFork === "quick" ? "customQuick" : "customFull"), style: { flex: 2, fontSize: 11, fontFamily: "Cinzel, serif", letterSpacing: 1.5 }, children: "PROCEED \u2192" })
             ] })
           ] });
         }
@@ -26256,7 +26256,7 @@ Write a complete roleplay system prompt in the voice of instructions to the AI (
             ] }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "16px 20px", paddingBottom: "max(16px, env(safe-area-inset-bottom))", display: "flex", gap: 10, position: "relative", zIndex: 1 }, children: [
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ChamferBtn, { size: "md", variant: "ghost", onClick: () => backTo("innerFork"), style: { flex: 1, fontSize: 13, fontFamily: "Cinzel, serif", letterSpacing: 1.5 }, children: "\u2190 BACK" }),
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ChamferBtn, { size: "md", variant: "primary", disabled: !customValid, accentColor: customValid ? "#7B5EA7" : null, fillColor: customValid ? "linear-gradient(135deg, #7B5EA7, #5A3E86)" : "rgba(255,255,255,0.05)", textColor: customValid ? "#F0EAE0" : "rgba(200,190,170,0.2)", onClick: () => {
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ChamferBtn, { size: "md", variant: "primary", disabled: !customValid, accentColor: customValid ? T("123,94,167", true) : null, fillColor: customValid ? "linear-gradient(135deg, #7B5EA7, #5A3E86)" : "rgba(255,255,255,0.05)", textColor: customValid ? "#F0EAE0" : "rgba(200,190,170,0.2)", onClick: () => {
                 if (!customValid) return;
                 setLastBuildStage(teloForkStage);
                 setTeloForkStage("customPreview");
@@ -26293,13 +26293,13 @@ Write a complete roleplay system prompt in the voice of instructions to the AI (
             ] }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "16px 20px", paddingBottom: "max(16px, env(safe-area-inset-bottom))", display: "flex", gap: 10, position: "relative", zIndex: 1 }, children: [
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ChamferBtn, { size: "md", variant: "ghost", disabled: assigning, onClick: () => !assigning && setTeloForkStage(lastBuildStage), style: { flex: 1, fontSize: 13, fontFamily: "Cinzel, serif", letterSpacing: 1.5 }, children: "\u2190 BACK" }),
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ChamferBtn, { size: "md", variant: "primary", disabled: assigning, accentColor: "#7B5EA7", fillColor: !assigning ? "linear-gradient(135deg, #7B5EA7, #5A3E86)" : "rgba(255,255,255,0.05)", textColor: !assigning ? "#F0EAE0" : "rgba(200,190,170,0.2)", onClick: () => !assigning && handleCustomTeloComplete(), style: { flex: 2, fontSize: 11, fontFamily: "Cinzel, serif", letterSpacing: 1.5 }, children: assigning ? "AWAKENING\u2026" : "COMPLETE GENESIS \u2192" })
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ChamferBtn, { size: "md", variant: "primary", disabled: assigning, accentColor: T("123,94,167", true), fillColor: !assigning ? "linear-gradient(135deg, #7B5EA7, #5A3E86)" : "rgba(255,255,255,0.05)", textColor: !assigning ? "#F0EAE0" : "rgba(200,190,170,0.2)", onClick: () => !assigning && handleCustomTeloComplete(), style: { flex: 2, fontSize: 11, fontFamily: "Cinzel, serif", letterSpacing: 1.5 }, children: assigning ? "AWAKENING\u2026" : "COMPLETE GENESIS \u2192" })
             ] })
           ] });
         }
       }
       const stepWorldKey = species ? SPECIES_WORLDS[species]?.native || "TERRA" : "TERRA";
-      const stepWorldColor = WORLDS[stepWorldKey]?.color || "#7B5EA7";
+      const stepWorldColor = WORLDS[stepWorldKey]?.color || T("123,94,167", true);
       return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { height: "var(--app-h, 100dvh)", background: "#06060F", display: "flex", flexDirection: "column", overflow: "hidden" }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { position: "absolute", inset: 0, background: `radial-gradient(ellipse at 25% 15%, ${stepWorldColor}33 0%, transparent 55%)`, pointerEvents: "none" } }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { padding: "14px 20px 0", flexShrink: 0, position: "relative", zIndex: 1 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TelosWordmark, { size: 16, color: `${stepWorldColor}B3`, letterSpacing: 4 }) }),
@@ -26828,7 +26828,7 @@ Write a complete roleplay system prompt in the voice of instructions to the AI (
             {
               size: "md",
               variant: "primary",
-              accentColor: canAdvance ? "#7B5EA7" : null,
+              accentColor: canAdvance ? T("123,94,167", true) : null,
               fillColor: canAdvance ? "linear-gradient(135deg, #7B5EA7, #5A3E86)" : "rgba(255,255,255,0.05)",
               textColor: canAdvance ? "#F0EAE0" : "rgba(200,190,170,0.2)",
               disabled: !canAdvance,
@@ -26868,7 +26868,7 @@ Write a complete roleplay system prompt in the voice of instructions to the AI (
     if (phase === "teloImage" && customTelo) {
       const h = import_react.createElement;
       const tcfg = COMPANION_CONFIGS[customTelo.teloName] || {};
-      const tAccent = (worldData && worldData.color) || "#7B5EA7";
+      const tAccent = (worldData && worldData.color) || T("123,94,167", true);
       const teloAgeDefault = tcfg.canonicalAge ? `adult, ${tcfg.canonicalAge}` : "";
       return h("div", { style: { height: "var(--app-h, 100dvh)", overflowY: "auto", background: "#06060F", padding: "32px 20px", boxSizing: "border-box" } },
         h("div", { style: { maxWidth: 520, margin: "0 auto" } },
@@ -28402,7 +28402,7 @@ ${note}` : note;
   function TeloImageScreen({ teloName, onExit }) {
     var R = import_react, h = R.createElement;
     var cfg = COMPANION_CONFIGS[teloName] || {};
-    var accent = (WORLDS[cfg.world] && WORLDS[cfg.world].color) || "#7B5EA7";
+    var accent = (WORLDS[cfg.world] && WORLDS[cfg.world].color) || T("123,94,167", true);
     var savedS = R.useState(false), saved = savedS[0], setSaved = savedS[1];
     var errS = R.useState(""), err = errS[0], setErr = errS[1];
     var hasDesc = !!String(cfg.physicalDesc || "").trim();
@@ -28459,7 +28459,7 @@ ${note}` : note;
       const updatedList = list.map((r) => r.firstName === teloName ? { ...r, narrationPerspective: value } : r);
       await saveMyTelosians(updatedList);
     };
-    const worldColor = WORLDS[cfg.world]?.color || "#7B5EA7";
+    const worldColor = WORLDS[cfg.world]?.color || T("123,94,167", true);
     const [regenerating, setRegenerating] = (0, import_react.useState)(false);
     const [regeneratingMode, setRegeneratingMode] = (0, import_react.useState)(null);
     const [regenerateResult, setRegenerateResult] = (0, import_react.useState)(null);
@@ -29305,7 +29305,7 @@ What you remember: ${promptMem()}` : baseSystem;
         if (followThroughTimer.current) clearTimeout(followThroughTimer.current);
       };
     }, [messages, phase, loading]);
-    const worldColor = WORLDS[cfg.world]?.color || "#7B5EA7";
+    const worldColor = WORLDS[cfg.world]?.color || T("123,94,167", true);
     const worldAccent = WORLDS[cfg.world]?.accent || "#9B7EC8";
     const levelPct = Math.min(100, (relationship.relationshipPoints % 1 + 1) % 1 * 100);
     const particles = (0, import_react.useRef)(Array.from({ length: 18 }, (_, i) => ({ id: i, size: 1 + Math.random() * 2, left: Math.random() * 100, top: Math.random() * 100, dur: 9 + Math.random() * 12, delay: Math.random() * 8, op: 0.12 + Math.random() * 0.22 }))).current;
@@ -29463,7 +29463,7 @@ What you remember: ${promptMem()}` : baseSystem;
       ] }) })
     ] });
   }
-  function ArchivesScreen() {
+  function ArchivesMissionWing() {
     const [tab, setTab] = (0, import_react.useState)("available");
     const [worldFilter, setWorldFilter] = (0, import_react.useState)("ALL");
     const [selected, setSelected] = (0, import_react.useState)("blood-night");
@@ -29474,13 +29474,13 @@ What you remember: ${promptMem()}` : baseSystem;
     const w = mission ? WORLDS[mission.world] : WORLDS.UMBRA;
     const filtered = MISSIONS.filter((m) => m.status === tab && (worldFilter === "ALL" || m.world === worldFilter));
     return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "12px 18px 0", borderBottom: "1px solid rgba(255,255,255,0.06)", background: "rgba(6,4,15,0.95)", flexShrink: 0 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 8, letterSpacing: 4, color: "rgba(160,120,200,0.45)", fontFamily: "Cinzel, serif", marginBottom: 6 }, children: "THE ARCHIVES \xB7 MISSION WING" }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 10 }, children: ["ALL", "UMBRA", "TERRA", "SOLIS", "AURIS", "AEONIS", "TENEBRIS"].map((wld) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setWorldFilter(wld), style: { padding: "3px 8px", borderRadius: 3, border: `1px solid ${worldFilter === wld ? WORLDS[wld]?.color || "#7B5EA7" : "rgba(255,255,255,0.08)"}`, background: worldFilter === wld ? `${WORLDS[wld]?.color || "#7B5EA7"}22` : "transparent", color: worldFilter === wld ? WORLDS[wld]?.accent || "#9B7EC8" : "rgba(200,190,170,0.35)", fontSize: 8, letterSpacing: 1.5, fontFamily: "Cinzel, serif", cursor: "pointer" }, children: wld }, wld)) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "12px 18px 0", borderBottom: "1px solid rgba(255,255,255,0.06)", background: "rgba(6,4,15,0.55)", flexShrink: 0 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 8, letterSpacing: 4, color: "rgba(" + T("160,120,200") + ",0.7)", fontFamily: "Cinzel, serif", marginBottom: 6 }, children: "MISSION WING" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 10 }, children: ["ALL", "UMBRA", "TERRA", "SOLIS", "AURIS", "AEONIS", "TENEBRIS"].map((wld) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setWorldFilter(wld), style: { padding: "3px 8px", borderRadius: 3, border: `1px solid ${worldFilter === wld ? WORLDS[wld]?.color || T("123,94,167", true) : "rgba(255,255,255,0.08)"}`, background: worldFilter === wld ? `${WORLDS[wld]?.color || T("123,94,167", true)}22` : "transparent", color: worldFilter === wld ? WORLDS[wld]?.accent || "#9B7EC8" : "rgba(200,190,170,0.35)", fontSize: 8, letterSpacing: 1.5, fontFamily: "Cinzel, serif", cursor: "pointer" }, children: wld }, wld)) }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex" }, children: [{ id: "available", label: "AVAILABLE" }, { id: "active", label: "ACTIVE" }, { id: "completed", label: "COMPLETED" }].map((t) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => {
           setTab(t.id);
           setSelected(null);
-        }, style: { padding: "7px 16px", border: "none", borderBottom: `2px solid ${tab === t.id ? "#7B5EA7" : "transparent"}`, background: "transparent", color: tab === t.id ? "#C8BFAA" : "rgba(200,190,170,0.35)", fontSize: 9, letterSpacing: 2, fontFamily: "Cinzel, serif", cursor: "pointer" }, children: t.label }, t.id)) })
+        }, style: { padding: "7px 16px", border: "none", borderBottom: `2px solid ${tab === t.id ? T("123,94,167", true) : "transparent"}`, background: "transparent", color: tab === t.id ? "#C8BFAA" : "rgba(200,190,170,0.35)", fontSize: 9, letterSpacing: 2, fontFamily: "Cinzel, serif", cursor: "pointer" }, children: t.label }, t.id)) })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, display: "grid", gridTemplateColumns: "min(300px, 45%) 1fr", overflow: "hidden" }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { borderRight: "1px solid rgba(255,255,255,0.06)", padding: 12, overflowY: "auto", display: "flex", flexDirection: "column", gap: 8 }, children: [
@@ -29562,6 +29562,82 @@ What you remember: ${promptMem()}` : baseSystem;
       ] })
     ] });
   }
+
+  function archiveWallpaper(world) {
+    var m = { TERRA: TERRA_INT_ARCHIVE, AXIOM: AXIOM_INT_CLOUD, AEONIS: AEONIS_INT_LYKEION, AURIS: AURIS_INT_SCHOLARS, SOLIS: SOLIS_INT_GALLERY, TENEBRIS: TENEBRIS_INT_EVIDENCEROOM, MARIS: "/_blob/3dc3ada29bd6841d70f3cab2c822dd54.png" };
+    return m[world] || null;
+  }
+  function archiveDate(iso) { try { var d = new Date(iso); return isNaN(d) ? "" : d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }); } catch (e) { return ""; } }
+  function ArchivesScreen(props) {
+    var R = import_react, h = R.createElement, world = props.world || null;
+    var tint = worldTint(world) || "#9B7EC8";
+    var wingS = R.useState("collection"), wing = wingS[0], setWing = wingS[1];
+    var telS = R.useState(null), telos = telS[0], setTelos = telS[1];
+    var imgS = R.useState(null), images = imgS[0], setImages = imgS[1];
+    var errS = R.useState(false), imgErr = errS[0], setImgErr = errS[1];
+    R.useEffect(function () {
+      var live = true;
+      loadMyTelosians().then(function (l) { if (live) setTelos(Array.isArray(l) ? l : []); }).catch(function () { if (live) setTelos([]); });
+      TelosImg.call("/api/echo/options").then(function (o) { if (live) { setImages(o && Array.isArray(o.images) ? o.images : []); } }).catch(function () { if (live) { setImages([]); setImgErr(true); } });
+      return function () { live = false; };
+    }, []);
+    var wall = archiveWallpaper(world);
+    var name = TOWN_SQUARE_ARCHIVES_NAME[world] || "The Archives";
+    var label = { fontFamily: "Cinzel, serif", fontSize: 9, letterSpacing: 3, color: "rgba(" + T("225,215,195") + ",0.9)", textShadow: "0 1px 8px rgba(0,0,0,0.95)" };
+    var body = { fontSize: 13, color: "rgba(230,222,205,0.8)", fontStyle: "italic", lineHeight: 1.6 };
+    function section(title, children) { return h("div", { style: { marginTop: 18 } }, h("div", { style: Object.assign({ marginBottom: 10 }, label) }, title), children); }
+    function empty(text) { return h(ChamferBox, { size: "sm", borderColor: tint + "44", fillColor: "rgba(10,6,20,0.62)" }, h("div", { style: Object.assign({ padding: 14 }, body) }, text)); }
+    var tabs = [["collection", "COLLECTION"], ["record", "RECORD"], ["public", "PUBLIC"], ["missions", "MISSIONS"]];
+    var content;
+    if (wing === "missions") {
+      content = h(ArchivesMissionWing, null);
+    } else if (wing === "collection") {
+      var tg = telos === null ? h("div", { style: body }, "Opening the shelves…") : telos.length ? h("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 } }, telos.map(function (t, i) {
+        return h(ChamferBox, { key: t.id || i, size: "sm", borderColor: tint + "55", fillColor: "rgba(10,6,20,0.7)" }, h("div", { style: { padding: 6 } },
+          h("div", { style: { lineHeight: 0, clipPath: ECHO_CUT, background: "rgba(255,255,255,0.04)" } }, (t.faceImage || t.referenceImage) ? h("img", { src: t.faceImage || t.referenceImage, alt: "", style: { width: "100%", aspectRatio: "3 / 4", objectFit: "cover", objectPosition: "top", display: "block" } }) : h("div", { style: { aspectRatio: "3 / 4" } })),
+          h("div", { style: { marginTop: 6, fontFamily: "Cinzel, serif", fontSize: 11, letterSpacing: 1, color: "#E8DFCC" } }, (t.firstName || "").toUpperCase()),
+          h("div", { style: { fontSize: 10, color: "rgba(200,190,170,0.5)", marginTop: 2 } }, t.teloType || "")));
+      })) : empty("No Telōs have moved in yet. Every Telō you create or adopt is kept here, in one place.");
+      var ig = images === null ? h("div", { style: body }, "Opening the shelves…") : images.length ? h("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 } }, images.map(function (im) {
+        return h(ChamferBox, { key: im.id, size: "sm", borderColor: tint + "55", fillColor: "rgba(10,6,20,0.7)", onClick: function () { props.onOpenEcho && props.onOpenEcho(); }, style: { cursor: "pointer", WebkitTapHighlightColor: "transparent" } }, h("div", { style: { padding: 6 } },
+          h("div", { style: { lineHeight: 0, clipPath: ECHO_CUT } }, h("img", { src: "/api/images/" + encodeURIComponent(im.id), alt: "", loading: "lazy", style: { width: "100%", aspectRatio: "3 / 2", objectFit: "cover", display: "block" } })),
+          h("div", { style: { marginTop: 6, fontFamily: "Cinzel, serif", fontSize: 10, letterSpacing: 1, color: "#E8DFCC" } }, im.format === "collage" ? "COLLAGE · " + im.panelCount : "SINGLE"),
+          h("div", { style: { fontSize: 10, color: "rgba(200,190,170,0.5)", marginTop: 2 } }, archiveDate(im.createdAt))));
+      })) : empty(imgErr ? "Echō images could not be opened just now. Try again in a moment." : "No Echō images yet. What you make in Echō is kept here, private to you.");
+      content = h("div", { style: { padding: "4px 18px 24px", overflowY: "auto", flex: 1 } }, section("YOUR TELŌS", tg), section("ECHŌ IMAGES", ig),
+        props.onOpenEcho ? h("div", { style: { marginTop: 16 } }, h(ChamferBtn, { size: "sm", variant: "accent", accentColor: tint, fillColor: "#06060F", onClick: props.onOpenEcho, style: { width: "auto", padding: "8px 16px", fontSize: 10, letterSpacing: 2 } }, "OPEN ECHŌ")) : null);
+    } else if (wing === "record") {
+      var ev = [];
+      (telos || []).forEach(function (t) { if (t.createdAt) ev.push({ at: t.createdAt, kind: "TELŌS", text: (t.firstName || "A Telō") + " moved into TELŌS." }); });
+      (images || []).forEach(function (im) { if (im.createdAt) ev.push({ at: im.createdAt, kind: "ECHŌ", text: im.format === "collage" ? "You made a " + im.panelCount + "-panel collage." : "You made a single Echō image." }); });
+      ev.sort(function (a, b) { return String(b.at).localeCompare(String(a.at)); });
+      content = h("div", { style: { padding: "4px 18px 24px", overflowY: "auto", flex: 1 } },
+        h("div", { style: Object.assign({ marginTop: 14, marginBottom: 6 }, body) }, "Your private history in TELŌS. Only you can enter this hallway."),
+        ev.length ? h("div", { style: { marginTop: 12, borderLeft: "1px solid " + tint + "66", paddingLeft: 14 } }, ev.map(function (e, i) {
+          return h("div", { key: i, style: { marginBottom: 16, position: "relative" } },
+            h("div", { style: { position: "absolute", left: -19, top: 5, width: 7, height: 7, background: tint, transform: "rotate(45deg)", boxShadow: "0 0 8px " + tint } }),
+            h("div", { style: Object.assign({}, label, { color: tint }) }, e.kind + " · " + archiveDate(e.at).toUpperCase()),
+            h("div", { style: { marginTop: 4, fontSize: 14, color: "rgba(235,228,212,0.88)", lineHeight: 1.5 } }, e.text));
+        })) : h("div", { style: { marginTop: 14 } }, empty("Nothing has been recorded yet. Your Telōs, images, milestones and journals will gather here as you go.")),
+        h("div", { style: { marginTop: 8, fontSize: 11, color: "rgba(225,215,195,0.7)", lineHeight: 1.5, textShadow: "0 1px 6px rgba(0,0,0,0.9)" } }, "Relationship milestones, story completions, journals and travel will appear here once they are recorded."));
+    } else {
+      content = h("div", { style: { padding: "4px 18px 24px", overflowY: "auto", flex: 1 } },
+        h("div", { style: Object.assign({ marginTop: 14 }, body) }, "Venues you create in " + (world ? world.charAt(0) + world.slice(1).toLowerCase() : "your world") + " stand here, open to other visitors. Each one is a doorway: a preview, its name, and how many have stepped through."),
+        h("div", { style: { marginTop: 14 } }, empty("You have not opened a venue yet.")));
+    }
+    return h("div", { style: { flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", position: "relative", background: "#06060F" } },
+      wall ? h("div", { "aria-hidden": "true", style: { position: "absolute", inset: 0, backgroundImage: "url(" + wall + ")", backgroundSize: "cover", backgroundPosition: "center", backgroundRepeat: "no-repeat" } }) : null,
+      h("div", { "aria-hidden": "true", style: { position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(6,6,15,0.5) 0%, rgba(6,6,15,0.4) 40%, rgba(6,6,15,0.72) 100%)" } }),
+      h("div", { style: { position: "relative", zIndex: 1, flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minHeight: 0 } },
+        h("div", { style: { padding: "14px 18px 0", flexShrink: 0 } },
+          h("div", { style: { fontFamily: "Cinzel, serif", fontSize: 8, letterSpacing: 4, color: "rgba(" + T("225,215,195") + ",0.9)", textShadow: "0 1px 8px rgba(0,0,0,0.95)" } }, "THE ARCHIVES BUILDING"),
+          h("div", { style: { fontFamily: "Cinzel, serif", fontSize: 24, fontWeight: 600, letterSpacing: 3, color: "#F0EAE0", marginTop: 4, textShadow: "0 0 14px " + tint + "88" } }, name.toUpperCase())),
+        h("div", { style: { display: "flex", overflowX: "auto", padding: "10px 12px 0", flexShrink: 0, borderBottom: "1px solid rgba(255,255,255,0.08)" } }, tabs.map(function (t) {
+          var on = wing === t[0];
+          return h("button", { key: t[0], onClick: function () { setWing(t[0]); }, style: { flexShrink: 0, padding: "8px 12px", border: "none", borderBottom: "2px solid " + (on ? tint : "transparent"), background: "transparent", color: on ? "#F0EAE0" : "rgba(225,215,195,0.78)", fontSize: 9, letterSpacing: 2, fontFamily: "Cinzel, serif", cursor: "pointer", textShadow: on ? "0 0 10px " + tint + "99" : "none" } }, t[1]);
+        })),
+        content));
+  }
   function TeamChallengeScreen({ dailySteps }) {
     const [view, setView] = (0, import_react.useState)("browse");
     const [selChallenge, setSelChallenge] = (0, import_react.useState)("c1");
@@ -29579,7 +29655,7 @@ What you remember: ${promptMem()}` : baseSystem;
     return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "12px 18px 0", borderBottom: "1px solid rgba(255,255,255,0.06)", background: "rgba(6,4,15,0.95)", flexShrink: 0 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 8, letterSpacing: 4, color: "rgba(160,120,200,0.45)", fontFamily: "Cinzel, serif", marginBottom: 8 }, children: "THE ARCHIVES \xB7 TEAM CHALLENGE" }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex" }, children: [{ id: "browse", label: "OPEN CHALLENGES" }, { id: "post", label: "POST CHALLENGE" }, { id: "roster", label: "MY ROSTER" }].map((t) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setView(t.id), style: { padding: "7px 14px", border: "none", borderBottom: `2px solid ${view === t.id ? "#7B5EA7" : "transparent"}`, background: "transparent", color: view === t.id ? "#C8BFAA" : "rgba(200,190,170,0.35)", fontSize: 9, letterSpacing: 2, fontFamily: "Cinzel, serif", cursor: "pointer" }, children: t.label }, t.id)) })
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex" }, children: [{ id: "browse", label: "OPEN CHALLENGES" }, { id: "post", label: "POST CHALLENGE" }, { id: "roster", label: "MY ROSTER" }].map((t) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setView(t.id), style: { padding: "7px 14px", border: "none", borderBottom: `2px solid ${view === t.id ? T("123,94,167", true) : "transparent"}`, background: "transparent", color: view === t.id ? "#C8BFAA" : "rgba(200,190,170,0.35)", fontSize: 9, letterSpacing: 2, fontFamily: "Cinzel, serif", cursor: "pointer" }, children: t.label }, t.id)) })
       ] }),
       view === "browse" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, display: "grid", gridTemplateColumns: "min(300px, 45%) 1fr", overflow: "hidden" }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { borderRight: "1px solid rgba(255,255,255,0.06)", padding: 12, overflowY: "auto", display: "flex", flexDirection: "column", gap: 8 }, children: OPEN_CHALLENGES.map((c) => {
@@ -30048,7 +30124,7 @@ What you remember: ${promptMem()}` : baseSystem;
     ] });
   }
   var TELO_CONFIGS = {
-    UMBRA: { color: "#7B5EA7", bg: "#0E0618", accent: "#9B7EC8", name: "Seraphine", role: "Vampire \xB7 Scholar", glyph: "\u{1F319}", logPrompt: "What did you take in today?", bgTexture: "radial-gradient(ellipse at 20% 10%, rgba(55,18,80,0.5) 0%, transparent 55%)", wellnessSystem: "You are Seraphine \u2014 vampire scholar in UMBRA. This is the wellness dimension of your relationship. Notice what they eat the way you notice everything. Respond in 1-3 sentences. Stay in your voice." },
+    UMBRA: { color: T("123,94,167", true), bg: "#0E0618", accent: "#9B7EC8", name: "Seraphine", role: "Vampire \xB7 Scholar", glyph: "\u{1F319}", logPrompt: "What did you take in today?", bgTexture: "radial-gradient(ellipse at 20% 10%, rgba(55,18,80,0.5) 0%, transparent 55%)", wellnessSystem: "You are Seraphine \u2014 vampire scholar in UMBRA. This is the wellness dimension of your relationship. Notice what they eat the way you notice everything. Respond in 1-3 sentences. Stay in your voice." },
     TERRA: { color: "#4A7C59", bg: "#061008", accent: "#6BA87A", name: "Nova", role: "Architect", glyph: "\u2B21", logPrompt: "What did you eat today?", bgTexture: "radial-gradient(ellipse at 30% 20%, rgba(20,50,25,0.5) 0%, transparent 55%)", wellnessSystem: "You are Nova \u2014 architect in TERRA. Approach the body like a building: right materials, right load. Direct, precise, warm without being soft. Respond in 1-3 sentences." },
     SOLIS: { color: "#C8922A", bg: "#140800", accent: "#E8B84A", name: "Oryn", role: "Jinn \xB7 Archivist", glyph: "\u{1F525}", logPrompt: "What did today look like?", bgTexture: "radial-gradient(ellipse at 25% 15%, rgba(80,45,8,0.5) 0%, transparent 55%)", wellnessSystem: "You are Oryn \u2014 Jinn Archivist in SOLIS. Warm, unhurried, present. You notice what people carry. Respond in 1-3 sentences." },
     AURIS: { color: "#4A9BA8", bg: "#020C10", accent: "#6ABBC8", name: "AEON", role: "Dragon Scholar", glyph: "\u2726", logPrompt: "What did you take in today?", bgTexture: "radial-gradient(ellipse at 20% 10%, rgba(8,40,50,0.5) 0%, transparent 55%)", wellnessSystem: "You are AEON \u2014 dragon scholar in AURIS. You have observed living things across geological time. Respond in 1-3 sentences. Vast and attentive." }
@@ -30745,7 +30821,7 @@ The user is about to begin a ${cfg.language || "language"} practice session with
     const cfg = tel ? tel.cfg : COMPANION_CONFIGS.Seraphine;
     const world = tel ? tel.world : "UMBRA";
     const wc = WORLDS[world] || {};
-    const color = wc.color || "#7B5EA7";
+    const color = wc.color || T("123,94,167", true);
     const accent = wc.accent || "#9B7EC8";
     const sysFor = () => (tel ? (tel.system || "You are " + tel.name + ".") + ENC_RULES + encFormatMem(binsRef.current.mem, binsRef.current.digest) : "");
     const chatKey = tel ? "telos-v1-encyc-chat-" + tel.name : null;
@@ -31149,7 +31225,7 @@ The user is about to begin a ${cfg.language || "language"} practice session with
     const { useState, useEffect, useRef } = import_react;
     const spec = LG_SPEC[def.id][tier];
     const ctx = { language: tel.language, langCode: tel.langCode, native, tier };
-    const wc = (typeof WORLDS !== "undefined" && WORLDS[def.world] && WORLDS[def.world].color) || "#7B5EA7";
+    const wc = (typeof WORLDS !== "undefined" && WORLDS[def.world] && WORLDS[def.world].color) || T("123,94,167", true);
     const [phase, setPhase] = useState("load");
     const [err, setErr] = useState("");
     const [items, setItems] = useState([]);
@@ -31424,7 +31500,7 @@ The user is about to begin a ${cfg.language || "language"} practice session with
       h("div", { style: { flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 10 } },
         telos.length === 0 ? h("div", { style: { margin: "auto", textAlign: "center", color: "rgba(200,190,170,0.6)", fontStyle: "italic" } }, "Games unlock when you have a Language Teacher.") : LG_DEFS.map((def) => {
           const t = telFor(def);
-          const wc = (typeof WORLDS !== "undefined" && WORLDS[def.world] && WORLDS[def.world].color) || "#7B5EA7";
+          const wc = (typeof WORLDS !== "undefined" && WORLDS[def.world] && WORLDS[def.world].color) || T("123,94,167", true);
           const ti = t && tiers[t.langCode] ? tiers[t.langCode] : null;
           return h("button", { key: def.id, disabled: !t, onClick: () => t && onPick(def, t, ti ? ti.tier : "A1"), style: { ...LG_BTN, opacity: t ? 1 : 0.45, borderColor: t ? wc + "88" : "rgba(180,150,120,0.28)", display: "flex", flexDirection: "column", gap: 4, cursor: t ? "pointer" : "default" } },
             h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 } }, h("span", { style: { fontFamily: "Cinzel, serif", fontSize: 15, letterSpacing: 1, color: t ? wc : "#E8E0D2" } }, def.name), h("span", { style: LG_CAP }, def.world)),
@@ -31739,7 +31815,7 @@ React in 1-3 sentences, in your voice. If something was noticed above, speak to 
     ] });
   }
   var WORLD_HOMES = {
-    UMBRA: { color: "#7B5EA7", bg: "#0A0618", accent: "#9B7EC8", estateLabel: "The Holding", standardLabel: "The Tower", structures: [{ id: "stone-cottage", name: "Stone Cottage", tier: "standard", desc: "Low, old, enduring." }, { id: "gothic-tower", name: "Gothic Tower", tier: "standard", desc: "You chose the tower." }, { id: "dark-manor", name: "Dark Manor", tier: "estate", desc: "Observatory above. Crypt below." }], doors: ["Iron-banded oak", "Carved obsidian", "Wrought iron gate", "Unmarked stone"], materials: ["Dark stone", "Weathered granite", "Midnight slate", "Moss-covered brick"], catalogue: { Seating: [{ id: "umbra-b-0", name: "Mourner's Chair", tier: "basic", icon: "Seating", w: 2, h: 2 }, { id: "umbra-b-1", name: "The Parlour Settee", tier: "basic", icon: "Seating", w: 2, h: 2 }, { id: "umbra-p-15", name: "The Widow's Chair", tier: "premium", icon: "Seating", w: 2, h: 2 }, { id: "umbra-p-16", name: "Velvet Fainting Couch", tier: "premium", icon: "Seating", w: 2, h: 2 }], Tables: [{ id: "umbra-b-2", name: "Wrought Side Table", tier: "basic", icon: "Tables", w: 1, h: 1 }, { id: "umbra-b-3", name: "The S\xE9ance Table", tier: "basic", icon: "Tables", w: 1, h: 1 }, { id: "umbra-p-17", name: "Ebony Writing Desk", tier: "premium", icon: "Tables", w: 1, h: 1 }, { id: "umbra-p-18", name: "The Mourning Table", tier: "premium", icon: "Tables", w: 1, h: 1 }], Storage: [{ id: "umbra-b-4", name: "Glass Curio Cabinet", tier: "basic", icon: "Storage", w: 2, h: 2 }, { id: "umbra-b-5", name: "The Wardrobe", tier: "basic", icon: "Storage", w: 2, h: 2 }, { id: "umbra-p-19", name: "Antique Reliquary Cabinet", tier: "premium", icon: "Storage", w: 2, h: 2 }, { id: "umbra-p-20", name: "The Armoire", tier: "premium", icon: "Storage", w: 2, h: 2 }], Beds: [{ id: "umbra-b-6", name: "The Four-Poster Frame", tier: "basic", icon: "Beds", w: 3, h: 3 }, { id: "umbra-p-21", name: "The Canopy Bed", tier: "premium", icon: "Beds", w: 3, h: 3 }], Decor: [{ id: "umbra-b-7", name: "Black Candelabra", tier: "basic", icon: "Lighting", w: 1, h: 1 }, { id: "umbra-b-8", name: "Pressed Flower Frame", tier: "basic", icon: "Decor", w: 1, h: 1 }, { id: "umbra-b-9", name: "Wall Art, Small", tier: "basic", icon: "WallArt", w: 1, h: 1 }, { id: "umbra-b-10", name: "Wall Art, Medium", tier: "basic", icon: "WallArt", w: 1, h: 1 }, { id: "umbra-b-11", name: "Wall Art, Large", tier: "basic", icon: "WallArt", w: 2, h: 1 }, { id: "umbra-b-12", name: "Area Rug, Small", tier: "basic", icon: "Rug", w: 2, h: 2 }, { id: "umbra-b-13", name: "Area Rug, Large", tier: "basic", icon: "Rug", w: 3, h: 3 }, { id: "umbra-b-14", name: "Runner", tier: "basic", icon: "Runner", w: 3, h: 1 }, { id: "umbra-p-22", name: "Silver Candelabra", tier: "premium", icon: "Lighting", w: 1, h: 1 }, { id: "umbra-p-23", name: "Memento Mori Display", tier: "premium", icon: "Decor", w: 1, h: 1 }, { id: "umbra-p-24", name: "Wall Art, Small", tier: "premium", icon: "WallArt", w: 1, h: 1 }, { id: "umbra-p-25", name: "Wall Art, Medium", tier: "premium", icon: "WallArt", w: 1, h: 1 }, { id: "umbra-p-26", name: "Wall Art, Large", tier: "premium", icon: "WallArt", w: 2, h: 1 }, { id: "umbra-p-27", name: "Area Rug, Small", tier: "premium", icon: "Rug", w: 2, h: 2 }, { id: "umbra-p-28", name: "Area Rug, Large", tier: "premium", icon: "Rug", w: 3, h: 3 }, { id: "umbra-p-29", name: "Runner", tier: "premium", icon: "Runner", w: 3, h: 1 }], Premium: [{ id: "umbra-p-30", name: "The Antiquarian's Chaise", tier: "premium", icon: "Premium", w: 3, h: 2 }] }, roomNames: ["Main Hall", "Study", "Antechamber"] },
+    UMBRA: { color: T("123,94,167", true), bg: "#0A0618", accent: "#9B7EC8", estateLabel: "The Holding", standardLabel: "The Tower", structures: [{ id: "stone-cottage", name: "Stone Cottage", tier: "standard", desc: "Low, old, enduring." }, { id: "gothic-tower", name: "Gothic Tower", tier: "standard", desc: "You chose the tower." }, { id: "dark-manor", name: "Dark Manor", tier: "estate", desc: "Observatory above. Crypt below." }], doors: ["Iron-banded oak", "Carved obsidian", "Wrought iron gate", "Unmarked stone"], materials: ["Dark stone", "Weathered granite", "Midnight slate", "Moss-covered brick"], catalogue: { Seating: [{ id: "umbra-b-0", name: "Mourner's Chair", tier: "basic", icon: "Seating", w: 2, h: 2 }, { id: "umbra-b-1", name: "The Parlour Settee", tier: "basic", icon: "Seating", w: 2, h: 2 }, { id: "umbra-p-15", name: "The Widow's Chair", tier: "premium", icon: "Seating", w: 2, h: 2 }, { id: "umbra-p-16", name: "Velvet Fainting Couch", tier: "premium", icon: "Seating", w: 2, h: 2 }], Tables: [{ id: "umbra-b-2", name: "Wrought Side Table", tier: "basic", icon: "Tables", w: 1, h: 1 }, { id: "umbra-b-3", name: "The S\xE9ance Table", tier: "basic", icon: "Tables", w: 1, h: 1 }, { id: "umbra-p-17", name: "Ebony Writing Desk", tier: "premium", icon: "Tables", w: 1, h: 1 }, { id: "umbra-p-18", name: "The Mourning Table", tier: "premium", icon: "Tables", w: 1, h: 1 }], Storage: [{ id: "umbra-b-4", name: "Glass Curio Cabinet", tier: "basic", icon: "Storage", w: 2, h: 2 }, { id: "umbra-b-5", name: "The Wardrobe", tier: "basic", icon: "Storage", w: 2, h: 2 }, { id: "umbra-p-19", name: "Antique Reliquary Cabinet", tier: "premium", icon: "Storage", w: 2, h: 2 }, { id: "umbra-p-20", name: "The Armoire", tier: "premium", icon: "Storage", w: 2, h: 2 }], Beds: [{ id: "umbra-b-6", name: "The Four-Poster Frame", tier: "basic", icon: "Beds", w: 3, h: 3 }, { id: "umbra-p-21", name: "The Canopy Bed", tier: "premium", icon: "Beds", w: 3, h: 3 }], Decor: [{ id: "umbra-b-7", name: "Black Candelabra", tier: "basic", icon: "Lighting", w: 1, h: 1 }, { id: "umbra-b-8", name: "Pressed Flower Frame", tier: "basic", icon: "Decor", w: 1, h: 1 }, { id: "umbra-b-9", name: "Wall Art, Small", tier: "basic", icon: "WallArt", w: 1, h: 1 }, { id: "umbra-b-10", name: "Wall Art, Medium", tier: "basic", icon: "WallArt", w: 1, h: 1 }, { id: "umbra-b-11", name: "Wall Art, Large", tier: "basic", icon: "WallArt", w: 2, h: 1 }, { id: "umbra-b-12", name: "Area Rug, Small", tier: "basic", icon: "Rug", w: 2, h: 2 }, { id: "umbra-b-13", name: "Area Rug, Large", tier: "basic", icon: "Rug", w: 3, h: 3 }, { id: "umbra-b-14", name: "Runner", tier: "basic", icon: "Runner", w: 3, h: 1 }, { id: "umbra-p-22", name: "Silver Candelabra", tier: "premium", icon: "Lighting", w: 1, h: 1 }, { id: "umbra-p-23", name: "Memento Mori Display", tier: "premium", icon: "Decor", w: 1, h: 1 }, { id: "umbra-p-24", name: "Wall Art, Small", tier: "premium", icon: "WallArt", w: 1, h: 1 }, { id: "umbra-p-25", name: "Wall Art, Medium", tier: "premium", icon: "WallArt", w: 1, h: 1 }, { id: "umbra-p-26", name: "Wall Art, Large", tier: "premium", icon: "WallArt", w: 2, h: 1 }, { id: "umbra-p-27", name: "Area Rug, Small", tier: "premium", icon: "Rug", w: 2, h: 2 }, { id: "umbra-p-28", name: "Area Rug, Large", tier: "premium", icon: "Rug", w: 3, h: 3 }, { id: "umbra-p-29", name: "Runner", tier: "premium", icon: "Runner", w: 3, h: 1 }], Premium: [{ id: "umbra-p-30", name: "The Antiquarian's Chaise", tier: "premium", icon: "Premium", w: 3, h: 2 }] }, roomNames: ["Main Hall", "Study", "Antechamber"] },
     TERRA: {
       color: "#4A7C59",
       bg: "#061008",
@@ -32336,11 +32412,12 @@ Convert this into a precise, structured clothing/outfit description optimized fo
   function setDashWorld(world) { const w = WORLDS[world]; const h = DASH_COLOR_OVERRIDE[world] || (w && w.accent); if (h && /^#[0-9a-f]{6}$/i.test(h)) { DASH.rgb = [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)]; DASH.on = true; } else { DASH.on = false; } }
   function T(triple, hex) {
     const t = triple.split(",").map(Number);
-    if (!DASH.on) return hex ? "#" + t.map((v) => v.toString(16).padStart(2, "0")).join("") : triple;
+    if (!DASH || !DASH.on) return hex ? "#" + t.map((v) => v.toString(16).padStart(2, "0")).join("") : triple;
     const k = Math.max(0, Math.min(1, ((t[0] + t[1] + t[2]) / 3 - 120) / 130)) * 0.5;
     const o = DASH.rgb.map((c) => Math.round(c * (1 - k) + 255 * k));
     return hex ? "#" + o.map((v) => v.toString(16).padStart(2, "0")).join("") : o.join(",");
   }
+  function worldTint(world) { const w = WORLDS[world]; const h = DASH_COLOR_OVERRIDE[world] || (w && w.accent); return h && /^#[0-9a-f]{6}$/i.test(h) ? h : null; }
   function dashGlow() { return "drop-shadow(0 0 5px rgba(" + T("210,190,235") + ",0.7)) drop-shadow(0 0 1.5px rgba(" + T("230,215,245") + ",0.45))"; }
   function DashboardGlyph({ id }) {
     const s = { width: 26, height: 26, color: T("228,215,245", true), filter: dashGlow() };
@@ -32601,7 +32678,7 @@ Convert this into a precise, structured clothing/outfit description optimized fo
         list?.map((record) => {
           const world = record.world || "TERRA";
           const wc = WORLDS[world];
-          const color = wc?.color || "#7B5EA7";
+          const color = wc?.color || T("123,94,167", true);
           return (
             // FIXED (App v17) — two things Chris flagged from the same screenshot:
             // (1) this card was a plain borderRadius:12 <button>, missed in the
@@ -33873,7 +33950,7 @@ Convert this into a precise, structured clothing/outfit description optimized fo
   }
   function TownSquareScreen({ world, onEnter, onClose, avatarSpecies }) {
     const [previewOpen, setPreviewOpen] = (0, import_react.useState)(false);
-    const worldColor = WORLDS[world]?.color || "#7B5EA7";
+    const worldColor = WORLDS[world]?.color || T("123,94,167", true);
     const archivesName = TOWN_SQUARE_ARCHIVES_NAME[world] || "The Archives";
     const [devEntranceOverride, setDevEntranceOverride] = (0, import_react.useState)(null);
     const marisEntrance = devEntranceOverride || getMarisEntrance(avatarSpecies);
@@ -35006,7 +35083,7 @@ Write a complete roleplay system prompt in the voice of instructions to the AI (
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontFamily: "Cinzel, serif", fontSize: 20, color: "#EEE8DD", marginBottom: 8 }, children: "Their image" }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11, color: "rgba(200,190,170,0.5)", fontStyle: "italic", lineHeight: 1.6, marginBottom: 14 }, children: "Everything about " + (firstName.trim() || "them") + " is set. Now they get their face and form, drawn from who you have made. When you are happy, move them into TEL\u014CS." }),
           genFull && !noImage ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11, color: "rgba(150,210,170,0.85)", lineHeight: 1.5, marginBottom: 14 }, children: "Image chosen. Use the button below to move them in." }) : null,
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(OnboardingImagePanel, { kind: "telo", teloId: teloImageScopeId(firstName), accent: "#7B5EA7", title: (firstName.trim() || "THEIR").toUpperCase() + "'S IMAGE", subtitle: "A full-length image and a face close-up.", alt: firstName, allowPhotos: false,
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(OnboardingImagePanel, { kind: "telo", teloId: teloImageScopeId(firstName), accent: T("123,94,167", true), title: (firstName.trim() || "THEIR").toUpperCase() + "'S IMAGE", subtitle: "A full-length image and a face close-up.", alt: firstName, allowPhotos: false,
             defaultAge: ageMode === "canonical" && canonicalAge ? "adult, " + canonicalAge : "",
             getFields: () => ({ name: firstName.trim(), species: String(teloType || "").slice(0, 300), description: String(physicalDesc || "").slice(0, 1500), style: "", outfit: String(expandedOutfit || teloOutfit || "").slice(0, 300), personality: [primaryTrait, (coreTraits || []).join(", "), flaw ? "flaw: " + flaw : ""].filter(Boolean).join("; ").slice(0, 300) }),
             photoLabel: "", certText: "", adultText: firstName.trim() + " is an adult (18 or over).",
@@ -35304,7 +35381,7 @@ He glances toward the window where the Aston Martin is parked crooked at the cur
   // who skipped the optional step. Adds the accepted images to the saved avatar; nothing else in the saved onboarding record changes.
   function AvatarImageScreen({ userProfile, onExit, onSaved }) {
     var R = import_react, h = R.createElement;
-    var accent = "#7B5EA7";
+    var accent = T("123,94,167", true);
     var savedS = R.useState(false), saved = savedS[0], setSaved = savedS[1];
     var errS = R.useState(""), err = errS[0], setErr = errS[1];
     var p = userProfile || {};
@@ -35418,7 +35495,7 @@ He glances toward the window where the Aston Martin is parked crooked at the cur
   }
 
   function EchoViewer(props) {
-    var R = import_react, h = R.createElement, accent = "#7B5EA7", img = props.img, collage = img.format === "collage";
+    var R = import_react, h = R.createElement, accent = T("123,94,167", true), img = props.img, collage = img.format === "collage";
     var rows = collage ? (props.rows || {})[String(img.panelCount)] : null;
     var capsS = R.useState((img.captions || []).concat(Array(Math.max(0, (img.panelCount || 0) - (img.captions || []).length)).fill(""))), caps = capsS[0], setCaps = capsS[1];
     var numS = R.useState(img.showPanelNumbers === true), nums = numS[0], setNums = numS[1];
@@ -35486,7 +35563,7 @@ He glances toward the window where the Aston Martin is parked crooked at the cur
   }
 
   function EchoImageScreen(props) {
-    var R = import_react, h = R.createElement, accent = "#7B5EA7";
+    var R = import_react, h = R.createElement, accent = T("123,94,167", true);
     var userProfile = props.userProfile || {};
     var S = function (v) { return R.useState(v); };
     var optsS = S(null), opts = optsS[0], setOpts = optsS[1];
@@ -35688,7 +35765,7 @@ He glances toward the window where the Aston Martin is parked crooked at the cur
 
   // Settings card: the real, server-enforced OpenAI filtering preference. Shown only to accounts the Worker marks eligible (private adult beta).
   function ImageGenerationSettingsCard() {
-    var R = import_react, h = R.createElement, accent = "#7B5EA7";
+    var R = import_react, h = R.createElement, accent = T("123,94,167", true);
     var stS = R.useState({ loading: true, enabled: false, mode: "auto", failed: false }), st = stS[0], setSt = stS[1];
     var saveS = R.useState(false), saving = saveS[0], setSaving = saveS[1];
     var errS = R.useState(""), err = errS[0], setErr = errS[1];
@@ -35805,8 +35882,8 @@ He glances toward the window where the Aston Martin is parked crooked at the cur
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: onExit, style: { width: 34, height: 34, borderRadius: "50%", border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.05)", color: "rgba(230,222,205,0.8)", fontSize: 16, cursor: "pointer" }, children: "\u2190" }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontFamily: "Cinzel, serif", fontSize: 20, color: "#EEE8DD" }, children: "Settings" })
       ] }),
-      onOpenAvatarImage ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ChamferBtn, { size: "md", variant: "ghost", accentColor: "#7B5EA7", style: { width: "100%", marginBottom: 16, padding: "14px 16px", letterSpacing: 2, fontSize: 12 }, onClick: onOpenAvatarImage, children: "AVATAR IMAGE" }) : null,
-      onOpenEcho ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ChamferBtn, { size: "md", variant: "ghost", accentColor: "#7B5EA7", style: { width: "100%", marginBottom: 16, padding: "14px 16px", letterSpacing: 2, fontSize: 12 }, onClick: onOpenEcho, children: "ECH\u014C IMAGE" }) : null,
+      onOpenAvatarImage ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ChamferBtn, { size: "md", variant: "ghost", accentColor: T("123,94,167", true), style: { width: "100%", marginBottom: 16, padding: "14px 16px", letterSpacing: 2, fontSize: 12 }, onClick: onOpenAvatarImage, children: "AVATAR IMAGE" }) : null,
+      onOpenEcho ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ChamferBtn, { size: "md", variant: "ghost", accentColor: T("123,94,167", true), style: { width: "100%", marginBottom: 16, padding: "14px 16px", letterSpacing: 2, fontSize: 12 }, onClick: onOpenEcho, children: "ECH\u014C IMAGE" }) : null,
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ImageGenerationSettingsCard, {}),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: 16, background: "rgba(255,255,255,0.03)", borderRadius: 10, border: "1px solid rgba(255,255,255,0.08)", marginBottom: 16 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 9, letterSpacing: 2, color: "rgba(200,190,170,0.4)", fontFamily: "Cinzel, serif", marginBottom: 8 }, children: "DATA BACKUP" }),
@@ -38820,7 +38897,9 @@ initRemote();
       AURIS: { color: "#6ABBC8", glow: "rgba(106,187,200,0.4)" }
     };
     const activeWorld = COMPANION_CONFIGS[activeTelo]?.world || "UMBRA";
-    const navAccent = WORLD_ACCENT[activeWorld] || WORLD_ACCENT.UMBRA;
+    setDashWorld(userWorld);
+    const userTintHex = worldTint(userWorld);
+    const navAccent = userTintHex ? { color: userTintHex, glow: userTintHex + "66" } : (WORLD_ACCENT[activeWorld] || WORLD_ACCENT.UMBRA);
     const BASE_NAV = [
       { id: "companion", label: "Companion" },
       { id: "archives", label: "Archives" },
@@ -38962,7 +39041,7 @@ initRemote();
         } }),
         screen === "settings" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SettingsScreen, { onExit: () => setScreen(preSettingsScreen), onOpenAvatarImage: userProfile ? () => setScreen("avatarImage") : null, onOpenEcho: () => { setEchoReturn("settings"); setScreen("echoImage"); } }),
         screen === "telo-image" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TeloImageScreen, { teloName: activeTelo, onExit: () => setScreen("telosian-profile") }),
-        screen === "echoImage" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EchoImageScreen, { userProfile, onExit: () => setScreen(echoReturn === "home" ? "home" : "settings") }),
+        screen === "echoImage" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EchoImageScreen, { userProfile, onExit: () => { if (echoReturn === "archives") { setScreen("main"); setActiveTab("archives"); } else setScreen(echoReturn === "home" ? "home" : "settings"); } }),
         screen === "avatarImage" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AvatarImageScreen, { userProfile, onExit: () => setScreen("settings"), onSaved: (ad) => setUserProfile(ad) }),
         screen === "encyclopaedia" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EncyclopaediaScreen, { onExit: () => setScreen("home") }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(LanguagePracticeScreen, { active: screen === "languages", onExit: () => setScreen("home") }),
@@ -39116,10 +39195,10 @@ initRemote();
         screen === "main" && !showTownSquareGate && !assemblageParticipants && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "12px 20px 10px", borderBottom: "1px solid rgba(255,255,255,0.05)", background: "rgba(6,6,15,0.95)", backdropFilter: "blur(20px)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "space-between" }, children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "center", overflowX: "auto", WebkitOverflowScrolling: "touch", minWidth: 0, flex: unreadDialogue ? "0 1 auto" : 1 }, children: [
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { onClick: () => setScreen("onboarding"), style: { fontFamily: "Cinzel, serif", fontSize: 16, fontWeight: 600, color: "rgba(160,120,210,0.7)", letterSpacing: 4, cursor: "pointer", userSelect: "none", flexShrink: 0 }, children: "TEL\u014CS" }),
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ChamferBtn, { size: "sm", variant: "accent", accentColor: "#B48CDC", fillColor: "#06060F", onClick: () => setScreen("create-telo"), style: { marginLeft: 10, width: "auto", padding: "4px 9px", fontSize: 9, fontWeight: 400, letterSpacing: 0.5, flexShrink: 0 }, children: "+ NEW TEL\u014CSIAN" }),
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ChamferBtn, { size: "sm", variant: "accent", accentColor: "#78B48C", fillColor: "#06060F", onClick: () => setScreen("my-telos"), style: { marginLeft: 6, width: "auto", padding: "4px 9px", fontSize: 9, fontWeight: 400, letterSpacing: 0.5, flexShrink: 0 }, children: "MY TEL\u014CS" }),
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ChamferBtn, { size: "sm", variant: "accent", accentColor: "#B4A0D2", fillColor: "#06060F", onClick: () => setScreen("home"), style: { marginLeft: 6, width: "auto", padding: "4px 9px", fontSize: 9, fontWeight: 400, letterSpacing: 0.5, flexShrink: 0 }, children: "HOME" }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { onClick: () => setScreen("onboarding"), style: { fontFamily: "Cinzel, serif", fontSize: 16, fontWeight: 600, color: userTintHex ? userTintHex + "BB" : "rgba(160,120,210,0.7)", letterSpacing: 4, cursor: "pointer", userSelect: "none", flexShrink: 0 }, children: "TEL\u014CS" }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ChamferBtn, { size: "sm", variant: "accent", accentColor: userTintHex || "#B4A0D2", fillColor: "#06060F", onClick: () => setScreen("home"), style: { marginLeft: 10, width: "auto", padding: "4px 9px", fontSize: 9, fontWeight: 400, letterSpacing: 0.5, flexShrink: 0 }, children: "HOME" }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ChamferBtn, { size: "sm", variant: "accent", accentColor: userTintHex || "#B48CDC", fillColor: "#06060F", onClick: () => setScreen("create-telo"), style: { marginLeft: 6, width: "auto", padding: "4px 9px", fontSize: 9, fontWeight: 400, letterSpacing: 0.5, flexShrink: 0 }, children: "+ NEW TEL\u014CSIAN" }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ChamferBtn, { size: "sm", variant: "accent", accentColor: userTintHex || "#78B48C", fillColor: "#06060F", onClick: () => setScreen("my-telos"), style: { marginLeft: 6, width: "auto", padding: "4px 9px", fontSize: 9, fontWeight: 400, letterSpacing: 0.5, flexShrink: 0 }, children: "MY TEL\u014CS" }),
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 6, marginLeft: 6, flexShrink: 0 }, children: ["Seraphine", "Nova", "Oryn", "AEON"].map((name) => {
                 const cfg = COMPANION_CONFIGS[name];
                 const wc = WORLDS[cfg.world];
@@ -39140,7 +39219,7 @@ initRemote();
           ] }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, overflow: "hidden", display: "flex", flexDirection: "column", animation: "fadeIn 0.3s ease" }, children: [
             activeTab === "companion" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CompanionScreen, { teloName: activeTelo, userProfile, onWellness: () => setActiveTab("wellness"), onShowProfile: () => setScreen("telosian-profile") }, `${activeTelo}-${companionRefreshKey}`),
-            activeTab === "archives" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ArchivesScreen, {}),
+            activeTab === "archives" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ArchivesScreen, { world: userWorld, onOpenEcho: () => { setEchoReturn("archives"); setScreen("echoImage"); } }),
             activeTab === "challenge" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TeamChallengeScreen, { dailySteps }),
             activeTab === "wellness" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(WellnessScreen, { dailySteps, setDailySteps }),
             activeTab === "home" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(HomeBuilderScreen, {}),
