@@ -398,7 +398,7 @@ export class UserState extends DurableObject {
     if (!amount) throw new ApiError(503, 'IMAGE_PRICING_UNAVAILABLE');
     const now = Date.now();
     this.run('DELETE FROM quotes WHERE expires_at<?', now - 3600e3);
-    if (this.one("SELECT COUNT(*) n FROM quotes WHERE state='open' AND expires_at>?", now).n >= 30) throw new ApiError(429, 'TOO_MANY_QUOTES');
+    this.run("UPDATE quotes SET state='superseded' WHERE state='open'");   // only the newest quote is ever valid; earlier ones cannot be redeemed
     const id = rid() + rid().slice(0, 6), bind = await sha(JSON.stringify(stable({ format: f.format, panelCount: f.panelCount, showPanelNumbers: f.showPanelNumbers })));
     this.run("INSERT INTO quotes(id,bind,amount,state,expires_at,created_at) VALUES(?,?,?,'open',?,?)", id, bind, amount, now + QUOTE_TTL_MS, now);
     return { quoteId: id, expiresAt: new Date(now + QUOTE_TTL_MS).toISOString(), amountSkol: amount, currency: 'Sköl', usageUnits: 1, format: f.format, panelCount: f.panelCount, showPanelNumbers: f.showPanelNumbers, charged: false };

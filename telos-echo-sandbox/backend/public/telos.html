@@ -35287,7 +35287,358 @@ He glances toward the window where the Aston Martin is parked crooked at the cur
         body,
         err ? h("div", { style: { marginTop: 14, fontSize: 12, color: "#E58A8A", lineHeight: 1.5 } }, err) : null));
   }
-  function SettingsScreen({ onExit, onOpenAvatarImage }) {
+  // ===== ECHŌ IMAGE (App v133) =====================================================================================
+  // Single Image or Collage (4–9 panels on ONE canvas = one request = one image use). Style comes from the user's own
+  // choice and the Worker's single style list; references, Sköl quote + explicit confirmation, review, save, refine.
+  // Panel numbers and captions are overlays drawn here, never printed into the generated art.
+  var ECHO_MSG = {
+    IMAGE_QUOTE_REQUIRED: "Check the price, then confirm it before creating.",
+    IMAGE_QUOTE_INVALID: "That price was out of date. It has been refreshed, so please confirm it again.",
+    IMAGE_PRICING_UNAVAILABLE: "A price for this kind of image has not been set up yet.",
+    IMAGE_SETTING_NOT_ALLOWED: "That setting is not available for your account.",
+    IDEMPOTENCY_CONFLICT: "That request changed. Please try again.",
+    ADULT_ATTESTATION_REQUIRED: "Please confirm that everyone shown is an adult (18+)."
+  };
+  function echoMsg(e) { return (e && ECHO_MSG[e.code]) || TelosImg.message(e); }
+  var ECHO_CUT = "polygon(5px 0, calc(100% - 5px) 0, 100% 5px, 100% calc(100% - 5px), calc(100% - 5px) 100%, 5px 100%, 0 calc(100% - 5px), 0 5px)";
+  var ECHO_CUT_LG = "polygon(9px 0, calc(100% - 9px) 0, 100% 9px, 100% calc(100% - 9px), calc(100% - 9px) 100%, 9px 100%, 0 calc(100% - 9px), 0 9px)";
+  function echoRects(rows) {
+    var out = [], idx = 0;
+    (rows || []).forEach(function (cells, r) { for (var c = 0; c < cells; c++) out.push({ index: ++idx, x: c / cells, y: r / rows.length, w: 1 / cells, h: 1 / rows.length }); });
+    return out;
+  }
+  function EchoTag(props) {
+    var h = import_react.createElement;
+    return h("div", { style: Object.assign({ position: "absolute", minWidth: 26, height: 26, background: "rgba(232,184,74,0.7)", clipPath: ECHO_CUT, display: "flex", alignItems: "center", justifyContent: "center" }, props.pos) },
+      h("div", { style: { position: "absolute", inset: 1, background: "rgba(10,6,20,0.9)", clipPath: ECHO_CUT, display: "flex", alignItems: "center", justifyContent: "center", color: "#E8D9A8", fontFamily: "Cinzel, serif", fontSize: 13, padding: "0 6px" } }, props.children));
+  }
+  function PanelNumberTags(props) {
+    var h = import_react.createElement;
+    return h("div", { "aria-label": "Panel numbers", style: { position: "absolute", inset: 0, pointerEvents: "none" } }, echoRects(props.rows).map(function (r) {
+      return h(EchoTag, { key: r.index, pos: { left: "calc(" + r.x * 100 + "% + 6px)", top: "calc(" + r.y * 100 + "% + 6px)", width: 28 } }, r.index);
+    }));
+  }
+  function PanelCaptions(props) {
+    var h = import_react.createElement, caps = props.captions || [];
+    return h("div", { style: { position: "absolute", inset: 0, pointerEvents: "none" } }, echoRects(props.rows).map(function (r, i) {
+      var t = String(caps[i] || "").trim(); if (!t) return null;
+      return h("div", { key: r.index, style: { position: "absolute", left: "calc(" + r.x * 100 + "% + 6px)", width: "calc(" + r.w * 100 + "% - 12px)", top: "calc(" + (r.y + r.h) * 100 + "% - 6px)", transform: "translateY(-100%)", pointerEvents: "auto" } },
+        h("div", { style: { background: "rgba(10,6,20,0.88)", color: "#EEE8DD", fontSize: 11, lineHeight: 1.35, padding: "5px 8px", clipPath: ECHO_CUT, textAlign: "center" } },
+          t.split(/(\s+)/).map(function (w, k) {
+            if (/^\s+$/.test(w) || !props.onWordTap) return w;
+            return h("span", { key: k, onClick: function () { props.onWordTap(w.replace(/[.,!?;:"()¿¡]/g, ""), i); }, style: { cursor: "pointer", borderBottom: "1px dotted rgba(232,184,74,0.6)" } }, w);
+          })));
+    }));
+  }
+  async function echoSaveBlob(blob, name) {
+    try {
+      var file = new File([blob], name, { type: blob.type || "image/png" });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file] }); return "shared"; }
+    } catch (e) { if (e && e.name === "AbortError") return "cancelled"; }
+    var url = URL.createObjectURL(blob), a = document.createElement("a");
+    a.href = url; a.download = name; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
+    return "downloaded";
+  }
+  async function echoNumberedBlob(blob, rows) {
+    var bmp = await createImageBitmap(blob), c = document.createElement("canvas");
+    c.width = bmp.width; c.height = bmp.height;
+    var g = c.getContext("2d"); g.drawImage(bmp, 0, 0);
+    var u = Math.max(20, Math.round(Math.min(bmp.width, bmp.height) / 34)), cut = Math.round(u * 0.28);
+    echoRects(rows).forEach(function (r) {
+      var x = Math.round(r.x * bmp.width + u * 0.45), y = Math.round(r.y * bmp.height + u * 0.45), w = Math.round(u * 1.7), hh = Math.round(u * 1.55);
+      g.beginPath(); g.moveTo(x + cut, y); g.lineTo(x + w - cut, y); g.lineTo(x + w, y + cut); g.lineTo(x + w, y + hh - cut); g.lineTo(x + w - cut, y + hh); g.lineTo(x + cut, y + hh); g.lineTo(x, y + hh - cut); g.lineTo(x, y + cut); g.closePath();
+      g.fillStyle = "rgba(10,6,20,0.9)"; g.fill(); g.lineWidth = Math.max(1, Math.round(u / 16)); g.strokeStyle = "rgba(232,184,74,0.75)"; g.stroke();
+      g.font = "600 " + u + "px Cinzel, serif"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillStyle = "#E8D9A8"; g.fillText(String(r.index), x + w / 2, y + hh / 2 + 1);
+    });
+    if (bmp.close) bmp.close();
+    return await new Promise(function (res, rej) { c.toBlob(function (b) { b ? res(b) : rej(new Error("export failed")); }, "image/png"); });
+  }
+  function echoBack(onClick) {
+    return import_react.createElement("button", { onClick: onClick, "aria-label": "Back", style: { width: 34, height: 34, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.05)", color: "#EEE8DD", cursor: "pointer", fontSize: 16, clipPath: "polygon(7px 0, calc(100% - 7px) 0, 100% 7px, 100% calc(100% - 7px), calc(100% - 7px) 100%, 7px 100%, 0 calc(100% - 7px), 0 7px)" } }, "←");
+  }
+
+  function EchoViewer(props) {
+    var R = import_react, h = R.createElement, accent = "#7B5EA7", img = props.img, collage = img.format === "collage";
+    var rows = collage ? (props.rows || {})[String(img.panelCount)] : null;
+    var capsS = R.useState((img.captions || []).concat(Array(Math.max(0, (img.panelCount || 0) - (img.captions || []).length)).fill(""))), caps = capsS[0], setCaps = capsS[1];
+    var numS = R.useState(img.showPanelNumbers === true), nums = numS[0], setNums = numS[1];
+    var viewS = R.useState("new"), view = viewS[0], setView = viewS[1];
+    var fullS = R.useState(false), full = fullS[0], setFull = fullS[1];
+    var msgS = R.useState(""), msg = msgS[0], setMsg = msgS[1];
+    var delS = R.useState(false), del = delS[0], setDel = delS[1];
+    var busyS = R.useState(false), busy = busyS[0], setBusy = busyS[1];
+    var original = props.original || null;
+    var shownId = view === "orig" && original ? original.id : img.id;
+    async function post(body) { return TelosImg.call("/api/echo/captions", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(Object.assign({ imageId: img.id }, body)) }); }
+    async function toggleNums() { var next = !nums; setNums(next); try { var r = await post({ showPanelNumbers: next }); props.onChanged(r.images); } catch (e) { setNums(!next); setMsg(echoMsg(e)); } }
+    async function saveCaps() { setBusy(true); setMsg(""); try { var r = await post({ captions: caps.slice(0, img.panelCount || 1) }); props.onChanged(r.images); setMsg("Captions saved."); } catch (e) { setMsg(echoMsg(e)); } setBusy(false); }
+    async function save(withNumbers) {
+      setBusy(true); setMsg("");
+      try {
+        var r = await fetch("/api/images/" + encodeURIComponent(shownId), { credentials: "same-origin" }); if (!r.ok) throw new Error("fetch");
+        var blob = await r.blob(); if (withNumbers && rows) blob = await echoNumberedBlob(blob, rows);
+        var out = await echoSaveBlob(blob, "telos-echo-" + shownId.slice(0, 8) + (withNumbers ? "-numbered" : "") + ".png");
+        if (out === "downloaded") setMsg("Saved to your device.");
+      } catch (e) { setMsg("The image could not be saved. Try again."); }
+      setBusy(false);
+    }
+    async function remove() { setBusy(true); try { await TelosImg.call("/api/images/" + encodeURIComponent(img.id), { method: "DELETE" }); props.onDeleted(img.id); } catch (e) { setMsg(echoMsg(e)); setBusy(false); } }
+    var btn = function (label, onClick, disabled, variant) { return h(ChamferBtn, { size: "md", variant: variant || "ghost", accentColor: accent, disabled: disabled || busy, onClick: onClick, style: { fontSize: 11, flex: "1 1 40%" } }, label); };
+    var stage = function (inFull) {
+      return h("div", { style: { position: "relative", width: "100%", lineHeight: 0, clipPath: ECHO_CUT_LG } },
+        h("img", { src: "/api/images/" + encodeURIComponent(shownId), alt: collage ? "Collage of " + img.panelCount + " panels" : "Echō image", style: { width: "100%", display: "block", maxHeight: inFull ? "100%" : "none", objectFit: "contain" } }),
+        collage && rows && nums ? h(PanelNumberTags, { rows: rows }) : null,
+        collage && rows && view === "new" ? h(PanelCaptions, { rows: rows, captions: caps, onWordTap: props.onWordTap }) : null);
+    };
+    if (full) return h("div", { onClick: function () { setFull(false); }, style: { position: "fixed", inset: 0, zIndex: 130, background: "#030308", display: "flex", alignItems: "center", justifyContent: "center", padding: 8 } },
+      h("div", { style: { width: "100%", maxHeight: "100%", overflow: "auto" } }, stage(true)),
+      h("div", { style: { position: "absolute", top: "calc(env(safe-area-inset-top, 0px) + 10px)", right: 12, fontSize: 10, letterSpacing: 2, fontFamily: "Cinzel, serif", color: "rgba(200,190,170,0.6)" } }, "TAP TO CLOSE"));
+    return h("div", { style: { position: "fixed", inset: 0, zIndex: 120, background: "#06060F", overflowY: "auto", WebkitOverflowScrolling: "touch" } },
+      h("div", { style: { padding: "calc(env(safe-area-inset-top, 0px) + 16px) 16px 40px", maxWidth: 520, margin: "0 auto" } },
+        h("div", { style: { display: "flex", alignItems: "center", gap: 12, marginBottom: 16 } }, echoBack(props.onClose), h("div", { style: { fontFamily: "Cinzel, serif", fontSize: 20, color: "#EEE8DD" } }, collage ? img.panelCount + "-panel collage" : "Echō image")),
+        original ? h("div", { style: { display: "flex", gap: 8, marginBottom: 12 } },
+          h(ChamferBox, { size: "sm", borderColor: view === "orig" ? accent + "99" : "rgba(255,255,255,0.08)", fillColor: view === "orig" ? accent + "40" : "rgba(10,6,20,0.5)", glowColor: view === "orig" ? accent + "33" : null, selected: view === "orig", onClick: function () { setView("orig"); }, style: { flex: 1, cursor: "pointer", textAlign: "center" } }, h("div", { style: { padding: "9px 6px", fontFamily: "Cinzel, serif", fontSize: 11, color: "#EEE8DD" } }, "ORIGINAL")),
+          h(ChamferBox, { size: "sm", borderColor: view === "new" ? accent + "99" : "rgba(255,255,255,0.08)", fillColor: view === "new" ? accent + "40" : "rgba(10,6,20,0.5)", glowColor: view === "new" ? accent + "33" : null, selected: view === "new", onClick: function () { setView("new"); }, style: { flex: 1, cursor: "pointer", textAlign: "center" } }, h("div", { style: { padding: "9px 6px", fontFamily: "Cinzel, serif", fontSize: 11, color: "#EEE8DD" } }, "REFINED"))) : null,
+        stage(false),
+        h("div", { style: { marginTop: 8, fontSize: 10, color: "rgba(200,190,170,0.45)", letterSpacing: 1 } }, (props.styleLabel || "").toUpperCase() + (img.world ? " · " + img.world : "") + " · PRIVATE"),
+        collage ? h("div", { style: { marginTop: 14 } },
+          h("div", { style: { display: "flex", gap: 8, alignItems: "center", justifyContent: "space-between" } },
+            h("div", { style: { fontFamily: "Cinzel, serif", fontSize: 11, letterSpacing: 2, color: "rgba(200,190,170,0.55)" } }, "SHOW PANEL NUMBERS"),
+            h("div", { style: { display: "flex", gap: 6 } }, [["ON", true], ["OFF", false]].map(function (o) { return h(ChamferBox, { key: o[0], size: "sm", borderColor: nums === o[1] ? accent + "99" : "rgba(255,255,255,0.08)", fillColor: nums === o[1] ? accent + "40" : "rgba(10,6,20,0.5)", glowColor: nums === o[1] ? accent + "33" : null, selected: nums === o[1], onClick: function () { if (nums !== o[1]) toggleNums(); }, style: { cursor: "pointer", minWidth: 54, textAlign: "center" } }, h("div", { style: { padding: "8px 10px", fontFamily: "Cinzel, serif", fontSize: 11, color: "#EEE8DD" } }, o[0])); }))),
+          h("div", { style: { marginTop: 4, fontSize: 10, color: "rgba(200,190,170,0.4)", lineHeight: 1.5 } }, "Numbers are an overlay. Turn them on or off, or save with or without them, without another generation."),
+          h("div", { style: { marginTop: 16, fontFamily: "Cinzel, serif", fontSize: 11, letterSpacing: 2, color: "rgba(200,190,170,0.55)" } }, "CAPTIONS AND DIALOGUE"),
+          h("div", { style: { marginTop: 4, fontSize: 10, color: "rgba(200,190,170,0.4)", lineHeight: 1.5 } }, "Shown over each panel and kept separate from the picture, so you can edit them any time."),
+          rows ? echoRects(rows).map(function (r, i) {
+            return h("div", { key: r.index, style: { display: "flex", gap: 8, alignItems: "center", marginTop: 8 } },
+              h("div", { style: { width: 26, flexShrink: 0, textAlign: "center", fontFamily: "Cinzel, serif", fontSize: 12, color: "#E8D9A8" } }, r.index),
+              h(ChamferField, { size: "sm", activeBorderColor: accent + "AA", style: { flex: 1 } }, h("input", { value: caps[i] || "", maxLength: 160, onChange: function (e) { var v = e.target.value; setCaps(function (c) { var n = c.slice(); n[i] = v; return n; }); }, placeholder: "Panel " + r.index, style: { width: "100%", padding: "10px 12px", background: "transparent", border: "none", outline: "none", color: "#EEE8DD", fontSize: 12 } })));
+          }) : null,
+          h("div", { style: { marginTop: 10 } }, h(ChamferBtn, { size: "md", variant: "ghost", accentColor: accent, disabled: busy, onClick: saveCaps, style: { width: "100%", fontSize: 11 } }, "SAVE CAPTIONS"))) : null,
+        h("div", { style: { display: "flex", flexWrap: "wrap", gap: 8, marginTop: 18 } },
+          btn("SAVE TO DEVICE", function () { save(false); }, false, "primary"),
+          collage && rows ? btn("SAVE WITH NUMBERS", function () { save(true); }) : null,
+          btn("VIEW FULL SIZE", function () { setFull(true); }),
+          btn("REFINE", function () { props.onRefine(img.id); })),
+        h("div", { style: { marginTop: 14 } }, del
+          ? h("div", { style: { display: "flex", gap: 8, alignItems: "center" } }, h("div", { style: { flex: 1, fontSize: 11, color: "#E58A8A" } }, "Delete this image for good?"), h(ChamferBtn, { size: "sm", variant: "ghost", onClick: function () { setDel(false); }, style: { fontSize: 11 } }, "KEEP"), h(ChamferBtn, { size: "sm", variant: "ghost", accentColor: "#C25A5A", disabled: busy, onClick: remove, style: { fontSize: 11 } }, "DELETE"))
+          : h(ChamferBtn, { size: "sm", variant: "ghost", onClick: function () { setDel(true); }, style: { fontSize: 10, opacity: 0.7 } }, "DELETE")),
+        msg ? h("div", { role: "status", style: { marginTop: 12, fontSize: 12, color: "#E8D9A8", lineHeight: 1.5 } }, msg) : null));
+  }
+
+  function EchoImageScreen(props) {
+    var R = import_react, h = R.createElement, accent = "#7B5EA7";
+    var userProfile = props.userProfile || {};
+    var S = function (v) { return R.useState(v); };
+    var optsS = S(null), opts = optsS[0], setOpts = optsS[1];
+    var loadErrS = S(false), loadErr = loadErrS[0], setLoadErr = loadErrS[1];
+    var tabS = S("make"), tab = tabS[0], setTab = tabS[1];
+    var fmtS = S("single"), fmt = fmtS[0], setFmt = fmtS[1];
+    var aspS = S("portrait"), aspect = aspS[0], setAspect = aspS[1];
+    var cntS = S(4), cnt = cntS[0], setCnt = cntS[1];
+    var numS = S(false), nums = numS[0], setNums = numS[1];
+    var styS = S(null), pickedStyle = styS[0], setPickedStyle = styS[1];
+    var worldS = S(null), world = worldS[0], setWorld = worldS[1];
+    var promptS = S(""), prompt = promptS[0], setPrompt = promptS[1];
+    var dirS = S(""), dir = dirS[0], setDir = dirS[1];
+    var refsS = S([]), selRefs = refsS[0], setSelRefs = refsS[1];
+    var adultS = S(false), adult = adultS[0], setAdult = adultS[1];
+    var quoteS = S(null), quote = quoteS[0], setQuote = quoteS[1];
+    var qErrS = S(""), qErr = qErrS[0], setQErr = qErrS[1];
+    var tickS = S(0), tick = tickS[0], setTick = tickS[1];
+    var confS = S(false), conf = confS[0], setConf = confS[1];
+    var busyS = S(false), busy = busyS[0], setBusy = busyS[1];
+    var msgS = S(""), msg = msgS[0], setMsg = msgS[1];
+    var viewS = S(null), viewId = viewS[0], setViewId = viewS[1];
+    var refineS = S(null), refine = refineS[0], setRefine = refineS[1];
+    var certS = S(false), certOpen = certS[0], setCertOpen = certS[1];
+    var alive = R.useRef(true), keyRef = R.useRef(TelosImg.newKey()), fileRef = R.useRef(null), certRef = R.useRef("self");
+    R.useEffect(function () { alive.current = true; return function () { alive.current = false; }; }, []);
+    async function load() {
+      try { var o = await TelosImg.call("/api/echo/options"); if (alive.current) { setOpts(o); setLoadErr(false); } return o; }
+      catch (e) { if (alive.current) setLoadErr(true); return null; }
+    }
+    R.useEffect(function () { load(); }, []);
+
+    var styles = opts ? opts.styles : [];
+    var inheritedStyle = (function () { var l = String(userProfile.style || "").toLowerCase(); var m = styles.filter(function (s) { return s.label.toLowerCase() === l || s.id === l; })[0]; return m ? m.id : "realism"; })();
+    var style = pickedStyle || inheritedStyle;
+    var refineImg = refine && opts ? opts.images.filter(function (i) { return i.id === refine; })[0] : null;
+    var original = refineImg && refineImg.refinedFrom && opts ? opts.images.filter(function (i) { return i.id === refineImg.refinedFrom; })[0] : null;
+    var isCollage = refineImg ? refineImg.format === "collage" : fmt === "collage";
+    var maxRefs = (opts ? opts.maxRefs : 3) - (refineImg ? 1 : 0);
+
+    R.useEffect(function () {
+      setQuote(null); setQErr(""); setConf(false);
+      if (!opts || tab !== "make") return;
+      var dead = false;
+      (async function () {
+        try {
+          var body = refine ? { refineOf: refine } : fmt === "collage" ? { format: "collage", panelCount: cnt, showPanelNumbers: nums } : { format: "single" };
+          var q = await TelosImg.call("/api/echo/quote", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+          if (!dead && alive.current) setQuote(q);
+        } catch (e) { if (!dead && alive.current) setQErr(echoMsg(e)); }
+      })();
+      return function () { dead = true; };
+    }, [!!opts, fmt, cnt, nums, refine, tab, tick]);
+
+    var canGo = !!(opts && !busy && prompt.trim().length >= 3 && adult && quote && conf && !qErr);
+    async function generate() {
+      if (!canGo) return;
+      setBusy(true); setMsg("");
+      var body = { prompt: prompt.trim(), direction: dir.trim(), style: refineImg ? refineImg.style : style, adultAttested: true, idempotencyKey: keyRef.current, quoteId: quote.quoteId, refs: selRefs.slice(0, maxRefs) };
+      if (world && !refineImg) body.world = world;
+      if (refineImg) body.refineOf = refineImg.id; else if (fmt === "collage") { body.format = "collage"; body.panelCount = cnt; body.showPanelNumbers = nums; } else { body.format = "single"; body.aspect = aspect; }
+      try {
+        var j = await TelosImg.call("/api/echo/generate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+        var deadline = Date.now() + 5 * 60 * 1000;
+        while ((j.state === "created" || j.state === "working") && Date.now() < deadline) {
+          await new Promise(function (r) { setTimeout(r, 2000); });
+          if (!alive.current) return;
+          j = await TelosImg.call("/api/jobs/" + j.id);
+        }
+        keyRef.current = TelosImg.newKey();
+        if (j.state === "complete") { await load(); if (alive.current) { setPrompt(""); setRefine(null); setConf(false); setViewId(j.imageId); } }
+        else if (j.state === "failed") setMsg("That image could not be created. Nothing was used, and nothing was charged.");
+        else setMsg("This is taking longer than expected. It will appear in your archive when it is ready.");
+      } catch (e) { setMsg(echoMsg(e)); }
+      if (alive.current) { setTick(function (t) { return t + 1; }); setBusy(false); }
+    }
+    async function addPhoto(files) {
+      setMsg("");
+      for (var i = 0; i < files.length && i < 3; i++) {
+        try {
+          var blob = await TelosImg.prepPhoto(files[i]);
+          var r = await TelosImg.call("/api/echo/refs", { method: "POST", headers: { "x-certify": certRef.current, "content-type": "image/jpeg" }, body: blob });
+          if (!alive.current) return;
+          setSelRefs(function (l) { return l.length < maxRefs ? l.concat([r.ref]) : l; });
+        } catch (e) { setMsg(echoMsg(e)); }
+      }
+      setCertOpen(false); await load();
+    }
+    async function removeRef(ref) {
+      try { await TelosImg.call("/api/echo/refs/" + ref.slice(2), { method: "DELETE" }); } catch (e) { /* already gone */ }
+      setSelRefs(function (l) { return l.filter(function (x) { return x !== ref; }); }); await load();
+    }
+    var label = function (t, sub) { return h("div", { style: { marginTop: 22, marginBottom: 8 } }, h("div", { style: { fontFamily: "Cinzel, serif", fontSize: 11, letterSpacing: 2, color: "rgba(200,190,170,0.55)" } }, t), sub ? h("div", { style: { fontSize: 11, color: "rgba(200,190,170,0.4)", fontStyle: "italic", lineHeight: 1.5, marginTop: 3 } }, sub) : null); };
+    var pick = function (key, text, sel, onClick, sub, extra) {
+      return h(ChamferBox, { key: key, size: "sm", borderColor: sel ? accent + "99" : "rgba(255,255,255,0.08)", fillColor: sel ? accent + "40" : "rgba(10,6,20,0.5)", glowColor: sel ? accent + "33" : null, selected: sel, onClick: onClick, style: { cursor: "pointer", textAlign: "center", WebkitTapHighlightColor: "transparent" } },
+        h("div", { style: { padding: "12px 6px" } }, extra || null, h("div", { style: { fontFamily: "Cinzel, serif", fontSize: 12, color: sel ? "#EEE8DD" : "#C8BFAA" } }, text), sub ? h("div", { style: { fontSize: 9, letterSpacing: 1, color: "rgba(200,190,170,0.45)", marginTop: 3 } }, sub) : null));
+    };
+    var back = echoBack(props.onExit);
+    var layoutMini = function (n, sel) {
+      return h("div", { style: { display: "flex", flexDirection: "column", gap: 2, height: 24, width: 34, margin: "0 auto 7px" } }, opts.rows[String(n)].map(function (cells, ri) { return h("div", { key: ri, style: { display: "flex", gap: 2, flex: 1 } }, Array.from({ length: cells }).map(function (_, ci) { return h("div", { key: ci, style: { flex: 1, background: sel ? "#B9A2E6" : "rgba(200,190,170,0.35)" } }); })); }));
+    };
+    var tabBtn = function (id, text) { return pick(id, text, tab === id, function () { setTab(id); setMsg(""); }); };
+
+    var body;
+    if (loadErr) body = h("div", { style: { fontSize: 13, color: "rgba(200,190,170,0.6)", lineHeight: 1.6, marginTop: 20 } }, "Image creation is not reachable right now. Reload the page and try again.");
+    else if (!opts) body = h("div", { style: { fontSize: 12, color: "rgba(200,190,170,0.5)", marginTop: 20 } }, "Opening…");
+    else if (tab === "archive") {
+      body = opts.images.length ? h("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 16 } }, opts.images.map(function (im) {
+        return h(ChamferBox, { key: im.id, size: "sm", borderColor: "rgba(255,255,255,0.08)", fillColor: "rgba(10,6,20,0.5)", onClick: function () { setViewId(im.id); }, style: { cursor: "pointer", WebkitTapHighlightColor: "transparent" } },
+          h("div", { style: { padding: 6 } }, h("div", { style: { lineHeight: 0, clipPath: ECHO_CUT } }, h("img", { src: "/api/images/" + encodeURIComponent(im.id), alt: "", loading: "lazy", style: { width: "100%", aspectRatio: "3 / 2", objectFit: "cover", display: "block" } })),
+            h("div", { style: { marginTop: 6, fontFamily: "Cinzel, serif", fontSize: 10, letterSpacing: 1, color: "#C8BFAA" } }, im.format === "collage" ? "COLLAGE · " + im.panelCount : "SINGLE"),
+            h("div", { style: { fontSize: 10, color: "rgba(200,190,170,0.45)", marginTop: 2 } }, (styles.filter(function (s) { return s.id === im.style; })[0] || { label: "" }).label)));
+      })) : h("div", { style: { fontSize: 13, color: "rgba(200,190,170,0.55)", fontStyle: "italic", lineHeight: 1.6, marginTop: 20 } }, "Nothing here yet. Images you create in Echō are kept here, private to you.");
+    } else {
+      var m = opts.moderation;
+      body = h("div", null,
+        refineImg ? h(ChamferBox, { size: "sm", borderColor: accent + "66", fillColor: "rgba(25,16,45,0.5)", style: { marginTop: 16 } }, h("div", { style: { padding: 10, display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" } },
+          h("div", { style: { width: 54, lineHeight: 0, flexShrink: 0, clipPath: ECHO_CUT } }, h("img", { src: "/api/images/" + encodeURIComponent(refineImg.id), alt: "", style: { width: "100%", aspectRatio: "3 / 2", objectFit: "cover", display: "block" } })),
+          h("div", { style: { flex: "1 1 160px", minWidth: 0, fontSize: 11, color: "rgba(230,222,205,0.8)", lineHeight: 1.5 } }, "Refining this image. Its format" + (isCollage ? " (" + refineImg.panelCount + " panels)" : "") + " and style stay the same. Describe only what should change."),
+          h(ChamferBtn, { size: "sm", variant: "ghost", onClick: function () { setRefine(null); setSelRefs([]); }, style: { fontSize: 10, flex: "0 0 auto", width: "100%" } }, "CANCEL REFINING"))) : null,
+        !refineImg ? h("div", null,
+          label("IMAGE FORMAT"),
+          h("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 } }, pick("single", "Single Image", fmt === "single", function () { setFmt("single"); }), pick("collage", "Collage", fmt === "collage", function () { setFmt("collage"); })),
+          fmt === "single" ? h("div", null, label("SHAPE"), h("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 } }, [["portrait", "Portrait"], ["square", "Square"], ["landscape", "Landscape"]].map(function (a) { return pick(a[0], a[1], aspect === a[0], function () { setAspect(a[0]); }); }))) : null,
+          fmt === "collage" ? h("div", null,
+            label("NUMBER OF PANELS", "One picture holding every panel. A higher count costs more Sköl."),
+            h("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 } }, opts.collageCounts.map(function (n) { return pick("n" + n, n + " panels", cnt === n, function () { setCnt(n); }, null, layoutMini(n, cnt === n)); })),
+            label("SHOW PANEL NUMBERS", "An overlay you can turn on or off later, without paying again."),
+            h("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 } }, pick("nOn", "On", nums, function () { setNums(true); }), pick("nOff", "Off", !nums, function () { setNums(false); }))) : null) : null,
+        label("WHAT HAPPENS", refineImg ? "What should change?" : isCollage ? "Describe the story the panels tell, from first to last." : "Describe the moment."),
+        h(ChamferField, { size: "sm", activeBorderColor: accent + "AA", fillColor: "rgba(25,16,45,0.5)" }, h("textarea", { value: prompt, onChange: function (e) { setPrompt(e.target.value.slice(0, 1500)); }, rows: 4, placeholder: refineImg ? "Make the sky a deep violet…" : "Two friends crossing the market at dusk…", style: { width: "100%", padding: "12px 14px", background: "transparent", border: "none", outline: "none", color: "#EEE8DD", fontSize: 13, lineHeight: 1.5, resize: "none", fontFamily: "inherit", boxSizing: "border-box" } })),
+        !refineImg ? h("div", null,
+          label("ARTISTIC DIRECTION (OPTIONAL)"),
+          h(ChamferField, { size: "sm", activeBorderColor: accent + "AA", fillColor: "rgba(25,16,45,0.5)" }, h("input", { value: dir, onChange: function (e) { setDir(e.target.value.slice(0, 500)); }, placeholder: "Golden hour, wide shot…", style: { width: "100%", padding: "12px 14px", background: "transparent", border: "none", outline: "none", color: "#EEE8DD", fontSize: 13, boxSizing: "border-box" } })),
+          label("STYLE", "Starts with your own style (" + ((styles.filter(function (s) { return s.id === inheritedStyle; })[0] || { label: "Realism" }).label) + "). Pick another for this image only."),
+          h("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 } }, styles.map(function (s) { return pick(s.id, s.label, style === s.id, function () { setPickedStyle(s.id); }, s.id === inheritedStyle ? "YOURS" : s.tier === "premium" ? "PREMIUM" : s.tier === "echo" ? "ECHŌ ONLY" : null); })),
+          label("WORLD (OPTIONAL)", "Keeps the architecture and atmosphere true to that world."),
+          h("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 } }, [pick("any", "Any", !world, function () { setWorld(null); })].concat(opts.worlds.map(function (w) { return pick(w, w, world === w, function () { setWorld(w); }); })))) : null,
+        label("REFERENCES (UP TO " + maxRefs + ")", "Your avatar, your Telōsians, or photos you add. They keep faces and looks consistent."),
+        h("div", { style: { display: "flex", flexWrap: "wrap", gap: 10 } },
+          opts.refs.map(function (r) {
+            var sel = selRefs.indexOf(r.ref) >= 0, src = r.ref[0] === "i" ? "/api/images/" + r.ref.slice(2) : "/api/echo/refs/" + r.ref.slice(2) + "/image";
+            var cap = r.source === "avatar" ? "YOU" : r.source === "telo" ? (r.kind === "telo" ? "FIRST TELŌSIAN" : r.kind.slice(5).toUpperCase().slice(0, 10)) : "PHOTO";
+            return h(ChamferBox, { key: r.ref, size: "sm", borderColor: sel ? accent + "99" : "rgba(255,255,255,0.08)", fillColor: sel ? accent + "40" : "rgba(10,6,20,0.5)", glowColor: sel ? accent + "33" : null, selected: sel, onClick: function () { setSelRefs(function (l) { return l.indexOf(r.ref) >= 0 ? l.filter(function (x) { return x !== r.ref; }) : l.length < maxRefs ? l.concat([r.ref]) : l; }); }, style: { width: 74, cursor: "pointer", WebkitTapHighlightColor: "transparent" } },
+              h("div", { style: { padding: 4 } }, h("div", { style: { lineHeight: 0, clipPath: ECHO_CUT } }, h("img", { src: src, alt: cap, style: { width: "100%", aspectRatio: "2 / 3", objectFit: "cover", display: "block" } })), h("div", { style: { marginTop: 4, fontSize: 8, letterSpacing: 1, textAlign: "center", color: "rgba(200,190,170,0.6)", fontFamily: "Cinzel, serif" } }, cap),
+                r.source === "upload" ? h("div", { onClick: function (e) { e.stopPropagation(); removeRef(r.ref); }, style: { marginTop: 3, fontSize: 8, textAlign: "center", color: "#E58A8A", letterSpacing: 1 } }, "REMOVE") : null));
+          }),
+          opts.config.allowPhotoUploads ? h(ChamferBox, { size: "sm", borderColor: "rgba(255,255,255,0.12)", fillColor: "rgba(10,6,20,0.5)", onClick: function () { setCertOpen(!certOpen); }, style: { width: 74, cursor: "pointer", WebkitTapHighlightColor: "transparent" } }, h("div", { style: { padding: "34px 4px", textAlign: "center", fontFamily: "Cinzel, serif", fontSize: 10, letterSpacing: 1, color: "#C8BFAA" } }, "+ PHOTO")) : null),
+        certOpen ? h(ChamferBox, { size: "sm", borderColor: "rgba(255,255,255,0.1)", fillColor: "rgba(10,6,20,0.6)", style: { marginTop: 10 } }, h("div", { style: { padding: 12 } },
+          h("div", { style: { fontSize: 11, color: "rgba(230,222,205,0.8)", lineHeight: 1.5, marginBottom: 10 } }, "Who is in the photo? Only adults, and only people who agree to it."),
+          [["self", "It is me"], ["permission", "I have their permission"], ["rights", "My own character"]].map(function (c) { return h("div", { key: c[0], style: { marginBottom: 8 } }, h(ChamferBtn, { size: "sm", variant: "ghost", accentColor: accent, onClick: function () { certRef.current = c[0]; if (fileRef.current) fileRef.current.click(); }, style: { width: "100%", fontSize: 11 } }, c[1])); }),
+          h("input", { ref: fileRef, type: "file", accept: "image/*", multiple: true, onChange: function (e) { var f = Array.from(e.target.files || []); e.target.value = ""; if (f.length) addPhoto(f); }, style: { display: "none" } }))) : null,
+        h("div", { style: { marginTop: 22, display: "flex", gap: 10, alignItems: "flex-start", cursor: "pointer", fontSize: 12, color: "rgba(230,222,205,0.8)", lineHeight: 1.5 }, onClick: function () { setAdult(!adult); } },
+          h("span", { style: { flexShrink: 0, color: adult ? accent : "rgba(200,190,170,0.4)", fontSize: 13 } }, adult ? "◆" : "◇"), h("span", null, "Everyone shown is an adult (18 or over).")),
+        h(ChamferBox, { size: "md", borderColor: accent + "66", fillColor: "#101014", style: { marginTop: 22 } }, h("div", { style: { padding: 14 } },
+          h("div", { style: { fontFamily: "Cinzel, serif", fontSize: 11, letterSpacing: 2, color: "rgba(200,190,170,0.55)" } }, "PRICE"),
+          qErr ? h("div", { style: { marginTop: 8, fontSize: 12, color: "#E58A8A", lineHeight: 1.5 } }, qErr)
+            : !quote ? h("div", { style: { marginTop: 8, fontSize: 12, color: "rgba(200,190,170,0.5)" } }, "Checking the price…")
+            : h("div", null,
+              h("div", { style: { marginTop: 8, fontFamily: "Cinzel, serif", fontSize: 20, color: "#E8D9A8" } }, quote.amountSkol.toLocaleString() + " Sköl"),
+              h("div", { style: { marginTop: 2, fontSize: 11, color: "rgba(200,190,170,0.6)" } }, (isCollage ? (refineImg ? refineImg.panelCount : cnt) + "-panel collage" : "Single image") + " · one image use"),
+              h("div", { style: { marginTop: 8, fontSize: 10, color: "rgba(200,190,170,0.45)", lineHeight: 1.5 } }, "Test build: no Sköl is taken yet. The price is recorded so you can see what it will cost. Daily and monthly spending limits still apply."),
+              h("div", { style: { marginTop: 12, display: "flex", gap: 10, alignItems: "flex-start", cursor: "pointer", fontSize: 12, color: "rgba(230,222,205,0.85)", lineHeight: 1.5 }, onClick: function () { setConf(!conf); } },
+                h("span", { style: { flexShrink: 0, color: conf ? accent : "rgba(200,190,170,0.4)", fontSize: 13 } }, conf ? "◆" : "◇"), h("span", null, "I approve " + quote.amountSkol.toLocaleString() + " Sköl for this image."))))),
+        m && m.enabled ? h("div", { style: { marginTop: 10, fontSize: 10, color: "rgba(200,190,170,0.4)", letterSpacing: 1 } }, "OPENAI MODERATION: " + m.mode.toUpperCase() + " (CHANGE IN SETTINGS)") : null,
+        h("div", { style: { marginTop: 16 } }, h(ChamferBtn, { size: "lg", variant: "primary", accentColor: accent, glowColor: canGo ? accent + "33" : null, disabled: !canGo, onClick: generate, style: { width: "100%", fontSize: 12, letterSpacing: 2 } }, busy ? (isCollage ? "COMPOSING YOUR PANELS…" : "CREATING…") : refineImg ? "REFINE IMAGE" : isCollage ? "CREATE COLLAGE" : "CREATE IMAGE")),
+        busy ? h("div", { style: { marginTop: 10, fontSize: 11, color: "rgba(200,190,170,0.55)", fontStyle: "italic", lineHeight: 1.5 } }, "This can take a minute or two. You can stay on this screen.") : null);
+    }
+    var viewImg = viewId && opts ? opts.images.filter(function (i) { return i.id === viewId; })[0] : null;
+    return h("div", { style: { position: "fixed", inset: 0, zIndex: 100, background: "#06060F", overflowY: "auto", WebkitOverflowScrolling: "touch" } },
+      h("div", { style: { padding: "calc(env(safe-area-inset-top, 0px) + 16px) 16px 48px", maxWidth: 520, margin: "0 auto" } },
+        h("div", { style: { display: "flex", alignItems: "center", gap: 12, marginBottom: 16 } }, back, h("div", { style: { fontFamily: "Cinzel, serif", fontSize: 20, color: "#EEE8DD" } }, "Echō image")),
+        h("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 } }, tabBtn("make", "CREATE"), tabBtn("archive", "ARCHIVE" + (opts && opts.images.length ? " · " + opts.images.length : ""))),
+        body,
+        msg ? h("div", { role: "status", style: { marginTop: 14, fontSize: 12, color: "#E58A8A", lineHeight: 1.5 } }, msg) : null),
+      viewImg ? h(EchoViewer, { key: viewImg.id, img: viewImg, rows: opts.rows, original: viewImg.refinedFrom ? opts.images.filter(function (i) { return i.id === viewImg.refinedFrom; })[0] : null, styleLabel: (styles.filter(function (s) { return s.id === viewImg.style; })[0] || { label: "" }).label,
+        onClose: function () { setViewId(null); }, onChanged: function (imgs) { setOpts(function (o) { return Object.assign({}, o, { images: imgs }); }); },
+        onDeleted: function () { setViewId(null); load(); },
+        onRefine: function (id) { setViewId(null); setRefine(id); setSelRefs([]); setTab("make"); setPrompt(""); } }) : null);
+  }
+
+  // Settings card: the real, server-enforced OpenAI filtering preference. Shown only to accounts the Worker marks eligible (private adult beta).
+  function ImageGenerationSettingsCard() {
+    var R = import_react, h = R.createElement, accent = "#7B5EA7";
+    var stS = R.useState({ loading: true, enabled: false, mode: "auto", failed: false }), st = stS[0], setSt = stS[1];
+    var saveS = R.useState(false), saving = saveS[0], setSaving = saveS[1];
+    var errS = R.useState(""), err = errS[0], setErr = errS[1];
+    R.useEffect(function () {
+      var live = true;
+      TelosImg.call("/api/echo/options").then(function (o) { if (live) setSt({ loading: false, enabled: !!(o.moderation && o.moderation.enabled), mode: o.moderation ? o.moderation.mode : "auto", failed: false }); }).catch(function () { if (live) setSt({ loading: false, enabled: false, mode: "auto", failed: true }); });
+      return function () { live = false; };
+    }, []);
+    async function choose(mode) {
+      if (!st.enabled || saving || mode === st.mode) return;
+      setSaving(true); setErr("");
+      try { var r = await TelosImg.call("/api/echo/settings", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ mode: mode }) }); setSt(Object.assign({}, st, { mode: r.mode })); }
+      catch (e) { setErr(echoMsg(e)); }
+      setSaving(false);
+    }
+    if (st.loading || !st.enabled) return null;
+    var opt = function (id, text) { var sel = st.mode === id; return h(ChamferBox, { key: id, size: "sm", borderColor: sel ? accent + "99" : "rgba(255,255,255,0.08)", fillColor: sel ? accent + "40" : "rgba(10,6,20,0.5)", glowColor: sel ? accent + "33" : null, selected: sel, onClick: function () { choose(id); }, style: { flex: 1, cursor: "pointer", textAlign: "center", WebkitTapHighlightColor: "transparent" } }, h("div", { style: { padding: "12px 8px", fontFamily: "Cinzel, serif", fontSize: 12, color: sel ? "#EEE8DD" : "#C8BFAA" } }, saving && !sel ? "…" : text)); };
+    return h(ChamferBox, { size: "md", borderColor: "rgba(255,255,255,0.09)", fillColor: "#101014", style: { marginBottom: 16 } }, h("div", { style: { padding: 16 } },
+      h("div", { style: { fontSize: 9, letterSpacing: 2, color: "rgba(200,190,170,0.4)", fontFamily: "Cinzel, serif", marginBottom: 8 } }, "IMAGE GENERATION · PRIVATE BETA"),
+      h("div", { style: { fontSize: 14, color: "#EEE8DD", fontWeight: 600 } }, "OpenAI moderation"),
+      h("div", { style: { fontSize: 11, color: "rgba(200,190,170,0.6)", marginTop: 4, lineHeight: 1.5, marginBottom: 12 } }, st.mode === "low" ? "Low filtering. This is the default for the adult beta." : "Auto filtering. Standard sensitivity."),
+      h("div", { style: { display: "flex", gap: 10 } }, opt("auto", "AUTO"), opt("low", "LOW")),
+      h("div", { style: { fontSize: 10, color: "rgba(200,190,170,0.48)", lineHeight: 1.6, marginTop: 12 } }, "Applies to images you make from now on, not to finished ones. It changes OpenAI’s filtering only. Telos’s own safety checks, adult-only characters and the provider’s rules always apply."),
+      err ? h("div", { role: "alert", style: { color: "#E58A8A", fontSize: 11, marginTop: 10 } }, err) : null));
+  }
+
+  function SettingsScreen({ onExit, onOpenAvatarImage, onOpenEcho }) {
     const [busy, setBusy] = (0, import_react.useState)(false);
     const [sivaad, setSivaad] = (0, import_react.useState)(null);
     (0, import_react.useEffect)(() => {
@@ -35370,6 +35721,8 @@ He glances toward the window where the Aston Martin is parked crooked at the cur
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontFamily: "Cinzel, serif", fontSize: 20, color: "#EEE8DD" }, children: "Settings" })
       ] }),
       onOpenAvatarImage ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ChamferBtn, { size: "md", variant: "ghost", accentColor: "#7B5EA7", style: { width: "100%", marginBottom: 16, padding: "14px 16px", letterSpacing: 2, fontSize: 12 }, onClick: onOpenAvatarImage, children: "AVATAR IMAGE" }) : null,
+      onOpenEcho ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ChamferBtn, { size: "md", variant: "ghost", accentColor: "#7B5EA7", style: { width: "100%", marginBottom: 16, padding: "14px 16px", letterSpacing: 2, fontSize: 12 }, onClick: onOpenEcho, children: "ECH\u014C IMAGE" }) : null,
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ImageGenerationSettingsCard, {}),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: 16, background: "rgba(255,255,255,0.03)", borderRadius: 10, border: "1px solid rgba(255,255,255,0.08)", marginBottom: 16 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 9, letterSpacing: 2, color: "rgba(200,190,170,0.4)", fontFamily: "Cinzel, serif", marginBottom: 8 }, children: "DATA BACKUP" }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: "rgba(230,222,205,0.8)", lineHeight: 1.5, marginBottom: 16 }, children: "Everything saved here \u2014 your Tel\u014Ds, memories, relationships, onboarding status \u2014 is tied to this specific session's storage. It doesn't automatically follow the code if you move to a new session. Export a backup here, then import it there." }),
@@ -38521,8 +38874,9 @@ initRemote();
           setEditingTeloName(activeTelo);
           setScreen("create-telo");
         } }),
-        screen === "settings" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SettingsScreen, { onExit: () => setScreen(preSettingsScreen), onOpenAvatarImage: userProfile ? () => setScreen("avatarImage") : null }),
+        screen === "settings" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SettingsScreen, { onExit: () => setScreen(preSettingsScreen), onOpenAvatarImage: userProfile ? () => setScreen("avatarImage") : null, onOpenEcho: () => setScreen("echoImage") }),
         screen === "telo-image" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TeloImageScreen, { teloName: activeTelo, onExit: () => setScreen("telosian-profile") }),
+        screen === "echoImage" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EchoImageScreen, { userProfile, onExit: () => setScreen("settings") }),
         screen === "avatarImage" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AvatarImageScreen, { userProfile, onExit: () => setScreen("settings"), onSaved: (ad) => setUserProfile(ad) }),
         screen === "encyclopaedia" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EncyclopaediaScreen, { onExit: () => setScreen("home") }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(LanguagePracticeScreen, { active: screen === "languages", onExit: () => setScreen("home") }),
