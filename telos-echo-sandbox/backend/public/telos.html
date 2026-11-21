@@ -35740,7 +35740,8 @@ He glances toward the window where the Aston Martin is parked crooked at the cur
         if (failed.length || !onboardingBack) {
           setMessage({ type: "error", text: `Restored ${keys.length - failed.length} of ${keys.length} items. ${failed.length ? "Could not save: " + failed.slice(0, 6).join(", ") + (failed.length > 6 ? " and " + (failed.length - 6) + " more" : "") + ". Your phone\u2019s browser storage may be full. " : ""}${onboardingBack ? "" : "Your account record is not in this backup, so the app will start over. "}` });
         } else
-        setMessage({ type: "success", text: `Restored ${keys.length} saved item${keys.length === 1 ? "" : "s"}. Reload the app to see them.` });
+        setMessage({ type: "success", text: `Restored ${keys.length} saved item${keys.length === 1 ? "" : "s"}. Opening your dashboard\u2026` });
+        setTimeout(() => { try { window.location.reload(); } catch (e) { } }, 900);   // reload here, on this same address, so nothing depends on where you reload from
       } catch (err) {
         setMessage({ type: "error", text: "Import failed: " + (err?.message || "invalid file") });
       }
