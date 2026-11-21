@@ -10,7 +10,7 @@ import { createOpenAIImageAdapter } from '../../src/openai-image-api.mjs';
 import { ApiError, parseConfig, costFromUsage, dayKey, containsMinorSignal, sniffImage, firstNumber, normalizeOnboarding, KINDS, isKind, baseKind } from './common.mjs';
 import { screenUpload, screenOutput } from './safety.mjs';
 import { PREBUILT, PREBUILT_VERSION, refPlan, prebuiltScene, normalizePrebuilt } from './prebuilt-canon.mjs';
-import { STYLES, WORLD_IDS, WORLD_VISUAL, COLLAGE_COUNTS, COLLAGE_ROWS, MAX_ECHO_REFS, QUOTE_TTL_MS, skolPrices, priceFor, normalizeFormat, normalizeEcho, sizeFor, echoDirection, styleId, eligibleForLowModeration } from './echo.mjs';
+import { STYLES, WORLD_IDS, WORLD_VISUAL, worldCanon, SUB_WORLDS, MARIS_DEEP_SPECIES, COLLAGE_COUNTS, COLLAGE_ROWS, MAX_ECHO_REFS, QUOTE_TTL_MS, skolPrices, priceFor, normalizeFormat, normalizeEcho, sizeFor, echoDirection, styleId, eligibleForLowModeration } from './echo.mjs';
 
 const CHUNK = 900_000;
 const MAX_JSON_BYTES = 32 * 1024;
@@ -318,7 +318,7 @@ export class UserState extends DurableObject {
   echoImages() {
     return this.q("SELECT id,meta,created_at FROM images WHERE kind='echo' ORDER BY created_at DESC LIMIT 60").map((r) => {
       let m = {}; try { m = JSON.parse(r.meta) ?? {}; } catch { /* ignore */ }
-      return { id: r.id, createdAt: r.created_at, format: m.format ?? 'single', panelCount: m.panelCount ?? null, showPanelNumbers: m.showPanelNumbers === true, style: m.style ?? 'realism', world: m.world ?? null,
+      return { id: r.id, createdAt: r.created_at, format: m.format ?? 'single', panelCount: m.panelCount ?? null, showPanelNumbers: m.showPanelNumbers === true, style: m.style ?? 'realism', world: m.world ?? null, subWorld: m.subWorld ?? null,
         aspect: m.aspect ?? 'portrait', refinedFrom: m.refinedFrom ?? null, scene: m.scene ?? '', captions: Array.isArray(m.captions) ? m.captions : [], moderation: m.moderation ?? null };
     });
   }
@@ -330,7 +330,7 @@ export class UserState extends DurableObject {
   echoOptions() {
     const cfg = this.cfg, prices = skolPrices(this.env);
     return {
-      styles: STYLES.map(({ id, label, tier }) => ({ id, label, tier })), worlds: WORLD_IDS, collageCounts: COLLAGE_COUNTS, rows: COLLAGE_ROWS, maxRefs: MAX_ECHO_REFS,
+      styles: STYLES.map(({ id, label, tier }) => ({ id, label, tier })), worlds: WORLD_IDS, subWorlds: SUB_WORLDS, marisDeepSpecies: MARIS_DEEP_SPECIES, collageCounts: COLLAGE_COUNTS, rows: COLLAGE_ROWS, maxRefs: MAX_ECHO_REFS,
       pricing: { currency: 'Sköl', collageConfigured: !!prices.collage, charged: false },
       moderation: this.echoModeration(), refs: this.echoRefList(), images: this.echoImages(),
       limits: { callsToday: this.callsToday(Date.now()), callsPerDay: cfg.maxCallsPerDayUser },
@@ -516,7 +516,7 @@ export class UserState extends DurableObject {
           return [{ id: p.kind, displayName: p.name || (p.kind === 'avatar' ? 'The user' : 'The companion'), canonVersion: 'v1', canonAgeClass: adult, ageAmbiguous: adult !== 'adult', minorPresenting: false, adultEligible: false,
             appearance: { locked: p.canon, atSceneTime: p.outfit ? { currentOutfit: p.outfit } : {} }, relationshipFacts: [] }];
         },
-        async getWorldSnapshot() { if (echo) return { id: 'echo', visualCanon: p.world ? `${p.world}: ${WORLD_VISUAL[p.world]}` : '' }; return { id: 'onboarding', visualCanon: pb ? pb.worldVisual : (p.world || '') }; }
+        async getWorldSnapshot() { if (echo) return { id: 'echo', visualCanon: p.world ? `${p.world}: ${worldCanon(p.world, p.subWorld ?? null)}` : '' }; return { id: 'onboarding', visualCanon: pb ? pb.worldVisual : (p.world || '') }; }
       },
       media: {
         async loadCanonReferences() {
@@ -538,7 +538,7 @@ export class UserState extends DurableObject {
         async savePrivateImage(rec) {
           const id = rid(); const { bytes, ...m } = rec;
           self.run('INSERT INTO images(id,job_id,kind,blob_id,meta,accepted,created_at) VALUES(?,?,?,?,?,0,?)', id, jobId, face ? p.kind + '_face' : p.kind, self.putBlob(bytes, rec.mime),
-            JSON.stringify({ ...(echo ? { format: p.format, panelCount: p.panelCount, showPanelNumbers: p.showPanelNumbers, style: p.style, world: p.world, aspect: p.aspect, refinedFrom: p.refinedFrom ?? null, scene: p.prompt.slice(0, 300), skolQuoted: p.skolQuoted ?? null, captions: [] } : {}), part: face ? 'face' : 'full', model: m.providerModel, quality: cfg.quality, size: cfg.size, referenceCount: m.referenceCount, endpoint: m.endpoint, moderation: m.moderation, ...(pb ? { charId: p.charId, form: p.form, mode: p.mode } : {}) }), Date.now());
+            JSON.stringify({ ...(echo ? { format: p.format, panelCount: p.panelCount, showPanelNumbers: p.showPanelNumbers, style: p.style, world: p.world, subWorld: p.subWorld ?? null, aspect: p.aspect, refinedFrom: p.refinedFrom ?? null, scene: p.prompt.slice(0, 300), skolQuoted: p.skolQuoted ?? null, captions: [] } : {}), part: face ? 'face' : 'full', model: m.providerModel, quality: cfg.quality, size: cfg.size, referenceCount: m.referenceCount, endpoint: m.endpoint, moderation: m.moderation, ...(pb ? { charId: p.charId, form: p.form, mode: p.mode } : {}) }), Date.now());
           return { id };
         }
       },

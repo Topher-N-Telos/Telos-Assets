@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { COLLAGE_COUNTS, COLLAGE_ROWS, panelRects, skolPrices, priceFor, collagePrompt, styleId, STYLES, normalizeFormat, eligibleForLowModeration, allowedWorlds, worldLock, WORLD_IDS } from '../../src/echo.mjs';
+import { COLLAGE_COUNTS, COLLAGE_ROWS, panelRects, skolPrices, priceFor, collagePrompt, styleId, STYLES, normalizeFormat, eligibleForLowModeration, allowedWorlds, worldLock, WORLD_IDS, subWorldsFor, worldCanon } from '../../src/echo.mjs';
 
 test('every collage size has full-width rows and a rectangle per panel, ending at the last number', () => {
   for (const n of COLLAGE_COUNTS) {
@@ -44,4 +44,11 @@ test('allowed worlds are the intersection across everyone shown; unknown species
 test('world lock names the world, its vernacular, and forbids mixing', () => {
   for (const w of WORLD_IDS) { const t = worldLock(w); assert.match(t, new RegExp('LOCK \\(' + w + '\\)')); assert.match(t, /Do not mix worlds/); }
   assert.match(worldLock('UMBRA'), /Gothic vertical/);
+});
+
+test('sub-worlds: Deep only for deep species; Solis has exactly three skies and forbids a dark one', () => {
+  assert.deepEqual(subWorldsFor('MARIS', ['Human']), ['outpost']); assert.deepEqual(subWorldsFor('MARIS', ['Merfolk', 'Oceanids']), ['outpost', 'deep']);
+  assert.deepEqual(subWorldsFor('SOLIS', ['Human']), ['day', 'night', 'polar']); assert.deepEqual(subWorldsFor('TERRA', ['Human']), []);
+  for (const k of ['day', 'night', 'polar']) assert.match(worldCanon('SOLIS', k), /NEVER HAS A DARK NIGHT SKY/);
+  assert.notEqual(worldCanon('MARIS', 'outpost'), worldCanon('MARIS', 'deep'));
 });
