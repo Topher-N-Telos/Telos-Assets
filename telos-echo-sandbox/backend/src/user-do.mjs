@@ -328,7 +328,7 @@ export class UserState extends DurableObject {
   // and tops off on its own when the day rolls over, and a failed job refunds itself.
   skolWallet(now = Date.now()) {
     const prices = skolPrices(this.env);
-    if (!prices.collage || String(this.env.SKOL_TEST_ALLOWANCE ?? '') === 'off') return null;
+    if (!prices.collage || this.unlimited || String(this.env.SKOL_TEST_ALLOWANCE ?? '') === 'off') return null;   // the owner account is never limited by the test allowance
     const n = Number(this.env.SKOL_TEST_COLLAGES), collages = Number.isSafeInteger(n) && n > 0 ? n : 3;
     const cap = collages * prices.collage[9], tz = this.cfg.timeZone, today = dayKey(now, tz);
     let spent = 0;
