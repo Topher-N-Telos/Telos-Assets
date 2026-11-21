@@ -32295,9 +32295,10 @@ Convert this into a precise, structured clothing/outfit description optimized fo
     { id: "worlds", label: "Worlds", built: true },
     { id: "my-telos", label: "My Tel\u014Ds", built: true },
     { id: "challenge", label: "Challenge", built: true },
-    { id: "create-telo", label: "Tel\u014D Creation", built: true },
+    // App v140 — Telō Creation and Creator Studio share one "Create" card that turns over to show both; Echō takes the freed place.
+    { id: "create", label: "Create", built: true, flip: [{ id: "create-telo", label: "Tel\u014D Creation", built: true }, { id: "creator-studio", label: "Creator Studio", built: false }] },
     { id: "design", label: "Design", built: true },
-    { id: "creator-studio", label: "Creator Studio", built: false },
+    { id: "echo", label: "Ech\u014D", built: true },
     { id: "creator-income", label: "Creator Income", built: false },
     // FIXED (App v113) — flipped built:true. Backs onto LanguagePracticeScreen
     // (Hirameki, embedded as an interim stand-in — see its definition above
@@ -32368,6 +32369,18 @@ Convert this into a precise, structured clothing/outfit description optimized fo
           ] }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("circle", { cx: "70", cy: "70", r: "5", fill: "#E4D7F5" }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("circle", { cx: "30", cy: "70", r: "5", fill: "#E4D7F5" })
+        ] });
+      case "create":
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("svg", { viewBox: "0 0 100 100", style: s, fill: "none", stroke: "currentColor", strokeWidth: "3", strokeLinecap: "round", strokeLinejoin: "round", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", { d: "M50 14 L58 42 L86 50 L58 58 L50 86 L42 58 L14 50 L42 42 Z" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("circle", { cx: "50", cy: "50", r: "4", fill: "currentColor", stroke: "none" })
+        ] });
+      case "echo":
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("svg", { viewBox: "0 0 100 100", style: s, fill: "none", stroke: "currentColor", strokeWidth: "3", strokeLinecap: "round", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("circle", { cx: "34", cy: "50", r: "6", fill: "currentColor", stroke: "none" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", { d: "M50 34 A22 22 0 0 1 50 66" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", { d: "M62 22 A40 40 0 0 1 62 78" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", { d: "M74 10 A58 58 0 0 1 74 90", opacity: "0.55" })
         ] });
       case "create-telo":
         return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("svg", { viewBox: "0 0 100 100", style: s, fill: "none", stroke: "currentColor", strokeWidth: "3", children: [
@@ -32484,7 +32497,34 @@ Convert this into a precise, structured clothing/outfit description optimized fo
       ] })
     ] });
   }
+  // App v140 — a card that turns over to show the cards folded into it. Same chamfer, glow and type as every other dashboard card.
+  function FlipDashboardCard({ card, onNavigate }) {
+    const R = import_react, h = R.createElement;
+    const flippedS = R.useState(false), flipped = flippedS[0], setFlipped = flippedS[1];
+    const cut = 13, ci = 11.5;
+    const clip = (c) => `polygon(${c}px 0, calc(100% - ${c}px) 0, 100% ${c}px, 100% calc(100% - ${c}px), calc(100% - ${c}px) 100%, ${c}px 100%, 0 calc(100% - ${c}px), 0 ${c}px)`;
+    const face = { position: "absolute", inset: 0, backfaceVisibility: "hidden", WebkitBackfaceVisibility: "hidden" };
+    const mini = (sub) => {
+      const live = sub.built;
+      return h("div", { key: sub.id, onClick: (e) => { e.stopPropagation(); if (live) onNavigate(sub.id); }, style: { height: 38, clipPath: clip(8), background: "linear-gradient(135deg, rgba(210,190,235,0.1), rgba(160,135,195,0.03))", boxShadow: "0 0 10px rgba(190,165,225,0.2)", cursor: live ? "pointer" : "default", WebkitTapHighlightColor: "transparent" } },
+        h("div", { style: { clipPath: clip(7), margin: 1.5, height: "calc(100% - 3px)", background: "rgba(120,105,145,0.09)", display: "flex", alignItems: "center", gap: 8, padding: "0 10px", position: "relative" } },
+          h("div", { style: { width: 22, height: 22, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transform: "scale(0.82)" } }, h(DashboardGlyph, { id: sub.id })),
+          h("div", { style: { fontFamily: "Cinzel, serif", fontSize: 11, color: "#EEE8DD", whiteSpace: "nowrap" } }, sub.label),
+          !live ? h("div", { style: { position: "absolute", bottom: 4, right: 8, fontSize: 6.5, letterSpacing: 1, fontFamily: "Cinzel, serif", color: "rgba(200,190,170,0.4)" } }, "SOON") : null));
+    };
+    return h("div", { style: { height: 108, perspective: 800, position: "relative" } },
+      h("div", { style: { position: "absolute", inset: 0, transformStyle: "preserve-3d", WebkitTransformStyle: "preserve-3d", transition: "transform 0.55s cubic-bezier(0.4, 0.1, 0.2, 1)", transform: flipped ? "rotateY(180deg)" : "none" } },
+        h("div", { style: Object.assign({}, face, { pointerEvents: flipped ? "none" : "auto" }) }, h(DashboardCard, { card: Object.assign({}, card, { flip: null }), onNavigate: () => setFlipped(true) })),
+        h("div", { style: Object.assign({}, face, { transform: "rotateY(180deg)", pointerEvents: flipped ? "auto" : "none" }) },
+          h("div", { style: { height: "100%", clipPath: clip(cut), background: "linear-gradient(135deg, rgba(210,190,235,0.06), rgba(160,135,195,0.02))", boxShadow: "0 0 16px rgba(190,165,225,0.18)" } },
+            h("div", { style: { clipPath: clip(ci), margin: 1.5, height: "calc(100% - 3px)", background: "rgba(120,105,145,0.07)", padding: "5px 8px 8px", display: "flex", flexDirection: "column", gap: 5, boxSizing: "border-box" } },
+              h("div", { onClick: () => setFlipped(false), role: "button", "aria-label": "Turn the card back", style: { height: 20, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 4px", cursor: "pointer", WebkitTapHighlightColor: "transparent" } },
+                h("div", { style: { fontFamily: "Cinzel, serif", fontSize: 9, letterSpacing: 2, color: "rgba(200,190,170,0.6)" } }, "CREATE"),
+                h("div", { style: { fontSize: 13, color: "rgba(228,215,245,0.85)", lineHeight: 1 } }, "\u21BA")),
+              card.flip.map(mini)))))); 
+  }
   function DashboardCard({ card, onNavigate, locked = false, wide = false }) {
+    if (card.flip) return import_react.createElement(FlipDashboardCard, { card, onNavigate });
     const live = card.built && !locked;
     const [pressed, setPressed] = (0, import_react.useState)(false);
     const cut = 13, cutInner = 11.5;
@@ -38668,6 +38708,7 @@ initRemote();
   function TelosApp() {
     const [screen, setScreen] = (0, import_react.useState)("loading");
     const [preSettingsScreen, setPreSettingsScreen] = (0, import_react.useState)("main");
+    const [echoReturn, setEchoReturn] = (0, import_react.useState)("settings");   // where Echō\u2019s back arrow goes: the dashboard card or Settings
     const [loadAttempt, setLoadAttempt] = (0, import_react.useState)(0);
     const [activeTab, setActiveTab] = (0, import_react.useState)("companion");
     const [activeTelo, setActiveTelo] = (0, import_react.useState)("Seraphine");
@@ -38907,9 +38948,9 @@ initRemote();
           setEditingTeloName(activeTelo);
           setScreen("create-telo");
         } }),
-        screen === "settings" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SettingsScreen, { onExit: () => setScreen(preSettingsScreen), onOpenAvatarImage: userProfile ? () => setScreen("avatarImage") : null, onOpenEcho: () => setScreen("echoImage") }),
+        screen === "settings" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SettingsScreen, { onExit: () => setScreen(preSettingsScreen), onOpenAvatarImage: userProfile ? () => setScreen("avatarImage") : null, onOpenEcho: () => { setEchoReturn("settings"); setScreen("echoImage"); } }),
         screen === "telo-image" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TeloImageScreen, { teloName: activeTelo, onExit: () => setScreen("telosian-profile") }),
-        screen === "echoImage" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EchoImageScreen, { userProfile, onExit: () => setScreen("settings") }),
+        screen === "echoImage" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EchoImageScreen, { userProfile, onExit: () => setScreen(echoReturn === "home" ? "home" : "settings") }),
         screen === "avatarImage" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AvatarImageScreen, { userProfile, onExit: () => setScreen("settings"), onSaved: (ad) => setUserProfile(ad) }),
         screen === "encyclopaedia" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EncyclopaediaScreen, { onExit: () => setScreen("home") }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(LanguagePracticeScreen, { active: screen === "languages", onExit: () => setScreen("home") }),
@@ -38954,6 +38995,10 @@ initRemote();
                   break;
                 case "create-telo":
                   setScreen("create-telo");
+                  break;
+                case "echo":
+                  setEchoReturn("home");
+                  setScreen("echoImage");
                   break;
                 // FIXED (App v95) — this set activeTab to "design", but the Home Builder only
                 // renders when activeTab === "home" (the bottom nav's Design button uses id
