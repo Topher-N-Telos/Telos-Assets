@@ -35436,9 +35436,16 @@ He glances toward the window where the Aston Martin is parked crooked at the cur
     WORLD_NOT_COMPATIBLE: "Someone in this picture cannot enter that world. Choose one they can all visit.",
     WORLD_CONFLICT: "Your description names a different world. Choose that world instead, or remove its name."
   };
+  // Sköl is always written with its own mark, and thousands are separated with apostrophes (1'200, 2'500'000), never commas.
+  var SKOL_MARK = "/_blob/350364d27aaaaee90089a764bb5e59ad.png";
+  function skolNum(n) { var v = Math.round(Number(n)); if (!isFinite(v)) return ""; var a = String(Math.abs(v)).replace(/\B(?=(\d{3})+(?!\d))/g, "'"); return (v < 0 ? "-" : "") + a; }
+  function SkolMark(props) { return import_react.createElement("img", { src: SKOL_MARK, alt: "Sk\u00F6l", style: { height: props.size || "1.15em", width: "auto", verticalAlign: "-0.2em", marginLeft: "0.28em", display: "inline-block" } }); }
+  function SkolAmt(props) { return import_react.createElement("span", { style: { whiteSpace: "nowrap" } }, skolNum(props.n), import_react.createElement(SkolMark, { size: props.size })); }
+  // Turns "[SK]" in a message into the mark (used for messages that arrive as plain text).
+  function skolRich(str) { if (typeof str !== "string" || str.indexOf("[SK]") < 0) return str; var parts = str.split("[SK]"), out = []; parts.forEach(function (t, i) { out.push(t); if (i < parts.length - 1) out.push(import_react.createElement(SkolMark, { key: "m" + i })); }); return out; }
   function echoResetText(iso) { try { var d = new Date(iso); return isNaN(d) ? "" : d.toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" }); } catch (x) { return ""; } }
   function echoMsg(e) {
-    if (e && e.code === "INSUFFICIENT_SKOL" && e.body) return "You have " + Number(e.body.balance).toLocaleString() + " Sköl left and this costs " + Number(e.body.price).toLocaleString() + ". Your Sköl refills when your image allowance resets" + (e.body.resetsAt ? ", around " + echoResetText(e.body.resetsAt) : "") + ".";
+    if (e && e.code === "INSUFFICIENT_SKOL" && e.body) return "You have " + skolNum(e.body.balance) + "[SK] left and this costs " + skolNum(e.body.price) + "[SK]. Your balance refills when your image allowance resets" + (e.body.resetsAt ? ", around " + echoResetText(e.body.resetsAt) : "") + ".";
     return (e && ECHO_MSG[e.code]) || TelosImg.message(e);
   }
   var ECHO_CUT = "polygon(5px 0, calc(100% - 5px) 0, 100% 5px, 100% calc(100% - 5px), calc(100% - 5px) 100%, 5px 100%, 0 calc(100% - 5px), 0 5px)";
@@ -35564,7 +35571,7 @@ He glances toward the window where the Aston Martin is parked crooked at the cur
         h("div", { style: { marginTop: 14 } }, del
           ? h("div", { style: { display: "flex", gap: 8, alignItems: "center" } }, h("div", { style: { flex: 1, fontSize: 11, color: "#E58A8A" } }, "Delete this image for good?"), h(ChamferBtn, { size: "sm", variant: "ghost", onClick: function () { setDel(false); }, style: { fontSize: 11 } }, "KEEP"), h(ChamferBtn, { size: "sm", variant: "ghost", accentColor: "#C25A5A", disabled: busy, onClick: remove, style: { fontSize: 11 } }, "DELETE"))
           : h(ChamferBtn, { size: "sm", variant: "ghost", onClick: function () { setDel(true); }, style: { fontSize: 10, opacity: 0.7 } }, "DELETE")),
-        msg ? h("div", { role: "status", style: { marginTop: 12, fontSize: 12, color: "#E8D9A8", lineHeight: 1.5 } }, msg) : null));
+        msg ? h("div", { role: "status", style: { marginTop: 12, fontSize: 12, color: "#E8D9A8", lineHeight: 1.5 } }, skolRich(msg)) : null));
   }
 
   function EchoImageScreen(props) {
@@ -35743,14 +35750,14 @@ He glances toward the window where the Aston Martin is parked crooked at the cur
           h("span", { style: { flexShrink: 0, color: adult ? accent : "rgba(200,190,170,0.4)", fontSize: 13 } }, adult ? "◆" : "◇"), h("span", null, "Everyone shown is an adult (18 or over).")),
         h(ChamferBox, { size: "md", borderColor: accent + "66", fillColor: "#101014", style: { marginTop: 22 } }, h("div", { style: { padding: 14 } },
           h("div", { style: { fontFamily: "Cinzel, serif", fontSize: 11, letterSpacing: 2, color: "rgba(200,190,170,0.55)" } }, "PRICE"),
-          qErr ? h("div", { style: { marginTop: 8, fontSize: 12, color: "#E58A8A", lineHeight: 1.5 } }, qErr)
+          qErr ? h("div", { style: { marginTop: 8, fontSize: 12, color: "#E58A8A", lineHeight: 1.5 } }, skolRich(qErr))
             : !quote ? h("div", { style: { marginTop: 8, fontSize: 12, color: "rgba(200,190,170,0.5)" } }, "Checking the price…")
             : h("div", null,
-              h("div", { style: { marginTop: 8, fontFamily: "Cinzel, serif", fontSize: 20, color: "#E8D9A8" } }, quote.amountSkol.toLocaleString() + " Sköl"),
+              h("div", { style: { marginTop: 8, fontFamily: "Cinzel, serif", fontSize: 20, color: "#E8D9A8" } }, h(SkolAmt, { n: quote.amountSkol, size: "1.1em" })),
               h("div", { style: { marginTop: 2, fontSize: 11, color: "rgba(200,190,170,0.6)" } }, (isCollage ? (refineImg ? refineImg.panelCount : cnt) + "-panel collage" : "Single image") + " · one image use"),
-              quote.charged ? h("div", { style: { marginTop: 8, fontSize: 11, color: "rgba(225,215,195,0.75)", lineHeight: 1.5 } }, "Your Sköl: " + quote.balance.toLocaleString() + " now, " + quote.balanceAfter.toLocaleString() + " after this image. It refills when your image allowance resets" + (quote.resetsAt ? ", around " + echoResetText(quote.resetsAt) : "") + ". Unused Sköl tops off at that point, it does not pile up.") : h("div", { style: { marginTop: 8, fontSize: 10, color: "rgba(200,190,170,0.45)", lineHeight: 1.5 } }, "Test build: no Sköl is taken yet. The price is recorded so you can see what it will cost. Daily and monthly spending limits still apply."),
+              quote.charged ? h("div", { style: { marginTop: 8, fontSize: 11, color: "rgba(225,215,195,0.75)", lineHeight: 1.5 } }, "Your balance: ", h(SkolAmt, { n: quote.balance, size: "1.25em" }), " now, ", h(SkolAmt, { n: quote.balanceAfter, size: "1.25em" }), " after this image. It refills when your image allowance resets" + (quote.resetsAt ? ", around " + echoResetText(quote.resetsAt) : "") + ". Unused Sköl tops off at that point, it does not pile up.") : h("div", { style: { marginTop: 8, fontSize: 10, color: "rgba(200,190,170,0.45)", lineHeight: 1.5 } }, "Test build: no Sköl is taken yet. The price is recorded so you can see what it will cost. Daily and monthly spending limits still apply."),
               h("div", { style: { marginTop: 12, display: "flex", gap: 10, alignItems: "flex-start", cursor: "pointer", fontSize: 12, color: "rgba(230,222,205,0.85)", lineHeight: 1.5 }, onClick: function () { setConf(!conf); } },
-                h("span", { style: { flexShrink: 0, color: conf ? accent : "rgba(200,190,170,0.4)", fontSize: 13 } }, conf ? "◆" : "◇"), h("span", null, "I approve " + quote.amountSkol.toLocaleString() + " Sköl for this image."))))),
+                h("span", { style: { flexShrink: 0, color: conf ? accent : "rgba(200,190,170,0.4)", fontSize: 13 } }, conf ? "◆" : "◇"), h("span", null, "I approve ", h(SkolAmt, { n: quote.amountSkol, size: "1.25em" }), " for this image."))))),
         m && m.enabled ? h("div", { style: { marginTop: 10, fontSize: 10, color: "rgba(200,190,170,0.4)", letterSpacing: 1 } }, "OPENAI MODERATION: " + m.mode.toUpperCase() + " (CHANGE IN SETTINGS)") : null,
         h("div", { style: { marginTop: 16 } }, h(ChamferBtn, { size: "lg", variant: "primary", accentColor: accent, glowColor: canGo ? accent + "33" : null, disabled: !canGo, onClick: generate, style: { width: "100%", fontSize: 12, letterSpacing: 2 } }, busy ? (isCollage ? "COMPOSING YOUR PANELS…" : "CREATING…") : refineImg ? "REFINE IMAGE" : isCollage ? "CREATE COLLAGE" : "CREATE IMAGE")),
         busy ? h("div", { style: { marginTop: 10, fontSize: 11, color: "rgba(200,190,170,0.55)", fontStyle: "italic", lineHeight: 1.5 } }, "This can take a minute or two. You can stay on this screen.") : null);
@@ -35761,7 +35768,7 @@ He glances toward the window where the Aston Martin is parked crooked at the cur
         h("div", { style: { display: "flex", alignItems: "center", gap: 12, marginBottom: 16 } }, back, h("div", { style: { fontFamily: "Cinzel, serif", fontSize: 20, color: "#EEE8DD" } }, "Echō image")),
         h("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 } }, tabBtn("make", "CREATE"), tabBtn("archive", "ARCHIVE" + (opts && opts.images.length ? " · " + opts.images.length : ""))),
         body,
-        msg ? h("div", { role: "status", style: { marginTop: 14, fontSize: 12, color: "#E58A8A", lineHeight: 1.5 } }, msg) : null),
+        msg ? h("div", { role: "status", style: { marginTop: 14, fontSize: 12, color: "#E58A8A", lineHeight: 1.5 } }, skolRich(msg)) : null),
       viewImg ? h(EchoViewer, { key: viewImg.id, img: viewImg, rows: opts.rows, original: viewImg.refinedFrom ? opts.images.filter(function (i) { return i.id === viewImg.refinedFrom; })[0] : null, styleLabel: (styles.filter(function (s) { return s.id === viewImg.style; })[0] || { label: "" }).label,
         onClose: function () { setViewId(null); }, onChanged: function (imgs) { setOpts(function (o) { return Object.assign({}, o, { images: imgs }); }); },
         onDeleted: function () { setViewId(null); load(); },
