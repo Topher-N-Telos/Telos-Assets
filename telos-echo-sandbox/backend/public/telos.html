@@ -35297,7 +35297,11 @@ He glances toward the window where the Aston Martin is parked crooked at the cur
     IMAGE_PRICING_UNAVAILABLE: "A price for this kind of image has not been set up yet.",
     IMAGE_SETTING_NOT_ALLOWED: "That setting is not available for your account.",
     IDEMPOTENCY_CONFLICT: "That request changed. Please try again.",
-    ADULT_ATTESTATION_REQUIRED: "Please confirm that everyone shown is an adult (18+)."
+    ADULT_ATTESTATION_REQUIRED: "Please confirm that everyone shown is an adult (18+).",
+    WORLD_REQUIRED: "Choose a world for this image.",
+    WORLD_SPECIES_REQUIRED: "Choose a world for this image.",
+    WORLD_NOT_COMPATIBLE: "Someone in this picture cannot enter that world. Choose one they can all visit.",
+    WORLD_CONFLICT: "Your description names a different world. Choose that world instead, or remove its name."
   };
   function echoMsg(e) { return (e && ECHO_MSG[e.code]) || TelosImg.message(e); }
   var ECHO_CUT = "polygon(5px 0, calc(100% - 5px) 0, 100% 5px, 100% calc(100% - 5px), calc(100% - 5px) 100%, 5px 100%, 0 calc(100% - 5px), 0 5px)";
@@ -35439,6 +35443,7 @@ He glances toward the window where the Aston Martin is parked crooked at the cur
     var numS = S(false), nums = numS[0], setNums = numS[1];
     var styS = S(null), pickedStyle = styS[0], setPickedStyle = styS[1];
     var worldS = S(null), world = worldS[0], setWorld = worldS[1];
+    var telsS = S([]), telosians = telsS[0], setTelosians = telsS[1];
     var promptS = S(""), prompt = promptS[0], setPrompt = promptS[1];
     var dirS = S(""), dir = dirS[0], setDir = dirS[1];
     var refsS = S([]), selRefs = refsS[0], setSelRefs = refsS[1];
@@ -35458,9 +35463,20 @@ He glances toward the window where the Aston Martin is parked crooked at the cur
       try { var o = await TelosImg.call("/api/echo/options"); if (alive.current) { setOpts(o); setLoadErr(false); } return o; }
       catch (e) { if (alive.current) setLoadErr(true); return null; }
     }
-    R.useEffect(function () { load(); }, []);
+    R.useEffect(function () { load(); loadMyTelosians().then(function (l) { if (alive.current && Array.isArray(l)) setTelosians(l); }).catch(function () { }); }, []);
 
     var styles = opts ? opts.styles : [];
+    // Who is in the picture decides which worlds are open: the avatar plus every Telōsian shown must all be able to enter.
+    var avatarSpecies = userProfile.species || "Human";
+    var speciesList = [avatarSpecies];
+    selRefs.forEach(function (rf) {
+      var meta = opts ? opts.refs.filter(function (x) { return x.ref === rf; })[0] : null;
+      if (!meta || meta.source !== "telo" || meta.kind.indexOf("telo~") !== 0) return;
+      var rec = telosians.filter(function (t) { return teloImageScopeId(t.firstName) === meta.kind.slice(5); })[0];
+      var sp = rec && (rec.teloType || rec.species); if (sp && speciesList.indexOf(sp) < 0) speciesList.push(sp);
+    });
+    var openWorlds = (opts ? opts.worlds : []).filter(function (w) { return speciesList.every(function (sp) { return getCompatibleWorlds(sp).indexOf(w) >= 0; }); });
+    var effWorld = openWorlds.indexOf(world) >= 0 ? world : openWorlds.indexOf(getNativeWorld(avatarSpecies)) >= 0 ? getNativeWorld(avatarSpecies) : openWorlds[0] || null;
     var inheritedStyle = (function () { var l = String(userProfile.style || "").toLowerCase(); var m = styles.filter(function (s) { return s.label.toLowerCase() === l || s.id === l; })[0]; return m ? m.id : "realism"; })();
     var style = pickedStyle || inheritedStyle;
     var refineImg = refine && opts ? opts.images.filter(function (i) { return i.id === refine; })[0] : null;
@@ -35482,12 +35498,12 @@ He glances toward the window where the Aston Martin is parked crooked at the cur
       return function () { dead = true; };
     }, [!!opts, fmt, cnt, nums, refine, tab, tick]);
 
-    var canGo = !!(opts && !busy && prompt.trim().length >= 3 && adult && quote && conf && !qErr);
+    var canGo = !!(opts && !busy && prompt.trim().length >= 3 && adult && quote && conf && !qErr && (refineImg || effWorld));
     async function generate() {
       if (!canGo) return;
       setBusy(true); setMsg("");
       var body = { prompt: prompt.trim(), direction: dir.trim(), style: refineImg ? refineImg.style : style, adultAttested: true, idempotencyKey: keyRef.current, quoteId: quote.quoteId, refs: selRefs.slice(0, maxRefs) };
-      if (world && !refineImg) body.world = world;
+      if (!refineImg) { body.world = effWorld; body.species = speciesList; }
       if (refineImg) body.refineOf = refineImg.id; else if (fmt === "collage") { body.format = "collage"; body.panelCount = cnt; body.showPanelNumbers = nums; } else { body.format = "single"; body.aspect = aspect; }
       try {
         var j = await TelosImg.call("/api/echo/generate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
@@ -35564,8 +35580,8 @@ He glances toward the window where the Aston Martin is parked crooked at the cur
           h(ChamferField, { size: "sm", activeBorderColor: accent + "AA", fillColor: "rgba(25,16,45,0.5)" }, h("input", { value: dir, onChange: function (e) { setDir(e.target.value.slice(0, 500)); }, placeholder: "Golden hour, wide shot…", style: { width: "100%", padding: "12px 14px", background: "transparent", border: "none", outline: "none", color: "#EEE8DD", fontSize: 13, boxSizing: "border-box" } })),
           label("STYLE", "Starts with your own style (" + ((styles.filter(function (s) { return s.id === inheritedStyle; })[0] || { label: "Realism" }).label) + "). Pick another for this image only."),
           h("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 } }, styles.map(function (s) { return pick(s.id, s.label, style === s.id, function () { setPickedStyle(s.id); }, s.id === inheritedStyle ? "YOURS" : s.tier === "premium" ? "PREMIUM" : s.tier === "echo" ? "ECHŌ ONLY" : null); })),
-          label("WORLD (OPTIONAL)", "Keeps the architecture and atmosphere true to that world."),
-          h("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 } }, [pick("any", "Any", !world, function () { setWorld(null); })].concat(opts.worlds.map(function (w) { return pick(w, w, world === w, function () { setWorld(w); }); })))) : null,
+          label("WORLD", openWorlds.length ? "Only worlds everyone in the picture can enter. The image follows that world\u2019s architecture, light and materials." : "No single world admits everyone in this picture. Remove a reference."),
+          h("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 } }, openWorlds.map(function (w) { return pick(w, w, effWorld === w, function () { setWorld(w); }); }))) : null,
         label("REFERENCES (UP TO " + maxRefs + ")", "Your avatar, your Telōsians, or photos you add. They keep faces and looks consistent."),
         h("div", { style: { display: "flex", flexWrap: "wrap", gap: 10 } },
           opts.refs.map(function (r) {

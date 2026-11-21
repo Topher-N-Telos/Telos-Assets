@@ -103,6 +103,19 @@ const text = (v, max, field, req = false) => {
 };
 const REF = /^(i|u):[A-Za-z0-9_-]{6,40}$/;
 
+/** Which worlds a species may enter (native first). Mirrors the app's SPECIES_WORLDS table; an unlisted species is unrestricted, as in the app. */
+export const SPECIES_WORLDS = Object.freeze({"Human": {"native": "TERRA", "permitted": ["UMBRA", "SOLIS", "AURIS", "VELA", "TENEBRIS", "AEONIS", "AXIOM", "MARIS"]}, "Rootkin": {"native": "TERRA", "permitted": ["UMBRA", "AXIOM", "AURIS", "SOLIS", "AEONIS", "TENEBRIS", "MARIS"]}, "Vampire": {"native": "UMBRA", "permitted": ["AEONIS", "TENEBRIS", "AURIS"]}, "Sorcerer": {"native": "UMBRA", "permitted": ["AURIS", "AEONIS", "TENEBRIS"]}, "Wraith": {"native": "UMBRA", "permitted": ["TENEBRIS", "AEONIS"]}, "Shadow Sage": {"native": "UMBRA", "permitted": ["TERRA", "AXIOM"]}, "Vesper": {"native": "UMBRA", "permitted": ["TENEBRIS"]}, "Cyborg": {"native": "AXIOM", "permitted": ["VELA", "TERRA"]}, "Android": {"native": "AXIOM", "permitted": ["VELA", "TERRA"]}, "Pixel Sprite": {"native": "AXIOM", "permitted": ["SOLIS"]}, "Dragon": {"native": "AURIS", "permitted": ["AEONIS", "SOLIS", "UMBRA"]}, "Elf": {"native": "AURIS", "permitted": ["UMBRA", "AEONIS", "MARIS", "SOLIS"]}, "Griffin": {"native": "AURIS", "permitted": ["UMBRA", "SOLIS", "AEONIS", "TENEBRIS"]}, "Sylph": {"native": "AURIS", "permitted": ["SOLIS", "AEONIS"]}, "Forest Giant": {"native": "AURIS", "permitted": ["UMBRA", "TENEBRIS", "SOLIS"]}, "Nimbus": {"native": "AURIS", "permitted": ["SOLIS", "AEONIS"]}, "Phoenix": {"native": "SOLIS", "permitted": ["AEONIS", "AURIS"]}, "Jinn": {"native": "SOLIS", "permitted": ["AEONIS", "TENEBRIS", "UMBRA"]}, "Azer": {"native": "SOLIS", "permitted": ["AXIOM", "TERRA"]}, "Garuda": {"native": "SOLIS", "permitted": ["AEONIS", "VELA"]}, "Sun Mage": {"native": "SOLIS", "permitted": ["TERRA", "AEONIS", "AURIS"]}, "Solidi": {"native": "SOLIS", "permitted": ["AXIOM", "AEONIS"]}, "Deity": {"native": "AEONIS", "permitted": ["SOLIS", "AURIS"]}, "Demigod": {"native": "AEONIS", "permitted": ["SOLIS", "TERRA"]}, "Fae": {"native": "AEONIS", "permitted": ["AURIS", "UMBRA", "TENEBRIS", "SOLIS"]}, "Seraph": {"native": "AEONIS", "permitted": ["TERRA", "UMBRA", "AXIOM", "AURIS", "SOLIS", "VELA", "TENEBRIS"]}, "Celestine": {"native": "AEONIS", "permitted": ["SOLIS", "AURIS"]}, "Alien": {"native": "VELA", "permitted": []}, "Vantari": {"native": "VELA", "permitted": ["AXIOM", "TERRA"]}, "Lycanthrope": {"native": "TENEBRIS", "permitted": ["UMBRA", "AURIS"]}, "Revenant": {"native": "TENEBRIS", "permitted": ["UMBRA"]}, "Gargoyle": {"native": "TENEBRIS", "permitted": ["UMBRA", "AURIS"]}, "Nephilim": {"native": "TENEBRIS", "permitted": ["TERRA", "UMBRA", "AXIOM", "AURIS", "SOLIS", "AEONIS", "VELA"]}, "The Unseen": {"native": "TENEBRIS", "permitted": ["UMBRA"]}, "Merfolk": {"native": "MARIS", "permitted": []}, "Sea Serpent": {"native": "MARIS", "permitted": []}, "Sea Nymph": {"native": "MARIS", "permitted": []}, "Bajau": {"native": "MARIS", "permitted": []}, "Oceanids": {"native": "MARIS", "permitted": []}});
+export const compatibleWorlds = (species) => { const e = SPECIES_WORLDS[species]; return e ? [e.native, ...e.permitted] : [...WORLD_IDS]; };
+/** Worlds open to EVERYONE in the picture: the intersection across the user's avatar species and every Telōsian type shown. */
+export const allowedWorlds = (speciesList) => (speciesList ?? []).reduce((acc, sp) => acc.filter((w) => compatibleWorlds(sp).includes(w)), [...WORLD_IDS]);
+const WORLD_NAME_RE = new RegExp('\\b(' + WORLD_IDS.join('|') + ')\\b', 'i');
+
+/** Hard rule for every image: one world, its vernacular is not negotiable by the scene text. */
+export function worldLock(world) {
+  const others = WORLD_IDS.filter((w) => w !== world).join(', ');
+  return `WORLD VERNACULAR LOCK (${world}): This image takes place in ${world} and in no other world. ${world} look: ${WORLD_VISUAL[world]} Architecture, materials, lighting, technology level, street furniture and signage must all follow this. If the scene text asks for anything that belongs to ${others} or to a different world's look, keep the scene's action but draw it in the ${world} equivalent. Do not mix worlds.`;
+}
+
 /** Shared by quote + generate. `refine` (an existing Echō image's metadata) forces its format/style/world so edits keep them. */
 export function normalizeFormat(body, refine = null) {
   const b = body ?? {};
@@ -126,21 +139,29 @@ export function normalizeEcho(body, refine = null) {
   const b = body ?? {};
   const f = normalizeFormat(b, refine);
   if (f.world !== null && !WORLD_IDS.includes(f.world)) throw bad('world');
+  let species = [];
+  if (!refine) {
+    if (f.world === null) throw new ApiError(400, 'WORLD_REQUIRED');
+    species = Array.isArray(b.species) ? b.species : null;
+    if (!species || !species.length || species.length > 6 || species.some((x) => typeof x !== 'string' || !x || x.length > 40)) throw new ApiError(400, 'WORLD_SPECIES_REQUIRED');
+    if (!allowedWorlds(species).includes(f.world)) throw new ApiError(403, 'WORLD_NOT_COMPATIBLE');
+  }
   if (b.adultAttested !== true) throw new ApiError(400, 'ADULT_ATTESTATION_REQUIRED');
   const prompt = text(b.prompt, 1500, 'prompt', true), direction = text(b.direction, 500, 'direction');
   if (containsMinorSignal(prompt, direction)) throw new ApiError(400, 'BLOCKED_MINOR_TERMS');
+  if (f.world) for (const m of `${prompt} ${direction}`.matchAll(new RegExp(WORLD_NAME_RE.source, 'gi'))) if (m[1].toUpperCase() !== f.world) throw new ApiError(400, 'WORLD_CONFLICT');
   const refs = b.refs ?? [];
   if (!Array.isArray(refs) || refs.length > MAX_ECHO_REFS || refs.some((r) => typeof r !== 'string' || !REF.test(r)) || new Set(refs).size !== refs.length) throw bad('refs');
   const key = String(b.idempotencyKey ?? ''); if (!/^[A-Za-z0-9_-]{16,64}$/.test(key)) throw bad('idempotencyKey');
   const quoteId = String(b.quoteId ?? ''); if (!/^[A-Za-z0-9_-]{16,64}$/.test(quoteId)) throw new ApiError(403, 'IMAGE_QUOTE_REQUIRED');
-  return { kind: 'echo', ...f, prompt, direction, refs, ...(refine ? { refinedFrom: String(b.refineOf) } : {}), idempotencyKey: key, quoteId, photoIds: [], canon: {} };
+  return { kind: 'echo', ...f, species, prompt, direction, refs, ...(refine ? { refinedFrom: String(b.refineOf) } : {}), idempotencyKey: key, quoteId, photoIds: [], canon: {} };
 }
 export const sizeFor = (f) => (f.format === 'collage' ? COLLAGE_SIZE : SINGLE_SIZES[f.aspect] ?? SINGLE_SIZES.portrait);
 
 /** Art direction handed to the shared scene builder: style first, then collage layout, then the user's words. */
 export function echoDirection(p) {
   const st = STYLES.find((s) => s.id === p.style) ?? STYLES[0];
-  return [`VISUAL STYLE (${st.label}): ${st.prompt}`, p.format === 'collage' ? collagePrompt(p.panelCount, st.label) : '', p.refinedFrom ? 'REFINEMENT: the first reference image is the existing image. Keep its composition, characters, layout and art style; apply ONLY the change requested below.' : '', `SCENE: ${p.prompt}`, p.direction && `ARTISTIC DIRECTION: ${p.direction}`].filter(Boolean).join('\n');
+  return [p.world ? worldLock(p.world) : '', `VISUAL STYLE (${st.label}): ${st.prompt}`, p.format === 'collage' ? collagePrompt(p.panelCount, st.label) : '', p.refinedFrom ? 'REFINEMENT: the first reference image is the existing image. Keep its composition, characters, layout and art style; apply ONLY the change requested below.' : '', `SCENE: ${p.prompt}`, p.direction && `ARTISTIC DIRECTION: ${p.direction}`].filter(Boolean).join('\n');
 }
 
 export const eligibleForLowModeration = (env, email) => {

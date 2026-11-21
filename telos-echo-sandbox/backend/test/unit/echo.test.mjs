@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { COLLAGE_COUNTS, COLLAGE_ROWS, panelRects, skolPrices, priceFor, collagePrompt, styleId, STYLES, normalizeFormat, eligibleForLowModeration } from '../../src/echo.mjs';
+import { COLLAGE_COUNTS, COLLAGE_ROWS, panelRects, skolPrices, priceFor, collagePrompt, styleId, STYLES, normalizeFormat, eligibleForLowModeration, allowedWorlds, worldLock, WORLD_IDS } from '../../src/echo.mjs';
 
 test('every collage size has full-width rows and a rectangle per panel, ending at the last number', () => {
   for (const n of COLLAGE_COUNTS) {
@@ -33,4 +33,15 @@ test('only the owner and the explicit adult-beta list may use Low moderation', (
   const env = { OWNER_EMAIL: 'o@x.com', ADULT_BETA_EMAILS: 'a@x.com, B@x.com' };
   assert.deepEqual(['o@x.com', 'A@x.com', 'b@x.com', 'c@x.com', ''].map((e) => eligibleForLowModeration(env, e)), [true, true, true, false, false]);
   assert.equal(eligibleForLowModeration({}, 'o@x.com'), false);
+});
+
+test('allowed worlds are the intersection across everyone shown; unknown species are unrestricted like the app', () => {
+  assert.deepEqual(allowedWorlds(['Merfolk']), ['MARIS']);
+  assert.ok(allowedWorlds(['Human']).includes('MARIS') && allowedWorlds(['Human']).includes('TERRA'));
+  assert.deepEqual(allowedWorlds(['Vesper', 'Vampire']), ['UMBRA', 'TENEBRIS']);
+  assert.equal(allowedWorlds(['Something New']).length, 9);
+});
+test('world lock names the world, its vernacular, and forbids mixing', () => {
+  for (const w of WORLD_IDS) { const t = worldLock(w); assert.match(t, new RegExp('LOCK \\(' + w + '\\)')); assert.match(t, /Do not mix worlds/); }
+  assert.match(worldLock('UMBRA'), /Gothic vertical/);
 });

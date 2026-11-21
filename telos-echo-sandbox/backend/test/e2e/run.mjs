@@ -400,7 +400,7 @@ test('Telō made after onboarding: its own package, redos and accepted image, in
 const ea = (who) => as(who, E), eAlice = ea(ALICE), eBob = ea(BOB), eOwner = ea(OWNER);
 const mlog = () => fetch(`http://127.0.0.1:${MOCK}/__log`).then((r) => r.json());
 const quoteFor = async (api, over = {}) => { const r = await api('POST', '/api/echo/quote', { format: 'collage', panelCount: 4, showPanelNumbers: false, ...over }); assert.equal(r.status, 200, JSON.stringify(r.json)); return r.json; };
-const echoBody = (q, over = {}) => { const b = { prompt: 'Two friends walking through the village market at dusk', adultAttested: true, idempotencyKey: key(), quoteId: q.quoteId, format: 'collage', panelCount: 4, showPanelNumbers: false, ...over }; if (b.format === 'single') { delete b.panelCount; delete b.showPanelNumbers; } return b; };
+const echoBody = (q, over = {}) => { const b = { prompt: 'Two friends walking through the village market at dusk', adultAttested: true, idempotencyKey: key(), quoteId: q.quoteId, format: 'collage', panelCount: 4, showPanelNumbers: false, world: 'TERRA', species: ['Human'], ...over }; if (b.format === 'single') { delete b.panelCount; delete b.showPanelNumbers; } return b; };
 const echoGen = async (api, over = {}, qover = {}) => { await sleep(150); const q = await quoteFor(api, { ...(over.format === 'single' ? { format: 'single', panelCount: undefined } : {}), ...(over.panelCount ? { panelCount: over.panelCount } : {}), ...(over.showPanelNumbers !== undefined ? { showPanelNumbers: over.showPanelNumbers } : {}), ...qover }); const r = await api('POST', '/api/echo/generate', echoBody(q, over)); return { q, r }; };
 
 test('echo: options expose the one style list, 4–9 counts, and who may use Low moderation', async () => {
@@ -429,7 +429,7 @@ test('echo: Sköl quotes rise strictly from 4 to 9 panels, are one image use, ne
 
 test('echo: a collage is ONE provider request (n=1) and ONE image use; quote is single-use and bound to count; replay is free', async () => {
   const sum0 = (await eOwner('GET', '/api/_admin/summary')).json.callsToday;
-  assert.equal((await eAlice('POST', '/api/echo/generate', { prompt: 'x', adultAttested: true, idempotencyKey: key(), format: 'collage', panelCount: 4 })).json.error, 'IMAGE_QUOTE_REQUIRED');
+  assert.equal((await eAlice('POST', '/api/echo/generate', { prompt: 'x', adultAttested: true, idempotencyKey: key(), format: 'collage', panelCount: 4, world: 'TERRA', species: ['Human'] })).json.error, 'IMAGE_QUOTE_REQUIRED');
   const q6 = await quoteFor(eAlice, { panelCount: 6, showPanelNumbers: true });
   const wrong = await eAlice('POST', '/api/echo/generate', echoBody(q6, { panelCount: 9 }));
   assert.equal(wrong.status, 403); assert.equal(wrong.json.error, 'IMAGE_QUOTE_INVALID');
@@ -541,4 +541,14 @@ test('echo: captions and numbers are overlays saved beside the image, never in t
   assert.equal((await eAlice('POST', '/api/echo/captions', { imageId: d.imageId, captions: ['a', 'b', 'c', 'd', 'e'] })).status, 400);
   assert.deepEqual((await eAlice('GET', '/api/images/' + d.imageId)).bytes, before);
   assert.equal((await eAlice('DELETE', '/api/images/' + d.imageId)).json.ok, true);
+});
+
+test('echo: world must be chosen, compatible with the avatar AND every Telōsian shown, and the scene cannot name another world', async () => {
+  const go = async (over) => { await sleep(150); const q = await quoteFor(eAlice, { format: 'single', panelCount: undefined }); return eAlice('POST', '/api/echo/generate', echoBody(q, { format: 'single', ...over })); };
+  assert.equal((await go({ world: null })).status, 400);                                            // a world is required
+  assert.equal((await go({ species: undefined })).json.error, 'WORLD_SPECIES_REQUIRED');
+  assert.equal((await go({ species: ['Merfolk'], world: 'TERRA' })).status, 403);                    // Merfolk cannot enter TERRA
+  assert.equal((await go({ species: ['Human', 'Merfolk'], world: 'UMBRA' })).status, 403);           // the Telōsian shown must be able to enter too
+  assert.equal((await go({ species: ['Vampire'], world: 'TENEBRIS' })).status, 200);                // permitted
+  assert.equal((await go({ prompt: 'A quiet street in UMBRA at night', world: 'TERRA' })).status, 400); // scene names a different world
 });
