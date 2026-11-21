@@ -111,7 +111,7 @@ export const allowedWorlds = (speciesList) => (speciesList ?? []).reduce((acc, s
 const WORLD_NAME_RE = new RegExp('\\b(' + WORLD_IDS.join('|') + ')\\b', 'i');
 
 /** Sub-tags: a world that looks different by region or sky carries one more tag. Chris's canon: Maris Outpost is its own tag; Solis has exactly three skies. */
-export const SUB_WORLDS = Object.freeze({ MARIS: ['outpost', 'deep'], SOLIS: ['day', 'night', 'polar'] });
+export const SUB_WORLDS = Object.freeze({ MARIS: ['outpost', 'deep'] });   // user-chosen sub-tags. Solis skies are NOT chosen by the user; the generator picks them from the scene text (solisSky).
 export const MARIS_DEEP_SPECIES = Object.freeze(['Merfolk', 'Sea Serpent', 'Oceanids', 'Sea Nymph']);
 /** The Deep is open only if everyone pictured belongs there; the Outpost tier is open to all of MARIS's visitors. */
 export const subWorldsFor = (world, speciesList) => {
@@ -119,12 +119,21 @@ export const subWorldsFor = (world, speciesList) => {
   if (world === 'MARIS') return (speciesList ?? []).every((sp) => MARIS_DEEP_SPECIES.includes(sp)) ? ['outpost', 'deep'] : ['outpost'];
   return [...SUB_WORLDS[world]];
 };
+const POLAR_RE = /\b(polar|arctic|glacier|glacial|iceberg|icebergs|ice sheet|ice field|tundra|permafrost|frozen sea)\b/i;
+const NIGHT_RE = /\b(night|nighttime|midnight|overnight|after dark|late at night|dusk|evening|twilight|sunset)\b/i;
+const DAY_RE = /\b(day|daytime|noon|midday|morning|afternoon|sunrise|dawn)\b/i;
+/** Backend-only Solis sky. day = champagne gold; night = midnight sun; polar = low red sun, ONLY for polar Solis (the scene must be in the polar region). `inherited` carries a refined image's earlier sky. */
+export function solisSky(text, inherited = null) {
+  const t = String(text ?? ''), polar = POLAR_RE.test(t) || inherited === 'polar', night = NIGHT_RE.test(t), day = DAY_RE.test(t);
+  if (polar) return day && !night ? 'day' : 'polar';
+  return night ? 'night' : day ? 'day' : (inherited === 'night' ? 'night' : 'day');
+}
 const MARIS_OUTPOST_VISUAL = 'ABOVE the water, the surface outposts of MARIS. Dense stacked platform rings and vertical spire clusters rather than sprawl; glass geodesic domes with an organic lattice framework, spires piercing the surface, elevated platform rings joined by causeways, warm interior light glowing through the glass at dusk. Relay outposts: exposed docking rigs, cable relay towers, pressure-lock waystations, dimmer utilitarian light. Open sea around the settlement. Small-city scale, never a metropolis.';
 const MARIS_DEEP_VISUAL = 'BELOW the surface, the deep of MARIS. Underwater, the same coastlines and river systems but filled. Pressure habitats, coral towers, bioluminescent civic lighting. The city extends down rather than up.';
 export const SOLIS_SKY = Object.freeze({
-  day: 'SOLIS DAY: a warm champagne-gold sky with a blue horizon.',
-  night: 'SOLIS NIGHT: the midnight sun. The sun is still up and the whole sky is a warm burnt orange.',
-  polar: 'POLAR SOLIS NIGHT: a low red sun and a burgundy sky.'
+  day: 'SOLIS DAY: a warm champagne-gold sky with a blue horizon. The low red sun and burgundy sky are never used here; they belong only to polar Solis.',
+  night: 'SOLIS NIGHT: the midnight sun. The sun is still up and the whole sky is a warm burnt orange. The low red sun and burgundy sky are never used here; they belong only to polar Solis.',
+  polar: 'POLAR SOLIS NIGHT: a low red sun and a burgundy sky. This sky belongs to polar Solis alone.'
 });
 const SOLIS_NO_DARK = 'SOLIS NEVER HAS A DARK NIGHT SKY. No black, navy or starry sky, no moonlit darkness, ever. Every hour is lit by one of its three skies, and a night scene uses the midnight-sun or the polar sky.';
 export const worldCanon = (world, sub = null) => {
@@ -172,17 +181,19 @@ export function normalizeEcho(body, refine = null) {
     if (!allowedWorlds(species).includes(f.world)) throw new ApiError(403, 'WORLD_NOT_COMPATIBLE');
   }
   let subWorld = null;
-  if (refine) subWorld = refine.subWorld ?? null;
+  if (f.world === 'SOLIS') subWorld = null;   // set below from the scene text; any sub-tag the browser sends is ignored
+  else if (refine) subWorld = refine.subWorld ?? null;
   else if (f.world && SUB_WORLDS[f.world]) {
     subWorld = typeof b.subWorld === 'string' ? b.subWorld : null;
     if (!subWorld || !SUB_WORLDS[f.world].includes(subWorld)) throw new ApiError(400, 'SUBWORLD_REQUIRED');
     if (!subWorldsFor(f.world, species).includes(subWorld)) throw new ApiError(403, 'SUBWORLD_NOT_COMPATIBLE');
-  } else if (b.subWorld !== undefined && b.subWorld !== null) throw new ApiError(400, 'FIELD_INVALID');
+  }
   if (b.adultAttested !== true) throw new ApiError(400, 'ADULT_ATTESTATION_REQUIRED');
   const prompt = text(b.prompt, 1500, 'prompt', true), direction = text(b.direction, 500, 'direction');
   if (containsMinorSignal(prompt, direction)) throw new ApiError(400, 'BLOCKED_MINOR_TERMS');
   if (f.world) for (const m of `${prompt} ${direction}`.matchAll(new RegExp(WORLD_NAME_RE.source, 'gi'))) if (m[1].toUpperCase() !== f.world) throw new ApiError(400, 'WORLD_CONFLICT');
   if (f.world === 'SOLIS' && SOLIS_DARK_RE.test(`${prompt} ${direction}`)) throw new ApiError(400, 'SOLIS_DARK_SKY');
+  if (f.world === 'SOLIS') subWorld = solisSky(`${prompt} ${direction}`, refine?.subWorld ?? null);
   const refs = b.refs ?? [];
   if (!Array.isArray(refs) || refs.length > MAX_ECHO_REFS || refs.some((r) => typeof r !== 'string' || !REF.test(r)) || new Set(refs).size !== refs.length) throw bad('refs');
   const key = String(b.idempotencyKey ?? ''); if (!/^[A-Za-z0-9_-]{16,64}$/.test(key)) throw bad('idempotencyKey');

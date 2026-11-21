@@ -400,7 +400,7 @@ test('Telō made after onboarding: its own package, redos and accepted image, in
 const ea = (who) => as(who, E), eAlice = ea(ALICE), eBob = ea(BOB), eOwner = ea(OWNER);
 const mlog = () => fetch(`http://127.0.0.1:${MOCK}/__log`).then((r) => r.json());
 const quoteFor = async (api, over = {}) => { const r = await api('POST', '/api/echo/quote', { format: 'collage', panelCount: 4, showPanelNumbers: false, ...over }); assert.equal(r.status, 200, JSON.stringify(r.json)); return r.json; };
-const echoBody = (q, over = {}) => { const b = { prompt: 'Two friends walking through the village market at dusk', adultAttested: true, idempotencyKey: key(), quoteId: q.quoteId, format: 'collage', panelCount: 4, showPanelNumbers: false, world: 'TERRA', species: ['Human'], ...(over.world === 'SOLIS' && !over.subWorld ? { subWorld: 'day' } : {}), ...over }; if (b.format === 'single') { delete b.panelCount; delete b.showPanelNumbers; } return b; };
+const echoBody = (q, over = {}) => { const b = { prompt: 'Two friends walking through the village market at dusk', adultAttested: true, idempotencyKey: key(), quoteId: q.quoteId, format: 'collage', panelCount: 4, showPanelNumbers: false, world: 'TERRA', species: ['Human'], ...over }; if (b.format === 'single') { delete b.panelCount; delete b.showPanelNumbers; } return b; };
 const echoGen = async (api, over = {}, qover = {}) => { await sleep(150); const q = await quoteFor(api, { ...(over.format === 'single' ? { format: 'single', panelCount: undefined } : {}), ...(over.panelCount ? { panelCount: over.panelCount } : {}), ...(over.showPanelNumbers !== undefined ? { showPanelNumbers: over.showPanelNumbers } : {}), ...qover }); const r = await api('POST', '/api/echo/generate', echoBody(q, over)); return { q, r }; };
 
 test('echo: options expose the one style list, 4–9 counts, and who may use Low moderation', async () => {
@@ -559,13 +559,21 @@ test('echo: Maris Outpost and Solis skies are their own sub-tags; Solis never ge
   assert.equal((await go({ world: 'MARIS', subWorld: 'deep' })).status, 403);                          // a Human cannot be pictured in the Deep
   assert.equal((await go({ world: 'MARIS', subWorld: 'outpost' })).status, 200);
   assert.equal((await go({ world: 'MARIS', subWorld: 'deep', species: ['Merfolk'] })).status, 200);
-  assert.equal((await go({ world: 'SOLIS', subWorld: 'dusk' })).json.error, 'SUBWORLD_REQUIRED');       // only day, night, polar
-  assert.equal((await go({ world: 'SOLIS', subWorld: 'night' })).status, 200);
-  assert.equal((await go({ world: 'SOLIS', subWorld: 'polar' })).status, 200);
-  assert.equal((await go({ world: 'SOLIS', subWorld: 'day', prompt: 'A starry night sky over the forge' })).json.error, 'SOLIS_DARK_SKY');
-  assert.equal((await go({ world: 'TERRA', subWorld: 'day' })).status, 400);                            // other worlds have no sub-tag
-  const prompts = (await mlog()).map((x) => x.prompt).join('\n');
-  assert.match(prompts, /MARIS \/ OUTPOST/); assert.match(prompts, /glass geodesic domes/);
-  assert.match(prompts, /SOLIS \/ NIGHT/); assert.match(prompts, /midnight sun/); assert.match(prompts, /POLAR SOLIS NIGHT: a low red sun and a burgundy sky/);
-  assert.match(prompts, /champagne-gold sky with a blue horizon/); assert.match(prompts, /NEVER HAS A DARK NIGHT SKY/);
+  // Solis skies are chosen by the generator from the scene text, never by the user
+  assert.equal((await go({ world: 'SOLIS', prompt: 'Two friends at the forge at midnight' })).status, 200);
+  assert.equal((await go({ world: 'SOLIS', prompt: 'A trader crossing the polar ice at dusk' })).status, 200);
+  assert.equal((await go({ world: 'SOLIS', prompt: 'A busy market at noon', subWorld: 'polar' })).status, 200);   // a forged sub-tag is ignored
+  assert.equal((await go({ world: 'TERRA', prompt: 'A polar bear mural in the arctic night' })).status, 200);      // polar words in another world never give the polar sky
+  assert.equal((await go({ world: 'SOLIS', prompt: 'A starry night sky over the forge' })).json.error, 'SOLIS_DARK_SKY');
+  const all = (await mlog()).map((x) => x.prompt);
+  const maris = all.filter((x) => /LOCK \(MARIS/.test(x)).join('\n');
+  assert.match(maris, /MARIS \/ OUTPOST/); assert.match(maris, /glass geodesic domes/);
+  const solis = all.filter((x) => /LOCK \(SOLIS/.test(x));
+  assert.ok(solis.some((x) => /SOLIS \/ NIGHT/.test(x) && /midnight sun/.test(x)));
+  assert.ok(solis.some((x) => /SOLIS \/ POLAR/.test(x) && /low red sun and a burgundy sky\. This sky belongs/.test(x)));
+  assert.ok(solis.some((x) => /SOLIS \/ DAY/.test(x) && /champagne-gold sky with a blue horizon/.test(x)));
+  assert.ok(solis.filter((x) => /SOLIS \/ (DAY|NIGHT)/.test(x)).every((x) => /never used here/.test(x)));   // day and night prompts forbid the polar sky
+  assert.ok(solis.every((x) => /NEVER HAS A DARK NIGHT SKY/.test(x)));
+  const terra = all.filter((x) => /LOCK \(TERRA/.test(x)).join('\n');
+  assert.ok(terra.length && !/burgundy|midnight sun|champagne/.test(terra));
 });
