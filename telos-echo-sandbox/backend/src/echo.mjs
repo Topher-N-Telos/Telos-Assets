@@ -1,0 +1,150 @@
+/**
+ * Echō image generation: Single Image or Collage (4–9 panels). Pure data + validation, no I/O.
+ *  - A collage is ONE canvas = ONE provider request (n:1) = ONE image use, whatever the panel count.
+ *  - Sköl prices are NEVER invented here. The six collage prices come from the COLLAGE_SKOL_PRICES setting (strictly increasing);
+ *    a single image uses Master 30.2's "Photo (beyond daily credits) 20 sköl" unless SINGLE_SKOL_PRICE overrides it.
+ *    With no ladder configured, quotes fail closed (IMAGE_PRICING_UNAVAILABLE).
+ *  - The style list is the Master's (7.4 / 12.2) and is the ONE list: the app reads it from the Worker.
+ *  - World looks are the Master's "City Grammar by World" text (Section 3), used as visual canon for scenes.
+ */
+import { ApiError, containsMinorSignal } from './common.mjs';
+
+export const COLLAGE_COUNTS = Object.freeze([4, 5, 6, 7, 8, 9]);
+/** Panels per row. Every row fills the full width, so odd counts never leave an empty cell. */
+export const COLLAGE_ROWS = Object.freeze({ 4: [2, 2], 5: [3, 2], 6: [3, 3], 7: [3, 2, 2], 8: [4, 4], 9: [3, 3, 3] });
+export const COLLAGE_SIZE = '1536x1024';
+export const SINGLE_SIZES = Object.freeze({ portrait: '1024x1536', square: '1024x1024', landscape: '1536x1024' });
+export const DEFAULT_STYLE = 'realism';
+export const MAX_ECHO_REFS = 3;
+export const QUOTE_TTL_MS = 10 * 60 * 1000;
+export const SINGLE_SKOL_DEFAULT = 20;     // Master 30.2: Photo (beyond daily credits) = 20 sköl
+
+/** Normalized per-panel rectangles (0..1) — used for the number overlay and for caption bubbles. */
+export function panelRects(count) {
+  const rows = COLLAGE_ROWS[count]; if (!rows) throw new RangeError('INVALID_PANEL_COUNT');
+  let index = 0;
+  return rows.flatMap((cells, row) => Array.from({ length: cells }, (_, col) => ({ index: ++index, x: col / cells, y: row / rows.length, width: 1 / cells, height: 1 / rows.length })));
+}
+
+export const STYLES = Object.freeze([
+  { id: 'realism', label: 'Realism', tier: 'base', prompt: 'Photorealistic, cinematic realism with naturally motivated lighting, believable movement, candid and unposed composition.' },
+  { id: 'anime', label: 'Anime', tier: 'base', prompt: 'Anime illustration: clean line art, expressive eyes, cel shading, painterly cinematic backgrounds.' },
+  { id: 'cartoon', label: 'Cartoon', tier: 'base', prompt: 'Cartoon illustration: bold clean outlines, flat shaded colour, expressive simplified shapes.' },
+  { id: 'watercolor', label: 'Watercolor', tier: 'base', prompt: 'Watercolor painting: soft translucent washes, visible paper texture, gently bleeding edges.' },
+  { id: 'comic', label: 'Comic Book', tier: 'base', prompt: 'Comic book illustration: bold ink lines, flat colour blocking, graphic shadow, subtle halftone texture.' },
+  { id: 'ghibli', label: 'Studio Ghibli-inspired', tier: 'premium', prompt: 'Gentle hand-painted animated-film look: lush painterly backgrounds, soft natural light, warm expressive characters.' },
+  { id: 'oil', label: 'Oil Painting', tier: 'premium', prompt: 'Oil painting: visible brushwork, rich pigment, dramatic chiaroscuro, canvas texture.' },
+  { id: 'fantasy', label: 'Fantasy Epic', tier: 'premium', prompt: 'Epic fantasy illustration: grand scale, rich colour, heroic lighting, detailed concept-art finish.' },
+  { id: 'cyberpunk', label: 'Cyberpunk Neon', tier: 'echo', prompt: 'Cyberpunk neon: rain-slicked surfaces, glowing signage, deep shadow, saturated neon light.' },
+  { id: 'scifi', label: 'Sci-Fi Cinematic', tier: 'echo', prompt: 'Cinematic science fiction: cold vast spaces, clean practical lighting, station and starfield scale.' },
+  { id: 'noir', label: 'Noir', tier: 'echo', prompt: 'Film noir: high-contrast monochrome, hard shadow, venetian-blind light, smoky atmosphere.' },
+  { id: 'pixel', label: 'Pixel Art', tier: 'echo', prompt: 'Pixel art: crisp limited-palette pixels, retro game sensibility, clear readable silhouettes.' }
+]);
+const STYLE_BY_ID = Object.fromEntries(STYLES.map((s) => [s.id, s]));
+/** The app's avatar picker stores the label ("Comic Book"); map either form to an id, defaulting to realism. */
+export function styleId(v) {
+  const s = String(v ?? '').trim().toLowerCase();
+  if (STYLE_BY_ID[s]) return s;
+  return STYLES.find((x) => x.label.toLowerCase() === s)?.id ?? DEFAULT_STYLE;
+}
+export const stylePrompt = (id) => (STYLE_BY_ID[id] ?? STYLE_BY_ID[DEFAULT_STYLE]).prompt;
+
+export const WORLD_IDS = Object.freeze(['TERRA', 'UMBRA', 'AXIOM', 'AURIS', 'SOLIS', 'AEONIS', 'VELA', 'TENEBRIS', 'MARIS']);
+/** Master, Section 3 "City Grammar by World" (verbatim). */
+export const WORLD_VISUAL = Object.freeze({
+  TERRA: 'The city as it is. Photorealistic, cinematic. Contemporary architecture. The reference world.',
+  UMBRA: 'Stone and iron. Gothic vertical. Streets compressed and narrowed. Crimson lamplight. Perpetual dusk or deep night. Towers rather than sprawl.',
+  AXIOM: 'The city pushed forward into signal saturation. Recognizable street grid, denser and more vertical. Every surface a screen or reflective panel. Neon at street level, clean signal light above.',
+  AURIS: 'The city grown with its geography. Rivers wider and more central. Living architecture — wood still alive, stone shaped rather than cut. Floating elements. The city breathes.',
+  SOLIS: 'Fire-stone and forge-craft. Warm stone, copper and bronze, open flame as civic light. Lower and more human-scaled, built around courtyards and gathering spaces. Solar and thermal infrastructure.',
+  AEONIS: 'Marble and impossible light. Civic buildings are temples — the primary architecture. Light comes from within the buildings. Structures that should not stand but do.',
+  VELA: 'Station architecture. Modular, functional, oriented outward. The city reads as outpost rather than settled civilization. Built for expansion, pressure, and the frontier.',
+  TENEBRIS: 'Victorian — the period that got closest before modernity intervened. Gas lamps. Cobblestone. Fog never clears. The city stopped developing at a specific moment and has been accumulating dread since.',
+  MARIS: 'Underwater. Same coastlines and river systems but filled. Pressure habitats, coral towers, bioluminescent civic lighting. The city extends down rather than up.'
+});
+
+/** Instructions for ONE canvas holding several panels. Text overlays (numbers, captions, dialogue) are added by Telōs afterwards. */
+export function collagePrompt(count, styleLabel) {
+  const rows = COLLAGE_ROWS[count]; if (!rows) throw new RangeError('INVALID_PANEL_COUNT');
+  return `COLLAGE FORMAT: Create ONE continuous image canvas containing EXACTLY ${count} DISTINCT story panels.\n` +
+    `Reading order: left-to-right, top-to-bottom. Use ${rows.length} rows with ${rows.join(', ')} panels respectively. Every row fills the full width; leave no empty slots.\n` +
+    `Each panel is a different sequential narrative beat, never copies of one pose. Keep clean, even gutters between panels.\n` +
+    `Use the SAME art treatment (${styleLabel}) in every panel. Keep every character's identity, skin tone, wardrobe, and the location consistent from panel to panel.\n` +
+    `NO printed panel numbers, captions, subtitles, speech bubbles, logos or any lettering anywhere: Telōs adds numbers and dialogue afterwards as editable overlays.`;
+}
+
+/** Sköl prices. Collage ladder must be complete, whole, and strictly increasing. Returns null when not configured. */
+export function skolPrices(env = {}) {
+  let ladder = null;
+  if (env.COLLAGE_SKOL_PRICES) {
+    let raw; try { raw = JSON.parse(env.COLLAGE_SKOL_PRICES); } catch { raw = null; }
+    if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+      let last = 0, ok = true; const out = {};
+      for (const n of COLLAGE_COUNTS) { const v = raw[n]; if (!Number.isSafeInteger(v) || v <= last || v > 1e7) { ok = false; break; } out[n] = v; last = v; }
+      if (ok) ladder = out;
+    }
+  }
+  const s = Number(env.SINGLE_SKOL_PRICE);
+  const single = Number.isSafeInteger(s) && s > 0 && s <= 1e7 ? s : SINGLE_SKOL_DEFAULT;
+  return { single, collage: ladder };
+}
+export function priceFor(prices, format, panelCount) {
+  if (format === 'single') return prices.single;
+  return prices.collage ? prices.collage[panelCount] : null;
+}
+
+const bad = (field) => new ApiError(400, 'FIELD_INVALID', { field });
+const text = (v, max, field, req = false) => {
+  if (v === undefined || v === null || v === '') { if (req) throw bad(field); return ''; }
+  if (typeof v !== 'string' || v.length > max) throw bad(field);
+  const s = v.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '').trim();
+  if (req && !s) throw bad(field);
+  return s;
+};
+const REF = /^(i|u):[A-Za-z0-9_-]{6,40}$/;
+
+/** Shared by quote + generate. `refine` (an existing Echō image's metadata) forces its format/style/world so edits keep them. */
+export function normalizeFormat(body, refine = null) {
+  const b = body ?? {};
+  const base = refine
+    ? { format: refine.format, panelCount: refine.panelCount ?? null, showPanelNumbers: refine.showPanelNumbers === true, style: refine.style, world: refine.world ?? null, aspect: refine.aspect ?? 'portrait' }
+    : { format: b.format === undefined ? 'single' : b.format, panelCount: b.panelCount, showPanelNumbers: b.showPanelNumbers, style: styleId(b.style), world: b.world ?? null, aspect: b.aspect ?? 'portrait' };
+  if (!['single', 'collage'].includes(base.format)) throw bad('format');
+  if (base.format === 'single') {
+    if (!refine && (b.panelCount !== undefined || b.showPanelNumbers === true)) throw bad('panelCount');
+    if (!(base.aspect in SINGLE_SIZES)) throw bad('aspect');
+    return { format: 'single', panelCount: null, showPanelNumbers: false, style: base.style, world: base.world, aspect: base.aspect };
+  }
+  if (!COLLAGE_COUNTS.includes(base.panelCount)) throw bad('panelCount');
+  if (base.showPanelNumbers !== undefined && typeof base.showPanelNumbers !== 'boolean') throw bad('showPanelNumbers');
+  if (base.world !== null && !WORLD_IDS.includes(base.world)) throw bad('world');
+  return { format: 'collage', panelCount: base.panelCount, showPanelNumbers: base.showPanelNumbers === true, style: base.style, world: base.world, aspect: 'landscape' };
+}
+
+/** Full generate request. Everything the browser sends is untrusted; the quote id is the only price-related field and is verified server-side. */
+export function normalizeEcho(body, refine = null) {
+  const b = body ?? {};
+  const f = normalizeFormat(b, refine);
+  if (f.world !== null && !WORLD_IDS.includes(f.world)) throw bad('world');
+  if (b.adultAttested !== true) throw new ApiError(400, 'ADULT_ATTESTATION_REQUIRED');
+  const prompt = text(b.prompt, 1500, 'prompt', true), direction = text(b.direction, 500, 'direction');
+  if (containsMinorSignal(prompt, direction)) throw new ApiError(400, 'BLOCKED_MINOR_TERMS');
+  const refs = b.refs ?? [];
+  if (!Array.isArray(refs) || refs.length > MAX_ECHO_REFS || refs.some((r) => typeof r !== 'string' || !REF.test(r)) || new Set(refs).size !== refs.length) throw bad('refs');
+  const key = String(b.idempotencyKey ?? ''); if (!/^[A-Za-z0-9_-]{16,64}$/.test(key)) throw bad('idempotencyKey');
+  const quoteId = String(b.quoteId ?? ''); if (!/^[A-Za-z0-9_-]{16,64}$/.test(quoteId)) throw new ApiError(403, 'IMAGE_QUOTE_REQUIRED');
+  return { kind: 'echo', ...f, prompt, direction, refs, ...(refine ? { refinedFrom: String(b.refineOf) } : {}), idempotencyKey: key, quoteId, photoIds: [], canon: {} };
+}
+export const sizeFor = (f) => (f.format === 'collage' ? COLLAGE_SIZE : SINGLE_SIZES[f.aspect] ?? SINGLE_SIZES.portrait);
+
+/** Art direction handed to the shared scene builder: style first, then collage layout, then the user's words. */
+export function echoDirection(p) {
+  const st = STYLES.find((s) => s.id === p.style) ?? STYLES[0];
+  return [`VISUAL STYLE (${st.label}): ${st.prompt}`, p.format === 'collage' ? collagePrompt(p.panelCount, st.label) : '', p.refinedFrom ? 'REFINEMENT: the first reference image is the existing image. Keep its composition, characters, layout and art style; apply ONLY the change requested below.' : '', `SCENE: ${p.prompt}`, p.direction && `ARTISTIC DIRECTION: ${p.direction}`].filter(Boolean).join('\n');
+}
+
+export const eligibleForLowModeration = (env, email) => {
+  const e = String(email || '').toLowerCase(); if (!e) return false;
+  const list = String(env.ADULT_BETA_EMAILS || '').toLowerCase().split(',').map((x) => x.trim()).filter(Boolean);
+  return e === String(env.OWNER_EMAIL || '').toLowerCase() || list.includes(e);
+};

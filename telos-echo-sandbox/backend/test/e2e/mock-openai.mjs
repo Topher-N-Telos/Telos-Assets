@@ -11,7 +11,7 @@ export function startMock(port = 8799) {
       const raw = Buffer.concat(chunks).toString('latin1');
       const multipart = (req.headers['content-type'] || '').startsWith('multipart/');
       const field = (n) => (multipart ? (raw.match(new RegExp(`name="${n}"\\r\\n\\r\\n([^\\r]*)`)) || [])[1] : (() => { try { return JSON.parse(raw)[n]; } catch { return undefined; } })());
-      const entry = { path: req.url, auth: req.headers.authorization, multipart, model: field('model'), moderation: field('moderation'), quality: field('quality'), background: field('background'), size: field('size'),
+      const entry = { path: req.url, auth: req.headers.authorization, multipart, model: field('model'), moderation: field('moderation'), quality: field('quality'), background: field('background'), size: field('size'), n: field('n'), prompt: String(field('prompt') ?? '').slice(0, 6000),
         hasMask: raw.includes('name="mask"'), imageParts: multipart ? (raw.match(/name="image\[\]"/g) || []).length : 0, hasSafetyId: raw.includes('safety_identifier') };
       log.push(entry);
       const send = (status, body) => { res.statusCode = status; res.setHeader('content-type', 'application/json'); res.end(JSON.stringify(body)); };

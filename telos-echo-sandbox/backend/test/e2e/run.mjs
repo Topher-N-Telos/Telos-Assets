@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { startMock } from './mock-openai.mjs';
 import { makePng } from './png.mjs';
 
-const A = 'http://localhost:8787', B = 'http://localhost:8788', C = 'http://localhost:8789', D = 'http://localhost:8790', MOCK = 8799;
+const A = 'http://localhost:8787', B = 'http://localhost:8788', C = 'http://localhost:8789', D = 'http://localhost:8790', E = 'http://localhost:8791', MOCK = 8799;
 let mock, procs = [];
 const OWNER = 'owner@example.com', ALICE = 'alice@example.com', BOB = 'bob@example.com', EVE = 'eve@example.com', CARA = 'cara@example.com';
 const BASE = { OWNER_EMAIL: OWNER, ALLOWED_EMAILS: `${ALICE},${BOB},${CARA}`, DEV_BYPASS_AUTH: 'true', OPENAI_API_BASE: `http://127.0.0.1:${MOCK}/v1`, OPENAI_API_KEY: 'mock-key', MIN_SUBMIT_INTERVAL_MS: 100 };
@@ -31,7 +31,8 @@ before(async () => {
     launch(8787, { ...BASE, MAX_USD_PER_DAY: 10, MAX_USD_PER_MONTH: 100 }),
     launch(8788, {}),                                                                   // no auth config at all
     launch(8789, { ...BASE, MAX_USD_PER_DAY: 0.65, EST_USD_PER_CALL: 0.1 }),          // tiny global cap
-    launch(8790, { ...BASE, MAX_USD_PER_DAY: 50, MAX_USD_PER_MONTH: 500, MAX_CALLS_PER_DAY_USER: 60 })            // roomy caps: prebuilt-Telō tests
+    launch(8790, { ...BASE, MAX_USD_PER_DAY: 50, MAX_USD_PER_MONTH: 500, MAX_CALLS_PER_DAY_USER: 60 }),           // roomy caps: prebuilt-Telō tests
+    launch(8791, { ...BASE, MAX_USD_PER_DAY: 50, MAX_USD_PER_MONTH: 500, MAX_CALLS_PER_DAY_USER: 60, ADULT_BETA_EMAILS: ALICE, COLLAGE_SKOL_PRICES: JSON.stringify({ 4: 100, 5: 120, 6: 150, 7: 200, 8: 275, 9: 400 }) })   // Echō collage tests (ladder = TEST numbers only)
   ]);
 });
 after(() => { for (const p of procs) { try { process.kill(-p.pid, 'SIGKILL'); } catch {} } mock?.server.close(); });
@@ -393,4 +394,151 @@ test('Telō made after onboarding: its own package, redos and accepted image, in
   const acc = await cara('POST', '/api/onboarding/telo~wren-1/accept', { imageId: j.imageId, faceImageId: j.faceImageId }); assert.equal(acc.status, 200, JSON.stringify(acc.json));
   assert.equal(acc.json['telo~wren-1']?.acceptedImageId ?? (await cara('GET', '/api/me?telo=wren-1')).json['telo~wren-1'].acceptedImageId, j.imageId);
   assert.equal((await alice('GET', '/api/images/' + j.imageId)).status, 404);                        // images stay private to their owner
+});
+
+// ============ Echō images: Single Image / Collage (v136 integration) ============
+const ea = (who) => as(who, E), eAlice = ea(ALICE), eBob = ea(BOB), eOwner = ea(OWNER);
+const mlog = () => fetch(`http://127.0.0.1:${MOCK}/__log`).then((r) => r.json());
+const quoteFor = async (api, over = {}) => { const r = await api('POST', '/api/echo/quote', { format: 'collage', panelCount: 4, showPanelNumbers: false, ...over }); assert.equal(r.status, 200, JSON.stringify(r.json)); return r.json; };
+const echoBody = (q, over = {}) => { const b = { prompt: 'Two friends walking through the village market at dusk', adultAttested: true, idempotencyKey: key(), quoteId: q.quoteId, format: 'collage', panelCount: 4, showPanelNumbers: false, ...over }; if (b.format === 'single') { delete b.panelCount; delete b.showPanelNumbers; } return b; };
+const echoGen = async (api, over = {}, qover = {}) => { await sleep(150); const q = await quoteFor(api, { ...(over.format === 'single' ? { format: 'single', panelCount: undefined } : {}), ...(over.panelCount ? { panelCount: over.panelCount } : {}), ...(over.showPanelNumbers !== undefined ? { showPanelNumbers: over.showPanelNumbers } : {}), ...qover }); const r = await api('POST', '/api/echo/generate', echoBody(q, over)); return { q, r }; };
+
+test('echo: options expose the one style list, 4–9 counts, and who may use Low moderation', async () => {
+  const a = (await eAlice('GET', '/api/echo/options')).json, b = (await eBob('GET', '/api/echo/options')).json, d = (await as(ALICE, D)('GET', '/api/echo/options')).json;
+  assert.deepEqual(a.collageCounts, [4, 5, 6, 7, 8, 9]);
+  assert.equal(a.styles.length, 12); assert.equal(a.styles[0].id, 'realism');
+  for (const id of ['anime', 'cartoon', 'watercolor', 'comic', 'ghibli', 'oil', 'fantasy', 'cyberpunk', 'scifi', 'noir', 'pixel']) assert.ok(a.styles.some((s) => s.id === id), id);
+  assert.deepEqual(a.rows['7'], [3, 2, 2]);
+  assert.equal(a.pricing.collageConfigured, true); assert.equal(d.pricing.collageConfigured, false);
+  assert.deepEqual([a.moderation.enabled, a.moderation.mode], [true, 'low']);          // allowlisted adult-beta tester: default Low
+  assert.deepEqual([b.moderation.enabled, b.moderation.mode], [false, 'auto']);       // everyone else: Auto, switch hidden
+  assert.deepEqual([(await eOwner('GET', '/api/echo/options')).json.moderation.mode], ['low']);
+});
+
+test('echo: Sköl quotes rise strictly from 4 to 9 panels, are one image use, never accept a browser price', async () => {
+  let prev = 0;
+  for (const n of [4, 5, 6, 7, 8, 9]) { const q = await quoteFor(eAlice, { panelCount: n }); assert.equal(q.usageUnits, 1); assert.equal(q.currency, 'Sköl'); assert.ok(q.amountSkol > prev, `n=${n}`); assert.equal(q.charged, false); prev = q.amountSkol; }
+  assert.equal(prev, 400);
+  assert.equal((await eAlice('POST', '/api/echo/quote', { format: 'collage', panelCount: 9, amountSkol: 1 })).status, 400);
+  for (const n of [3, 10, '9', 4.5]) assert.equal((await eAlice('POST', '/api/echo/quote', { format: 'collage', panelCount: n })).json.error, 'FIELD_INVALID', String(n));
+  assert.equal((await eAlice('POST', '/api/echo/quote', { format: 'single', panelCount: 5 })).status, 400);
+  assert.equal((await eAlice('POST', '/api/echo/quote', { format: 'single' })).json.amountSkol, 20);       // Master 30.2: photo beyond credits
+  const noLadder = await as(ALICE, D)('POST', '/api/echo/quote', { format: 'collage', panelCount: 4 });      // no ladder configured: fail closed, nothing invented
+  assert.equal(noLadder.status, 503); assert.equal(noLadder.json.error, 'IMAGE_PRICING_UNAVAILABLE');
+});
+
+test('echo: a collage is ONE provider request (n=1) and ONE image use; quote is single-use and bound to count; replay is free', async () => {
+  const sum0 = (await eOwner('GET', '/api/_admin/summary')).json.callsToday;
+  assert.equal((await eAlice('POST', '/api/echo/generate', { prompt: 'x', adultAttested: true, idempotencyKey: key(), format: 'collage', panelCount: 4 })).json.error, 'IMAGE_QUOTE_REQUIRED');
+  const q6 = await quoteFor(eAlice, { panelCount: 6, showPanelNumbers: true });
+  const wrong = await eAlice('POST', '/api/echo/generate', echoBody(q6, { panelCount: 9 }));
+  assert.equal(wrong.status, 403); assert.equal(wrong.json.error, 'IMAGE_QUOTE_INVALID');
+  assert.equal((await eAlice('POST', '/api/echo/generate', echoBody({ quoteId: 'forgedquoteid0000000' }, { panelCount: 6 }))).json.error, 'IMAGE_QUOTE_INVALID');
+  const mismatch = await eAlice('POST', '/api/echo/generate', echoBody(q6, { panelCount: 6, showPanelNumbers: false }));       // quote is bound to the number preference too
+  assert.equal(mismatch.json.error, 'IMAGE_QUOTE_INVALID');
+  await sleep(150);
+  const before = (await mlog()).length;
+  const b = echoBody(q6, { panelCount: 6, showPanelNumbers: true, style: 'watercolor', world: 'SOLIS' });
+  const r = await eAlice('POST', '/api/echo/generate', b);
+  assert.equal(r.status, 200, JSON.stringify(r.json));
+  const done = await wait(eAlice, r.json.id); assert.equal(done.state, 'complete');
+  const log = (await mlog()).slice(before);
+  assert.equal(log.length, 1, 'exactly one provider request for a 6-panel collage');
+  assert.equal(log[0].n, 1); assert.equal(log[0].size, '1536x1024'); assert.equal(log[0].path, '/v1/images/generations');
+  assert.match(log[0].prompt, /EXACTLY 6 DISTINCT story panels/); assert.match(log[0].prompt, /3, 3 panels/); assert.match(log[0].prompt, /NO printed panel numbers/);
+  assert.match(log[0].prompt, /Watercolor painting/); assert.doesNotMatch(log[0].prompt, /Photorealistic candid/); assert.match(log[0].prompt, /Fire-stone and forge-craft/);
+  const replay = await eAlice('POST', '/api/echo/generate', b); assert.equal(replay.json.replay, true); assert.equal((await mlog()).length, before + 1);   // replay: no new request
+  assert.equal((await eAlice('POST', '/api/echo/generate', { ...b, idempotencyKey: key() })).json.error, 'IMAGE_QUOTE_INVALID');          // quote already used
+  assert.equal((await eOwner('GET', '/api/_admin/summary')).json.callsToday - sum0, 1, 'one collage = one counted call');
+  const img = (await eAlice('GET', '/api/echo/options')).json.images[0];
+  assert.deepEqual([img.format, img.panelCount, img.showPanelNumbers, img.style, img.world], ['collage', 6, true, 'watercolor', 'SOLIS']);
+  const bytes = await eAlice('GET', '/api/images/' + done.imageId); assert.equal(bytes.status, 200); assert.equal((await eBob('GET', '/api/images/' + done.imageId)).status, 404);   // private to its owner
+});
+
+test('echo: every style works for single and collage; default is realism; the user\'s style is used, not photorealism', async () => {
+  const opts = (await eAlice('GET', '/api/echo/options')).json;
+  for (const s of opts.styles.slice(1, 4)) {
+    const before = (await mlog()).length;
+    const { r } = await echoGen(eAlice, { style: s.id, format: 'single', aspect: 'square' }); assert.equal(r.status, 200, JSON.stringify(r.json)); await wait(eAlice, r.json.id);
+    const l = (await mlog()).slice(before)[0]; assert.equal(l.size, '1024x1024'); assert.doesNotMatch(l.prompt, /Photorealistic, cinematic realism/, s.id);
+  }
+  const before = (await mlog()).length;
+  const { r } = await echoGen(eAlice, { format: 'single' }); await wait(eAlice, r.json.id);       // no style given
+  assert.match((await mlog()).slice(before)[0].prompt, /Photorealistic, cinematic realism/);
+});
+
+test('echo: refining keeps format, panel count and style; the original goes to the edits endpoint as a reference', async () => {
+  const q = await quoteFor(eAlice, { panelCount: 5 });
+  const r0 = await eAlice('POST', '/api/echo/generate', echoBody(q, { panelCount: 5, style: 'comic' })); const d0 = await wait(eAlice, r0.json.id);
+  const rq = await quoteFor(eAlice, { refineOf: d0.imageId });
+  assert.equal(rq.panelCount, 5); assert.equal(rq.format, 'collage');
+  const before = (await mlog()).length;
+  const r1 = await eAlice('POST', '/api/echo/generate', { prompt: 'Make the sky a deep violet', adultAttested: true, idempotencyKey: key(), quoteId: rq.quoteId, refineOf: d0.imageId, format: 'single', style: 'anime' });   // attempts to change format/style are ignored
+  assert.equal(r1.status, 200, JSON.stringify(r1.json)); const d1 = await wait(eAlice, r1.json.id); assert.equal(d1.state, 'complete');
+  const l = (await mlog()).slice(before)[0];
+  assert.equal(l.path, '/v1/images/edits'); assert.equal(l.imageParts, 1); assert.match(l.prompt, /EXACTLY 5 DISTINCT story panels/); assert.match(l.prompt, /Comic book illustration/); assert.match(l.prompt, /REFINEMENT/);
+  const imgs = (await eAlice('GET', '/api/echo/options')).json.images; const n = imgs.find((i) => i.id === d1.imageId);
+  assert.deepEqual([n.panelCount, n.style, n.refinedFrom], [5, 'comic', d0.imageId]); assert.ok(imgs.some((i) => i.id === d0.imageId), 'original is kept for comparison');
+});
+
+test('echo: Low/Auto moderation is enforced server-side, persisted, and unavailable to non-testers', async () => {
+  const mod = async (api) => { const before = (await mlog()).length; const { r } = await echoGen(api, { format: 'single' }); assert.equal(r.status, 200, JSON.stringify(r.json)); await wait(api, r.json.id); return (await mlog()).slice(before)[0].moderation; };
+  assert.equal(await mod(eAlice), 'low');
+  assert.equal((await eAlice('POST', '/api/echo/settings', { mode: 'auto' })).json.mode, 'auto');
+  assert.equal((await eAlice('GET', '/api/echo/options')).json.moderation.mode, 'auto');       // persisted
+  assert.equal(await mod(eAlice), 'auto');
+  assert.equal((await eAlice('POST', '/api/echo/settings', { mode: 'low' })).json.mode, 'low');
+  assert.equal(await mod(eAlice), 'low');
+  assert.equal((await eAlice('POST', '/api/echo/settings', { mode: 'unrestricted' })).status, 400);
+  const denied = await eBob('POST', '/api/echo/settings', { mode: 'low' }); assert.equal(denied.status, 403); assert.equal(denied.json.error, 'IMAGE_SETTING_NOT_ALLOWED');
+  const q = await quoteFor(eBob); const before = (await mlog()).length;
+  const r = await eBob('POST', '/api/echo/generate', echoBody(q, { moderation: 'low', moderationMode: 'low', surface: 'adult' })); await wait(eBob, r.json.id);        // forged fields are ignored
+  assert.equal((await mlog()).slice(before)[0].moderation, 'auto');
+});
+
+test('echo: validation fails closed before any provider call or spend', async () => {
+  const before = (await mlog()).length;
+  const q = await quoteFor(eAlice);
+  const bad = async (over, code, status = 400) => { const r = await eAlice('POST', '/api/echo/generate', echoBody(q, over)); assert.equal(r.status, status, JSON.stringify(over)); assert.equal(r.json.error, code, JSON.stringify(over)); };
+  await bad({ adultAttested: false }, 'ADULT_ATTESTATION_REQUIRED');
+  await bad({ prompt: 'a schoolgirl at the market' }, 'BLOCKED_MINOR_TERMS');
+  await bad({ prompt: '' }, 'FIELD_INVALID');
+  await bad({ refs: ['i:aaaaaaaa', 'i:bbbbbbbb', 'i:cccccccc', 'i:dddddddd'] }, 'FIELD_INVALID');
+  await bad({ refs: ['i:doesnotexist1'] }, 'REF_IMAGE_NOT_FOUND', 404);
+  await bad({ style: 'realism', world: 'NARNIA' }, 'FIELD_INVALID');
+  await bad({ showPanelNumbers: 'yes' }, 'FIELD_INVALID');
+  assert.equal((await mlog()).length, before);
+  const ok = await eAlice('POST', '/api/echo/generate', echoBody(q)); assert.equal(ok.status, 200);   // the same quote is still good after failed validations
+  await wait(eAlice, ok.json.id);
+});
+
+test('echo: reference photos need certification, are screened, private, usable as references, deletable', async () => {
+  const png = makePng(64, 96, [30, 90, 160]);
+  assert.equal((await eAlice('POST', '/api/echo/refs', png)).json.error, 'CERTIFICATION_REQUIRED');
+  const up = await eAlice('POST', '/api/echo/refs', png, { 'x-certify': 'self' }); assert.equal(up.status, 200); const ref = up.json.ref;
+  assert.ok((await eAlice('GET', '/api/echo/options')).json.refs.some((r) => r.ref === ref));
+  assert.equal((await eBob('GET', `/api/echo/refs/${ref.slice(2)}/image`)).status, 404);
+  const before = (await mlog()).length; const q = await quoteFor(eAlice, { panelCount: 4 });
+  const r = await eAlice('POST', '/api/echo/generate', echoBody(q, { refs: [ref] })); assert.equal(r.status, 200, JSON.stringify(r.json)); await wait(eAlice, r.json.id);
+  const l = (await mlog()).slice(before)[0]; assert.equal(l.path, '/v1/images/edits'); assert.equal(l.imageParts, 1);
+  assert.equal((await eAlice('DELETE', `/api/echo/refs/${ref.slice(2)}`)).json.ok, true);
+  assert.ok(!(await eAlice('GET', '/api/echo/options')).json.refs.some((r2) => r2.ref === ref));
+});
+
+test('echo: provider rejection fails the job, refunds the hold, and needs a NEW quote (no automatic paid retry)', async () => {
+  const q = await quoteFor(eAlice); const before = (await mlog()).length;
+  const r = await eAlice('POST', '/api/echo/generate', echoBody(q, { prompt: 'FORCE_400 market scene' }));
+  const d = await wait(eAlice, r.json.id); assert.equal(d.state, 'failed'); assert.equal(d.refunded, true);
+  assert.equal((await mlog()).length, before + 1);
+  assert.equal((await eAlice('POST', '/api/echo/generate', echoBody(q, { prompt: 'again' }))).json.error, 'IMAGE_QUOTE_INVALID');
+});
+
+test('echo: captions and numbers are overlays saved beside the image, never in the art; limits enforced', async () => {
+  const { r } = await echoGen(eAlice, { panelCount: 4 }); const d = await wait(eAlice, r.json.id);
+  const before = (await eAlice('GET', '/api/images/' + d.imageId)).bytes;
+  const ok = await eAlice('POST', '/api/echo/captions', { imageId: d.imageId, captions: ['Bonjour !', 'Ça va ?', '', 'À demain'], showPanelNumbers: true }); assert.equal(ok.status, 200);
+  const img = ok.json.images.find((i) => i.id === d.imageId); assert.deepEqual(img.captions, ['Bonjour !', 'Ça va ?', '', 'À demain']); assert.equal(img.showPanelNumbers, true);
+  assert.equal((await eAlice('POST', '/api/echo/captions', { imageId: d.imageId, captions: ['a', 'b', 'c', 'd', 'e'] })).status, 400);
+  assert.deepEqual((await eAlice('GET', '/api/images/' + d.imageId)).bytes, before);
+  assert.equal((await eAlice('DELETE', '/api/images/' + d.imageId)).json.ok, true);
 });

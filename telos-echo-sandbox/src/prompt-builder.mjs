@@ -22,7 +22,7 @@ export function buildSceneImagePrompt({ scene, characters, world, mode = 'cinema
       `MUTABLE AT SCENE TIME:\n${formatAppearance(c.appearance.atSceneTime)}\n` +
       `KNOWN RELATIONSHIP FACTS: ${JSON.stringify(c.relationshipFacts ?? [])}`;
   }).join('\n\n');
-  const style = mode === 'portrait' ? 'Photorealistic character portrait.' :
+  const style = mode === 'echo' ? 'Render in the VISUAL STYLE stated in the art direction below, and keep that one art treatment throughout.' : mode === 'portrait' ? 'Photorealistic character portrait.' :
     'Photorealistic candid scene with naturally motivated lighting, believable movement, and no forced studio pose.';
   const sceneTime = scene.occurredAt ?? 'CURRENT';
   // Tells the model which attached image is which subject, so several characters are never merged.

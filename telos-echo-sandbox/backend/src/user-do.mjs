@@ -10,6 +10,7 @@ import { createOpenAIImageAdapter } from '../../src/openai-image-api.mjs';
 import { ApiError, parseConfig, costFromUsage, dayKey, containsMinorSignal, sniffImage, firstNumber, normalizeOnboarding, KINDS, isKind, baseKind } from './common.mjs';
 import { screenUpload, screenOutput } from './safety.mjs';
 import { PREBUILT, PREBUILT_VERSION, refPlan, prebuiltScene, normalizePrebuilt } from './prebuilt-canon.mjs';
+import { STYLES, WORLD_IDS, WORLD_VISUAL, COLLAGE_COUNTS, COLLAGE_ROWS, MAX_ECHO_REFS, QUOTE_TTL_MS, skolPrices, priceFor, normalizeFormat, normalizeEcho, sizeFor, echoDirection, styleId, eligibleForLowModeration } from './echo.mjs';
 
 const CHUNK = 900_000;
 const MAX_JSON_BYTES = 32 * 1024;
@@ -46,7 +47,9 @@ export class UserState extends DurableObject {
       'CREATE TABLE IF NOT EXISTS images(id TEXT PRIMARY KEY, job_id TEXT, kind TEXT, blob_id TEXT, meta TEXT, accepted INTEGER NOT NULL DEFAULT 0, created_at INTEGER)',
       'CREATE TABLE IF NOT EXISTS grants(id TEXT PRIMARY KEY, kind TEXT, job_idem TEXT UNIQUE, state TEXT, ts INTEGER)',
       'CREATE TABLE IF NOT EXISTS usage(id TEXT PRIMARY KEY, job_id TEXT, ts INTEGER, model TEXT, usd REAL, estimated INTEGER, raw TEXT)',
-      'CREATE TABLE IF NOT EXISTS diag(job_id TEXT PRIMARY KEY, ts INTEGER, code TEXT, detail TEXT)'
+      'CREATE TABLE IF NOT EXISTS diag(job_id TEXT PRIMARY KEY, ts INTEGER, code TEXT, detail TEXT)',
+      'CREATE TABLE IF NOT EXISTS echo_refs(id TEXT PRIMARY KEY, blob_id TEXT NOT NULL, certified TEXT NOT NULL, screening TEXT, created_at INTEGER)',
+      'CREATE TABLE IF NOT EXISTS quotes(id TEXT PRIMARY KEY, bind TEXT NOT NULL, amount INTEGER NOT NULL, state TEXT NOT NULL, expires_at INTEGER NOT NULL, created_at INTEGER)'
     ]) this.sql.exec(s);
   }
 
@@ -112,6 +115,7 @@ export class UserState extends DurableObject {
       if (c === 'generate' && m === 'POST') return json(await this.generate(b, await this.body(request)));
       if (c === 'accept' && m === 'POST') return json(this.accept(b, await this.body(request)));
     }
+    if (a === 'echo') return this.echoRoute(request, m, parts);
     if (a === 'prebuilt' && b && c === 'generate' && m === 'POST') return json(await this.generatePrebuilt(b, await this.body(request)));
     if (a === 'jobs' && b && m === 'GET') return json(this.jobView(b));
     if (a === 'images' && b && m === 'DELETE') return json(this.deletePrebuiltImage(b));
@@ -233,7 +237,7 @@ export class UserState extends DurableObject {
   }
   deletePrebuiltImage(id) {
     const r = this.one('SELECT blob_id,kind FROM images WHERE id=?', id);
-    if (!r || r.kind !== PREBUILT_KIND) throw new ApiError(404, 'NOT_FOUND');
+    if (!r || (r.kind !== PREBUILT_KIND && r.kind !== 'echo')) throw new ApiError(404, 'NOT_FOUND');
     this.delBlob(r.blob_id); this.run('DELETE FROM images WHERE id=?', id);
     return { ok: true };
   }
@@ -270,8 +274,166 @@ export class UserState extends DurableObject {
     const jobId = rid();
     try {
       this.ctx.storage.transactionSync(() => {
-        this.run("INSERT INTO jobs(id,idem,kind,hash,params,state,ledger_id,created_at,updated_at) VALUES(?,?,?,?,?,'created',?,?,?)", jobId, p.idempotencyKey, kind, hash, JSON.stringify(p), res.id, now, now);
+        this.run("INSERT INTO jobs(id,idem,kind,hash,params,state,ledger_id,created_at,updated_at) VALUES(?,?,?,?,?,'created',?,?,?)", jobId, p.idempotencyKey, kind, hash, JSON.stringify({ ...p, moderationMode: this.echoModeration().mode }), res.id, now, now);
         this.run("INSERT INTO grants(id,kind,job_idem,state,ts) VALUES(?,?,?,'held',?)", rid(), kind, p.idempotencyKey, now);
+        this.setMeta('lastSubmitAt', now);
+      });
+    } catch (e) { await this.ledger.cancel(res.id); throw e; }
+    await this.ctx.storage.setAlarm(Date.now() + 50);
+    return { ...this.jobView(jobId), replay: false };
+  }
+
+
+  // ---------- Echō images: Single Image / Collage (one provider request per canvas) ----------
+  echoModeration() {
+    // Low filtering is only for a server-allowlisted adult-beta tester (ADULT_BETA_EMAILS / owner) while the deployment switch allows it. Nothing the browser sends can grant it.
+    const enabled = this.env.ECHO_LOW_MODERATION !== 'false' && eligibleForLowModeration(this.env, this.meta('email'));
+    const saved = this.meta('echoModeration', null);
+    const mode = !enabled ? 'auto' : saved === null ? 'low' : (saved === 'low' || saved === 'auto' ? saved : 'auto');
+    return { enabled, mode, defaultMode: enabled ? 'low' : 'auto', modes: enabled ? ['auto', 'low'] : ['auto'] };
+  }
+  echoSubjects(p) {
+    if (!p.refs?.length) return [{ id: 'echo-scene', name: 'Any people in the scene' }];
+    return p.refs.map((r, i) => ({ id: `ref${i + 1}`, name: `Subject from reference image ${i + 1}` }));
+  }
+  echoRefImages(p) {
+    const out = [];
+    for (let i = 0; i < p.refs.length; i++) {
+      const t = p.refs[i][0], id = p.refs[i].slice(2);
+      const row = t === 'i' ? this.one('SELECT blob_id FROM images WHERE id=?', id) : this.one('SELECT blob_id FROM echo_refs WHERE id=?', id);
+      const b = row && this.getBlob(row.blob_id);
+      if (!b) throw new Error('CANON_REFERENCES_UNAVAILABLE');
+      out.push({ bytes: b.bytes, mime: b.mime, label: i === 0 && p.refinedFrom
+        ? 'the EXISTING image to refine (SUBJECT 1) — keep its composition, characters, layout and art style'
+        : `reference image for SUBJECT ${i + 1} — keep this exact person: face, skin tone, hair, build, clothing` });
+    }
+    return out;
+  }
+  echoRefList() {
+    const own = this.q("SELECT id,kind,created_at FROM images WHERE accepted=1 AND (kind='avatar' OR kind='telo' OR kind LIKE 'telo~%') ORDER BY created_at").filter((r) => !r.kind.endsWith('_face'))
+      .map((r) => ({ ref: 'i:' + r.id, source: r.kind === 'avatar' ? 'avatar' : 'telo', kind: r.kind, createdAt: r.created_at }));
+    const up = this.q('SELECT id,certified,created_at FROM echo_refs ORDER BY created_at').map((r) => ({ ref: 'u:' + r.id, source: 'upload', certifiedAs: r.certified, createdAt: r.created_at }));
+    return [...own, ...up];
+  }
+  echoImages() {
+    return this.q("SELECT id,meta,created_at FROM images WHERE kind='echo' ORDER BY created_at DESC LIMIT 60").map((r) => {
+      let m = {}; try { m = JSON.parse(r.meta) ?? {}; } catch { /* ignore */ }
+      return { id: r.id, createdAt: r.created_at, format: m.format ?? 'single', panelCount: m.panelCount ?? null, showPanelNumbers: m.showPanelNumbers === true, style: m.style ?? 'realism', world: m.world ?? null,
+        aspect: m.aspect ?? 'portrait', refinedFrom: m.refinedFrom ?? null, scene: m.scene ?? '', captions: Array.isArray(m.captions) ? m.captions : [], moderation: m.moderation ?? null };
+    });
+  }
+  echoImageMeta(id) {
+    const r = this.one("SELECT meta FROM images WHERE id=? AND kind='echo'", id);
+    if (!r) throw new ApiError(404, 'NOT_FOUND');
+    try { return JSON.parse(r.meta) ?? {}; } catch { return {}; }
+  }
+  echoOptions() {
+    const cfg = this.cfg, prices = skolPrices(this.env);
+    return {
+      styles: STYLES.map(({ id, label, tier }) => ({ id, label, tier })), worlds: WORLD_IDS, collageCounts: COLLAGE_COUNTS, rows: COLLAGE_ROWS, maxRefs: MAX_ECHO_REFS,
+      pricing: { currency: 'Sköl', collageConfigured: !!prices.collage, charged: false },
+      moderation: this.echoModeration(), refs: this.echoRefList(), images: this.echoImages(),
+      limits: { callsToday: this.callsToday(Date.now()), callsPerDay: cfg.maxCallsPerDayUser },
+      config: { generationEnabled: cfg.generationEnabled, keyConfigured: !!this.env.OPENAI_API_KEY || this.devMock, allowPhotoUploads: cfg.allowPhotoUploads }
+    };
+  }
+  async echoRoute(request, m, parts) {
+    const [, , b, c, d] = parts;
+    if (b === 'options' && m === 'GET') return json(this.echoOptions());
+    if (b === 'settings' && m === 'POST') {
+      const j = await this.body(request);
+      if (Object.keys(j).some((k) => k !== 'mode') || !['auto', 'low'].includes(j.mode)) throw new ApiError(400, 'FIELD_INVALID');
+      if (!this.echoModeration().enabled) throw new ApiError(403, 'IMAGE_SETTING_NOT_ALLOWED');
+      this.setMeta('echoModeration', j.mode);
+      return json(this.echoModeration());
+    }
+    if (b === 'quote' && m === 'POST') return json(await this.echoQuote(await this.body(request)));
+    if (b === 'generate' && m === 'POST') return json(await this.admitEcho(await this.body(request)));
+    if (b === 'captions' && m === 'POST') return json(this.echoCaptions(await this.body(request)));
+    if (b === 'refs') {
+      if (m === 'POST' && !c) return json(await this.addEchoRef(request));
+      if (m === 'GET' && c && d === 'image') { const r = this.one('SELECT blob_id FROM echo_refs WHERE id=?', c); const bl = r && this.getBlob(r.blob_id); if (!bl) throw new ApiError(404, 'NOT_FOUND'); return new Response(bl.bytes, { headers: { 'content-type': bl.mime, 'cache-control': 'private, no-store' } }); }
+      if (m === 'DELETE' && c) { const r = this.one('SELECT blob_id FROM echo_refs WHERE id=?', c); if (!r) throw new ApiError(404, 'NOT_FOUND'); this.delBlob(r.blob_id); this.run('DELETE FROM echo_refs WHERE id=?', c); return json({ ok: true }); }
+    }
+    throw new ApiError(404, 'NOT_FOUND');
+  }
+  async addEchoRef(request) {
+    const cfg = this.cfg;
+    if (!cfg.allowPhotoUploads) throw new ApiError(403, 'PHOTO_UPLOADS_DISABLED');
+    const cert = request.headers.get('x-certify');
+    if (!['self', 'permission', 'rights'].includes(cert)) throw new ApiError(400, 'CERTIFICATION_REQUIRED');
+    if (this.one('SELECT COUNT(*) n FROM echo_refs').n >= 9) throw new ApiError(400, 'TOO_MANY_PHOTOS', { max: 9 });
+    const len = Number(request.headers.get('content-length') || 0);
+    if (len > cfg.maxPhotoBytes) throw new ApiError(413, 'IMAGE_TOO_LARGE', { maxBytes: cfg.maxPhotoBytes });
+    const bytes = new Uint8Array(await request.arrayBuffer());
+    if (!bytes.length || bytes.length > cfg.maxPhotoBytes) throw new ApiError(413, 'IMAGE_TOO_LARGE', { maxBytes: cfg.maxPhotoBytes });
+    const mime = sniffImage(bytes);
+    if (!mime) throw new ApiError(415, 'UNSUPPORTED_IMAGE_TYPE');
+    const screen = await screenUpload({ bytes, mime }, this.env);
+    if (!screen.ok) throw new ApiError(422, screen.code);
+    const id = rid();
+    this.run('INSERT INTO echo_refs(id,blob_id,certified,screening,created_at) VALUES(?,?,?,?,?)', id, this.putBlob(bytes, mime), cert, screen.status, Date.now());
+    return { id, ref: 'u:' + id };
+  }
+  echoCaptions(body) {
+    // Captions / dialogue / number preference are overlays stored beside the image — never printed into the generated art.
+    const r = this.one("SELECT id,meta FROM images WHERE id=? AND kind='echo'", String(body.imageId ?? ''));
+    if (!r) throw new ApiError(404, 'NOT_FOUND');
+    const meta = JSON.parse(r.meta);
+    if (body.captions !== undefined) {
+      const max = meta.panelCount ?? 1;
+      if (!Array.isArray(body.captions) || body.captions.length > max || body.captions.some((x) => typeof x !== 'string' || x.length > 160)) throw new ApiError(400, 'FIELD_INVALID', { field: 'captions' });
+      if (containsMinorSignal(...body.captions)) throw new ApiError(400, 'BLOCKED_MINOR_TERMS');
+      meta.captions = body.captions;
+    }
+    if (body.showPanelNumbers !== undefined) { if (typeof body.showPanelNumbers !== 'boolean') throw new ApiError(400, 'FIELD_INVALID', { field: 'showPanelNumbers' }); meta.showPanelNumbers = body.showPanelNumbers; }
+    this.run('UPDATE images SET meta=? WHERE id=?', JSON.stringify(meta), r.id);
+    return { ok: true, images: this.echoImages() };
+  }
+  async echoQuote(body) {
+    if (Object.keys(body).some((k) => !['format', 'panelCount', 'showPanelNumbers', 'refineOf', 'style', 'world', 'aspect'].includes(k))) throw new ApiError(400, 'FIELD_INVALID');   // a browser-supplied price is rejected outright
+    const refine = body.refineOf !== undefined ? this.echoImageMeta(String(body.refineOf)) : null;
+    const f = normalizeFormat(body, refine);
+    const amount = priceFor(skolPrices(this.env), f.format, f.panelCount);
+    if (!amount) throw new ApiError(503, 'IMAGE_PRICING_UNAVAILABLE');
+    const now = Date.now();
+    this.run('DELETE FROM quotes WHERE expires_at<?', now - 3600e3);
+    if (this.one("SELECT COUNT(*) n FROM quotes WHERE state='open' AND expires_at>?", now).n >= 30) throw new ApiError(429, 'TOO_MANY_QUOTES');
+    const id = rid() + rid().slice(0, 6), bind = await sha(JSON.stringify(stable({ format: f.format, panelCount: f.panelCount, showPanelNumbers: f.showPanelNumbers })));
+    this.run("INSERT INTO quotes(id,bind,amount,state,expires_at,created_at) VALUES(?,?,?,'open',?,?)", id, bind, amount, now + QUOTE_TTL_MS, now);
+    return { quoteId: id, expiresAt: new Date(now + QUOTE_TTL_MS).toISOString(), amountSkol: amount, currency: 'Sköl', usageUnits: 1, format: f.format, panelCount: f.panelCount, showPanelNumbers: f.showPanelNumbers, charged: false };
+  }
+  async admitEcho(body) {
+    const cfg = this.cfg, now = Date.now();
+    const refine = body.refineOf !== undefined ? this.echoImageMeta(String(body.refineOf)) : null;
+    const p = normalizeEcho(body, refine);
+    if (refine) { if (p.refs.length > MAX_ECHO_REFS - 1) throw new ApiError(400, 'FIELD_INVALID', { field: 'refs' }); p.refs = [`i:${p.refinedFrom}`, ...p.refs]; }
+    const hash = await sha(JSON.stringify(stable(p)));
+    const prior = this.one('SELECT id,hash FROM jobs WHERE idem=?', p.idempotencyKey);
+    if (prior) { if (prior.hash !== hash) throw new ApiError(409, 'IDEMPOTENCY_CONFLICT'); return { ...this.jobView(prior.id), replay: true }; }   // same key -> same job: no second request, no second use
+    if (!cfg.generationEnabled) throw new ApiError(503, 'GENERATION_PAUSED');
+    if (!this.env.OPENAI_API_KEY && !this.devMock) throw new ApiError(503, 'OPENAI_KEY_MISSING');
+    const last = this.meta('lastSubmitAt', 0);
+    if (last && now - last < cfg.minSubmitIntervalMs) throw new ApiError(429, 'TOO_SOON', { retryAfterMs: cfg.minSubmitIntervalMs - (now - last) });
+    if (this.one("SELECT COUNT(*) n FROM jobs WHERE state IN ('created','working')").n >= cfg.maxQueuedUser) throw new ApiError(429, 'TOO_MANY_QUEUED');
+    if (!this.unlimited && this.callsToday(now) + 1 > cfg.maxCallsPerDayUser) throw new ApiError(429, 'DAILY_CALL_CAP', { cap: cfg.maxCallsPerDayUser });
+    for (const r of p.refs) {
+      const id = r.slice(2), ok = r[0] === 'i' ? this.one('SELECT 1 x FROM images WHERE id=?', id) : this.one('SELECT 1 x FROM echo_refs WHERE id=?', id);
+      if (!ok) throw new ApiError(404, 'REF_IMAGE_NOT_FOUND');
+    }
+    const amount = priceFor(skolPrices(this.env), p.format, p.panelCount);
+    const bind = await sha(JSON.stringify(stable({ format: p.format, panelCount: p.panelCount, showPanelNumbers: p.showPanelNumbers })));
+    const q = this.one('SELECT bind,amount,state,expires_at FROM quotes WHERE id=?', p.quoteId);
+    if (!amount || !q || q.state !== 'open' || q.expires_at < now || q.bind !== bind || q.amount !== amount) throw new ApiError(403, 'IMAGE_QUOTE_INVALID');
+    const res = await this.ledger.reserve(this.meta('email'), cfg.estUsdPerCall);   // ONE provider request, whatever the panel count
+    if (!res.ok) throw new ApiError(429, res.code);
+    const jobId = rid(), params = { ...p, size: sizeFor(p), skolQuoted: amount, moderationMode: this.echoModeration().mode };
+    try {
+      this.ctx.storage.transactionSync(() => {
+        if (this.one('SELECT state FROM quotes WHERE id=?', p.quoteId)?.state !== 'open') throw new ApiError(403, 'IMAGE_QUOTE_INVALID');
+        this.run("UPDATE quotes SET state='used' WHERE id=?", p.quoteId);
+        this.run("INSERT INTO jobs(id,idem,kind,hash,params,state,ledger_id,created_at,updated_at) VALUES(?,?,?,?,?,'created',?,?,?)", jobId, p.idempotencyKey, 'echo', hash, JSON.stringify(params), res.id, now, now);
+        this.run("INSERT INTO grants(id,kind,job_idem,state,ts) VALUES(?,?,?,'held',?)", rid(), 'echo', p.idempotencyKey, now);
         this.setMeta('lastSubmitAt', now);
       });
     } catch (e) { await this.ledger.cancel(res.id); throw e; }
@@ -301,7 +463,8 @@ export class UserState extends DurableObject {
     // Deletes photos and images; keeps the entitlement counters so a purge cannot be used to claim free generations again.
     for (const u of this.q('SELECT blob_id FROM uploads')) this.delBlob(u.blob_id);
     for (const i of this.q('SELECT blob_id FROM images')) this.delBlob(i.blob_id);
-    this.run('DELETE FROM uploads'); this.run('DELETE FROM images');
+    for (const u of this.q('SELECT blob_id FROM echo_refs')) this.delBlob(u.blob_id);
+    this.run('DELETE FROM uploads'); this.run('DELETE FROM images'); this.run('DELETE FROM echo_refs'); this.run('DELETE FROM quotes');
     this.run("UPDATE jobs SET params='{}', result=NULL");
     return this.me();
   }
@@ -331,29 +494,34 @@ export class UserState extends DurableObject {
     const principal = { userId: (await sha(String(email))).slice(0, 32), verifiedAdult: false, age: 18 };
     const sceneId = `scene_${job.id}`;
     const pb = p.kind === PREBUILT_KIND ? prebuiltScene(p) : null;
+    const echo = p.kind === 'echo';
+    const echoSubjects = echo ? self.echoSubjects(p) : [];
     const face = (baseKind(p.kind) === 'telo' || p.kind === 'avatar') && p.part === 'face';       // face close-up half of the Telō package (built from the full-length image)
-    const adult = pb ? 'adult' : (p.canon.apparentAge && (firstNumber(p.canon.apparentAge) ?? 18) >= 18) ? 'adult' : 'unknown';
-    const sceneIntro = pb ? pb.sceneIntro : face
+    const adult = (pb || echo) ? 'adult' : (p.canon.apparentAge && (firstNumber(p.canon.apparentAge) ?? 18) >= 18) ? 'adult' : 'unknown';
+    const sceneIntro = echo ? (p.format === 'collage' ? 'A multi-panel story collage on one canvas.' : 'A single scene image.') + ' Every person depicted is an adult (18 or over).' : pb ? pb.sceneIntro : face
       ? 'Face-detail close-up of ' + (p.kind === 'avatar' ? 'the user\'s own avatar' : 'the user\'s Telōsian companion') + ', the SAME person as the attached full-length reference: head and shoulders with the face filling most of the frame, calm neutral expression, soft even lighting, sharp skin, hair and eye detail, plain uncluttered background.'
       : 'Onboarding full-length reference image of ' + (p.kind === 'avatar' ? 'the user\'s own avatar' : 'the user\'s first Telōsian companion') + ': one person, the ENTIRE body visible from head to feet including footwear, standing upright and facing the camera in a relaxed neutral pose with arms slightly away from the body, centered with clear space around the figure, shown in their world against an uncluttered background that does not hide the silhouette.';
     let usedProvider = false;
 
     const service = createSceneImageService({
       scenes: { async getAuthorizedScene(uid, sid) {
-        return sid === sceneId ? { id: sceneId, description: sceneIntro, worldId: 'onboarding', locationId: null, participantIds: [pb ? p.charId : p.kind], occurredAt: new Date(job.created_at).toISOString(), privateAdult: false } : null;
+        return sid === sceneId ? { id: sceneId, description: sceneIntro, worldId: 'onboarding', locationId: null, participantIds: echo ? echoSubjects.map((x) => x.id) : [pb ? p.charId : p.kind], occurredAt: new Date(job.created_at).toISOString(), privateAdult: false } : null;
       } },
       canon: {
         async getCharacterSnapshots() {
+          if (echo) return echoSubjects.map((x) => ({ id: x.id, displayName: x.name, canonVersion: 'echo1', canonAgeClass: 'adult', ageAmbiguous: false, minorPresenting: false, adultEligible: false,
+            appearance: { locked: { apparentAge: 'adult (18 or over)' }, atSceneTime: {} }, relationshipFacts: [] }));
           if (pb) return [{ id: p.charId, displayName: pb.displayName, canonVersion: PREBUILT_VERSION, canonAgeClass: 'adult', ageAmbiguous: false, minorPresenting: false, adultEligible: false,
             appearance: { locked: pb.locked, atSceneTime: pb.outfit ? { currentOutfit: pb.outfit } : {} }, relationshipFacts: [] }];
           return [{ id: p.kind, displayName: p.name || (p.kind === 'avatar' ? 'The user' : 'The companion'), canonVersion: 'v1', canonAgeClass: adult, ageAmbiguous: adult !== 'adult', minorPresenting: false, adultEligible: false,
             appearance: { locked: p.canon, atSceneTime: p.outfit ? { currentOutfit: p.outfit } : {} }, relationshipFacts: [] }];
         },
-        async getWorldSnapshot() { return { id: 'onboarding', visualCanon: pb ? pb.worldVisual : (p.world || '') }; }
+        async getWorldSnapshot() { if (echo) return { id: 'echo', visualCanon: p.world ? `${p.world}: ${WORLD_VISUAL[p.world]}` : '' }; return { id: 'onboarding', visualCanon: pb ? pb.worldVisual : (p.world || '') }; }
       },
       media: {
         async loadCanonReferences() {
           if (pb) return self.canonRefs(p.charId, p.form, !!p.outfit, p.mode, p.slot);
+          if (echo) return self.echoRefImages(p);
           if (face) {
             const r = self.one('SELECT blob_id FROM images WHERE id=?', p.refImageId); const b = r && self.getBlob(r.blob_id);
             if (!b) throw new Error('CANON_REFERENCES_UNAVAILABLE');
@@ -370,13 +538,14 @@ export class UserState extends DurableObject {
         async savePrivateImage(rec) {
           const id = rid(); const { bytes, ...m } = rec;
           self.run('INSERT INTO images(id,job_id,kind,blob_id,meta,accepted,created_at) VALUES(?,?,?,?,?,0,?)', id, jobId, face ? p.kind + '_face' : p.kind, self.putBlob(bytes, rec.mime),
-            JSON.stringify({ part: face ? 'face' : 'full', model: m.providerModel, quality: cfg.quality, size: cfg.size, referenceCount: m.referenceCount, endpoint: m.endpoint, moderation: m.moderation, ...(pb ? { charId: p.charId, form: p.form, mode: p.mode } : {}) }), Date.now());
+            JSON.stringify({ ...(echo ? { format: p.format, panelCount: p.panelCount, showPanelNumbers: p.showPanelNumbers, style: p.style, world: p.world, aspect: p.aspect, refinedFrom: p.refinedFrom ?? null, scene: p.prompt.slice(0, 300), skolQuoted: p.skolQuoted ?? null, captions: [] } : {}), part: face ? 'face' : 'full', model: m.providerModel, quality: cfg.quality, size: cfg.size, referenceCount: m.referenceCount, endpoint: m.endpoint, moderation: m.moderation, ...(pb ? { charId: p.charId, form: p.form, mode: p.mode } : {}) }), Date.now());
           return { id };
         }
       },
       wallet: {
         async verifyAcceptedQuote({ principal: pr, scene, purpose }) {
           if (purpose !== 'manual') throw new Error('QUOTE_INVALID');
+          if (echo) return { amount: p.skolQuoted ?? 0, currency: 'Sköl', userConfirmed: true, userId: pr.userId, sceneId: scene.id };   // the quote was verified + consumed at admission; no wallet exists yet, so nothing is deducted
           return { amount: 0, currency: 'free', userConfirmed: true, userId: pr.userId, sceneId: scene.id };   // free onboarding allotment (Master 30.2, 18.7)
         },
         async reserve({ idempotencyKey }) {
@@ -396,7 +565,7 @@ export class UserState extends DurableObject {
       },
       safeguards: {
         async beforeGeneration({ snapshots }) {
-          if (containsMinorSignal(p.name, p.description, p.style, p.world, p.outfit, p.personality, p.scene, p.direction, ...Object.values(p.canon ?? {}))) throw new Error('BLOCKED_MINOR_TERMS');
+          if (containsMinorSignal(p.name, p.description, p.style, p.world, p.outfit, p.personality, p.prompt, p.scene, p.direction, ...Object.values(p.canon ?? {}))) throw new Error('BLOCKED_MINOR_TERMS');
           if (!snapshots.every((s) => s.canonAgeClass === 'adult')) throw new Error('MINOR_OR_AMBIGUOUS_CHARACTER_BLOCKED');
         },
         async afterGeneration({ bytes }) {
@@ -407,11 +576,11 @@ export class UserState extends DurableObject {
       logger: { error: (d) => self.logFailure(jobId, d) },
       openaiImage: async (args) => {
         const render = createOpenAIImageAdapter({
-          apiKey: self.env.OPENAI_API_KEY || (self.devMock ? 'mock-key' : undefined), model: cfg.model, allowLowModeration: false,
+          apiKey: self.env.OPENAI_API_KEY || (self.devMock ? 'mock-key' : undefined), model: cfg.model, allowLowModeration: self.env.ECHO_LOW_MODERATION !== 'false',
           ...(self.devMock ? { apiRoot: self.env.OPENAI_API_BASE } : {})
         });
         usedProvider = true;
-        const result = await render({ ...args, quality: cfg.quality, size: cfg.size });
+        const result = await render({ ...args, quality: cfg.quality, size: args.size || cfg.size, moderationMode: p.moderationMode });
         let usd = costFromUsage(result.usage, cfg.rates); const estimated = usd === null;
         if (estimated) usd = cfg.estUsdPerCall;
         self.run('INSERT INTO usage(id,job_id,ts,model,usd,estimated,raw) VALUES(?,?,?,?,?,?,?)', rid(), jobId, Date.now(), result.model, usd, estimated ? 1 : 0, JSON.stringify(result.usage ?? null));
@@ -421,7 +590,7 @@ export class UserState extends DurableObject {
 
     try {
       await service({ principal, trustedSurface: 'sfw',
-        request: { sceneId, idempotencyKey: job.idem, purpose: 'manual', quoteId: null, artDirection: pb ? pb.artDirection : [face ? 'Face close-up only; keep the same outfit neckline, hair and skin as the reference.' : '', p.description, p.personality && `Temperament and bearing (let it shape posture and expression only, never the clothing or setting): ${p.personality}`, p.style && `Style: ${p.style}`].filter(Boolean).join('\n'), mode: pb ? pb.mode : 'portrait', quality: cfg.quality, size: cfg.size, } });
+        request: { sceneId, idempotencyKey: job.idem, purpose: 'manual', quoteId: null, artDirection: echo ? echoDirection(p) : pb ? pb.artDirection : [face ? 'Face close-up only; keep the same outfit neckline, hair and skin as the reference.' : '', p.description, p.personality && `Temperament and bearing (let it shape posture and expression only, never the clothing or setting): ${p.personality}`, p.style && `Style: ${p.style}`].filter(Boolean).join('\n'), mode: echo ? 'echo' : pb ? pb.mode : 'portrait', quality: cfg.quality, size: echo ? sizeFor(p) : cfg.size, } });
     } catch { /* recorded on the job row and in diag */ }
   }
 
