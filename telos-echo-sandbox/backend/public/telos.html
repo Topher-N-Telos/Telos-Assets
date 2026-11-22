@@ -31161,6 +31161,22 @@ The user is about to begin a ${cfg.language || "language"} practice session with
     { id: "talk", label: "Speech or talk", cat: "Professional", unit: "Piece", multi: false }
   ];
   var SC_RULES = "\n\nSKILL IN USE: Scribe. You are this person's co-author and writing coach on a sustained piece of work: stories, novels, poems, lyrics, screenplays, storyboards, comics, children's books, and professional documents such as reports, prospectuses, presentations, emails and speeches. Stay in your own voice while you work. Protect the author's established voice and the project's recorded facts: when something contradicts them, say so plainly instead of quietly changing it. Draft when asked, and offer options when the author is undecided. You have NO web access: never claim to have looked anything up. Hard limits no project setting changes: never write sexual, suggestive or nude content involving a minor or a minor-presenting character, and never write sexual content about real people or present invented claims about real people as true. A character under 18 may appear inside a work as a character of that work only, written without any sexual or suggestive content. Keep replies focused on the work.";
+  // Skill bridges (Master 19C.6A): a bridge puts one visible, author-approved item into another skill's inbox. The receiving screen shows it and
+  // the person decides whether to use it. Nothing moves between skill memories.
+  var SK_INBOX = "telos-v1-skill-inbox-";
+  async function skInboxList(skill) { try { const l = await storageGet(SK_INBOX + skill, []); return Array.isArray(l) ? l : []; } catch (e) { return []; } }
+  async function skInboxAdd(skill, item) { const l = await skInboxList(skill); await storageSet(SK_INBOX + skill, [...l, { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 5), ts: Date.now(), from: "Scribe", ...item }].slice(-20)); }
+  async function skInboxRemove(skill, id) { const l = await skInboxList(skill); await storageSet(SK_INBOX + skill, l.filter((x) => x.id !== id)); }
+  function skBridgeCard(o) {
+    const R = import_react, h = R.createElement;
+    if (!o.items || !o.items.length) return null;
+    return h("div", { style: { display: "flex", flexDirection: "column", gap: 8 } }, o.items.map((it) => h("div", { key: it.id, style: { border: "1px solid " + (o.accent || "#9B7EC8") + "55", background: "rgba(18,12,32,0.7)", padding: "12px 14px", display: "flex", flexDirection: "column", gap: 8 } },
+      h("div", { style: { fontFamily: "Cinzel, serif", fontSize: 9, letterSpacing: 2.5, color: (o.accent || "#9B7EC8") + "CC" } }, "FROM SCRIBE"),
+      h("div", { style: { fontSize: 13, color: "#D8CEBA", lineHeight: 1.5 } }, it.kind === "warmup" ? "Asked for a warm-up before a talk" + (it.title ? ": " + it.title : "") + "." : (it.title ? it.title + ": " : "") + String(it.text || "").slice(0, 280) + (String(it.text || "").length > 280 ? "…" : "")),
+      h("div", { style: { display: "flex", gap: 8 } },
+        h("button", { onClick: () => o.onUse(it), style: { background: "transparent", border: "1px solid " + (o.accent || "#9B7EC8") + "88", color: o.accent || "#9B7EC8", fontFamily: "Cinzel, serif", fontSize: 9, letterSpacing: 2, padding: "7px 12px", cursor: "pointer" } }, o.useLabel),
+        h("button", { onClick: () => o.onDismiss(it), style: { background: "transparent", border: "1px solid rgba(255,255,255,0.15)", color: "rgba(200,190,170,0.7)", fontFamily: "Cinzel, serif", fontSize: 9, letterSpacing: 2, padding: "7px 12px", cursor: "pointer" } }, "DISMISS")))));
+  }
   function scUid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
   function scType(p) { return SC_TYPES.find((t) => t.id === (p && p.typeId)) || SC_TYPES[0]; }
   function scWords(s) { return (s || "").trim().split(/\s+/).filter(Boolean).length; }
@@ -31538,6 +31554,8 @@ The user is about to begin a ${cfg.language || "language"} practice session with
     const [planUnit, setPlanUnit] = R.useState("");
     const [planPair, setPlanPair] = R.useState("");
     const [present, setPresent] = R.useState(false);
+    const [bridgeFor, setBridgeFor] = R.useState(null);
+    const [bridgeSkills, setBridgeSkills] = R.useState([]);
     const [impOpen, setImpOpen] = R.useState(false);
     const [impTitle, setImpTitle] = R.useState("");
     const [impText, setImpText] = R.useState("");
@@ -31884,6 +31902,26 @@ The user is about to begin a ${cfg.language || "language"} practice session with
         setTimeout(() => { try { f.contentWindow.focus(); f.contentWindow.print(); } catch (e) { say("Print not available"); } setTimeout(() => f.remove(), 4000); }, 300);
       } catch (e) { say("Print not available"); }
     };
+    const openBridge = async (uid) => {
+      if (bridgeFor === uid) { setBridgeFor(null); return; }
+      let list = [];
+      try { list = await loadMyTelosians(); } catch (e) { list = []; }
+      setBridgeSkills((list || []).map((r) => r && r.skillModule).filter(Boolean));
+      setBridgeFor(uid);
+    };
+    const sendBridge = async (kind, u) => {
+      try {
+        if (kind === "lang") {
+          const text = (selText || u.text || "").slice(0, 1500);
+          await skInboxAdd("Language Teacher", { kind: "passage", title: proj.title + " / " + u.title, text });
+          say("Sent to your Language Teacher");
+        } else {
+          await skInboxAdd("Wellness Coach", { kind: "warmup", title: proj.title });
+          say("Warm-up requested from your Wellness Coach");
+        }
+        setBridgeFor(null);
+      } catch (e) { say("Could not send"); }
+    };
     const saveSpeaking = async (text) => {
       try { await memPromiseRef.current; } catch (e) {}
       if (!memRef.current || !tel) return;
@@ -32018,6 +32056,7 @@ The user is about to begin a ${cfg.language || "language"} practice session with
                 h("div", { style: { display: "flex", flexWrap: "wrap", gap: 6 } },
                   btn("RESEARCH", () => setResearch({ seed: "", n: Date.now() }), { variant: "ghost", auto: true, pad: "6px 12px" }),
                   selText && btn("REVIEW FOR ACCURACY", () => { setResearch({ seed: selText, n: Date.now() }); setSelText(""); }, { variant: "ghost", auto: true, pad: "6px 12px" }),
+                  (u.text || "").trim() && btn(bridgeFor === u.id ? "CLOSE SEND" : "SEND TO…", () => openBridge(u.id), { variant: "ghost", auto: true, pad: "6px 12px" }),
                   (versions.length > 0 || u.approvedText) && btn(verOpen === u.id ? "HIDE VERSIONS" : "VERSIONS (" + versions.length + ")", () => { setVerOpen(verOpen === u.id ? null : u.id); setVerView(null); }, { variant: "ghost", auto: true, pad: "6px 12px" })),
                 (chk && chk.uid === u.id) && h("div", { style: { display: "flex", flexDirection: "column", gap: 8 } },
                   chk.failed ? note("I could not run the check just now. You can still approve it.") : label("CONTINUITY FLAGS", { color: accent + "CC" }),
@@ -32029,6 +32068,18 @@ The user is about to begin a ${cfg.language || "language"} practice session with
                       : btn(chk.failed ? "APPROVE ANYWAY" : "APPROVE", () => doApprove(u), { variant: "ghost", auto: true, pad: "7px 12px" }),
                     btn("KEEP REVISING", () => { setUnit(u.id, { status: "Under Revision" }); setChk(null); setExcReason(""); }, { variant: "ghost", auto: true, pad: "7px 12px" }))),
                 (u.exceptions || []).length > 0 && h("div", { style: { fontSize: 11, color: "rgba(200,190,170,0.55)", fontStyle: "italic" } }, "Intentional exception recorded: " + u.exceptions[u.exceptions.length - 1].reason),
+                bridgeFor === u.id && h("div", { style: { display: "flex", flexDirection: "column", gap: 8 } },
+                  label("SEND TO ANOTHER SKILL"),
+                  note("Only what is shown below leaves Scribe, and only when you tap Send."),
+                  bridgeSkills.includes("Language Teacher")
+                    ? (proj.category === "Creative"
+                      ? note("Language Teacher: Creative (Sandbox) work stays inside Scribe, so it can't be sent.")
+                      : h(R.Fragment, null, card(h("div", { style: { ...body, fontSize: 13 } }, "To your Language Teacher, for correction and explanation: \"" + (selText || u.text || "").slice(0, 300) + ((selText || u.text || "").length > 300 ? "…" : "") + "\"")), btn("SEND PASSAGE TO LANGUAGE TEACHER", () => sendBridge("lang", u), { variant: "ghost" })))
+                    : note("Language Teacher: none attached."),
+                  bridgeSkills.includes("Wellness Coach")
+                    ? btn("ASK WELLNESS COACH FOR A WARM-UP", () => sendBridge("well", u), { variant: "ghost" })
+                    : note("Wellness Coach: none attached. A warm-up request carries no text and no health data."),
+                  note("Virtual Assistant, Coding Mentor and Concierge are not available in the app yet.")),
                 verOpen === u.id && h("div", { style: { display: "flex", flexDirection: "column", gap: 8 } },
                   label("VERSIONS"),
                   versions.length === 0 && note("No earlier versions yet."),
@@ -32661,8 +32712,11 @@ React in 1-3 sentences, in your voice. If something was noticed above, speak to 
     ] });
   }
   function WellnessScreen({ dailySteps, setDailySteps }) {
+    // ADDED (App v136) — Scribe bridge (Master 19C.6A). Requests Scribe has left for this coach; no health data goes the other way.
+    const [scribeAsks, setScribeAsks] = (0, import_react.useState)([]);
     const [world, setWorld] = (0, import_react.useState)("UMBRA");
     const [view, setView] = (0, import_react.useState)("dashboard");
+    (0, import_react.useEffect)(() => { let dead = false; skInboxList("Wellness Coach").then((l) => { if (!dead) setScribeAsks(l); }); return () => { dead = true; }; }, [view]);
     const [logInput, setLogInput] = (0, import_react.useState)("");
     const [meal, setMeal] = (0, import_react.useState)("breakfast");
     const [parsing, setParsing] = (0, import_react.useState)(false);
@@ -32873,6 +32927,7 @@ React in 1-3 sentences, in your voice. If something was noticed above, speak to 
       ] }),
       view === "coach" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { ref: messagesContainerRef, onScroll: handleMessagesScroll, style: { flex: 1, overflowY: "auto", padding: "16px 16px 0", display: "flex", flexDirection: "column", gap: 14 }, children: [
+          skBridgeCard({ items: scribeAsks, accent: cfg.accent, useLabel: "START WARM-UP", onUse: (it) => { setCoachInput("Take me through a short warm-up before I give my talk: breathing, voice and shoulders."); skInboxRemove("Wellness Coach", it.id); setScribeAsks((l) => l.filter((x) => x.id !== it.id)); }, onDismiss: (it) => { skInboxRemove("Wellness Coach", it.id); setScribeAsks((l) => l.filter((x) => x.id !== it.id)); } }),
           coachMsgs.map((m, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { maxWidth: "90%", alignSelf: m.role === "user" ? "flex-end" : "flex-start" }, children: m.role === "user" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ChamferBox, { size: "sm", borderColor: `${cfg.color}33`, fillColor: `${cfg.color}28`, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { padding: "11px 14px", lineHeight: 1.65, fontSize: 15, color: "rgba(225,215,205,0.9)" }, children: m.content }) }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ChamferBox, { size: "sm", borderColor: "rgba(255,255,255,0.06)", fillColor: "rgba(18,12,32,0.7)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { padding: "11px 14px", lineHeight: 1.65, fontSize: 15, color: "#D8CEBA", fontStyle: "italic" }, children: m.content }) }) }, i)),
           coachLoading && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ChamferBox, { size: "sm", borderColor: `${cfg.color}33`, fillColor: "rgba(18,12,32,0.7)", style: { alignSelf: "flex-start" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 5, padding: "11px 14px" }, children: [0, 0.2, 0.4].map((d, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { width: 5, height: 5, borderRadius: "50%", background: `${cfg.color}88`, animation: `blink 1.4s ${d}s ease-in-out infinite alternate` } }, i)) }) }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { ref: bottomRef })
@@ -39673,6 +39728,9 @@ initRemote();
     const [chatInput, setChatInput] = (0, import_react.useState)("");
     const [chatBusy, setChatBusy] = (0, import_react.useState)(false);
     const [chatErr, setChatErr] = (0, import_react.useState)(null);
+    // ADDED (App v136) — Scribe bridge (Master 19C.6A): passages the author chose to send from Scribe. Shown inside the language chat; nothing is used until the person taps.
+    const [scribeItems, setScribeItems] = (0, import_react.useState)([]);
+    (0, import_react.useEffect)(() => { if (chatOpen) skInboxList("Language Teacher").then(setScribeItems); }, [chatOpen]);
     const chatEndRef = (0, import_react.useRef)(null);
     const lastSessionRef = (0, import_react.useRef)(null);
     (0, import_react.useEffect)(() => {
@@ -40041,6 +40099,7 @@ initRemote();
           ] })
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, overflowY: "auto", padding: "16px", display: "flex", flexDirection: "column", gap: 12 }, children: [
+          skBridgeCard({ items: scribeItems, accent: lt.accent, useLabel: "REVIEW WITH " + String(lt.name || "TEACHER").toUpperCase(), onUse: (it) => { setChatInput("Please review this passage from my writing. Correct the language and explain what you changed:\n\n" + String(it.text || "")); skInboxRemove("Language Teacher", it.id); setScribeItems((l) => l.filter((x) => x.id !== it.id)); }, onDismiss: (it) => { skInboxRemove("Language Teacher", it.id); setScribeItems((l) => l.filter((x) => x.id !== it.id)); } }),
           chatMsgs.length === 0 && !chatBusy && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { margin: "auto", textAlign: "center", color: "rgba(200,190,170,0.5)", fontStyle: "italic", fontSize: 14, maxWidth: 280, lineHeight: 1.5 }, children: `Ask ${lt.name || "your teacher"} about the lesson, a word, or anything you're stuck on.` }),
           chatMsgs.map((m, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CBub, { u: m.role === "user", border: m.role === "user" ? (lt.accent || "#9B7EC8") + "88" : "rgba(180,150,120,0.14)", fill: m.role === "user" ? `${lt.color || "#7B5EA7"}55` : "rgba(24,18,38,0.9)", style: { alignSelf: m.role === "user" ? "flex-end" : "flex-start", maxWidth: "86%", padding: "10px 13px", fontSize: 15, lineHeight: 1.5, whiteSpace: "pre-wrap", color: "#E8E0D2" }, children: [m.content, trControls(m, i, lt)] }, i)),
           chatBusy && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { alignSelf: "flex-start", color: "rgba(200,190,170,0.5)", fontStyle: "italic", fontSize: 14 }, children: "…" }),
