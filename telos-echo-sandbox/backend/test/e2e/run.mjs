@@ -623,3 +623,15 @@ test('echo profile: moments from a generated image or an uploaded photo, private
   assert.equal((await eAlice('DELETE', `/api/echo/posts/${a.json.id}`)).json.ok, true);
   assert.equal((await eAlice('GET', '/api/echo/profile')).json.counts.posts, 0);
 });
+
+test('account state: saved app data is private, size-limited, newest-wins timestamps, deletable', async () => {
+  const put = (c, k, v, h) => c('PUT', '/api/state/' + encodeURIComponent(k), Buffer.from(JSON.stringify(v)), Object.assign({ 'content-type': 'application/json' }, h || {}));
+  assert.equal((await put(eAlice, 'telos-v1-onboarding-complete', { name: 'Rowan' }, { 'x-saved-at': '1700000000000' })).status, 200);
+  assert.equal((await put(eAlice, 'bad key!', 1)).json.error, 'KEY_INVALID');
+  const list = (await eAlice('GET', '/api/state')).json.items; assert.equal(list.length, 1); assert.equal(JSON.parse(list[0].value).name, 'Rowan'); assert.equal(list[0].updatedAt, 1700000000000);
+  assert.equal((await eBob('GET', '/api/state')).json.items.length, 0);
+  assert.equal((await eAlice('PUT', '/api/state/x', Buffer.from('{nope'), { 'content-type': 'application/json' })).json.error, 'BAD_JSON');
+  assert.equal((await eAlice('PUT', '/api/state/big', Buffer.from(JSON.stringify('x'.repeat(2_000_000))), { 'content-type': 'application/json' })).json.error, 'STATE_TOO_LARGE');
+  assert.equal((await eAlice('DELETE', '/api/state/' + encodeURIComponent('telos-v1-onboarding-complete'))).json.ok, true);
+  assert.equal((await eAlice('GET', '/api/state')).json.items.length, 0);
+});

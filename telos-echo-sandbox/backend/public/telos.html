@@ -27149,11 +27149,48 @@ Write a complete roleplay system prompt in the voice of instructions to the AI (
     } catch (e) { return { error: true }; }
   }
   function lsSet(key, value) {
-    try { localStorage.setItem(LS_PREFIX + key, JSON.stringify(value)); return true; } catch (e) { return false; }
+    try { localStorage.setItem(LS_PREFIX + key, JSON.stringify(value)); localStorage.setItem(LS_MTIME + key, String(Date.now())); stateQueue(key); return true; } catch (e) { return false; }
   }
-  function lsDelete(key) { try { localStorage.removeItem(LS_PREFIX + key); } catch (e) {} }
+  function lsDelete(key) { try { localStorage.removeItem(LS_PREFIX + key); localStorage.removeItem(LS_MTIME + key); stateQueue(key, true); } catch (e) {} }
+  // App v150 — account copy. Everything the app saves on this device is also saved to the signed-in account on the Worker, and a device that has nothing (a new phone, the home-screen app, cleared storage) restores it on launch before the app decides whether to show onboarding. Newest save wins; data that only exists on this device is uploaded the first time.
+  var LS_MTIME = "telos-lsm:";
+  var STATE_TIMERS = {};
+  var STATE_HDR = { "x-telos": "1", "content-type": "application/json" };
+  function stateQueue(key, del) {
+    try {
+      clearTimeout(STATE_TIMERS[key]);
+      STATE_TIMERS[key] = setTimeout(function () { delete STATE_TIMERS[key]; statePush(key, del); }, 700);
+    } catch (e) {}
+  }
+  async function statePush(key, del) {
+    try {
+      var url = "/api/state/" + encodeURIComponent(key);
+      if (del) { await fetch(url, { method: "DELETE", credentials: "same-origin", headers: STATE_HDR }); return; }
+      var raw = localStorage.getItem(LS_PREFIX + key); if (raw === null) return;
+      await fetch(url, { method: "PUT", credentials: "same-origin", headers: Object.assign({ "x-saved-at": localStorage.getItem(LS_MTIME + key) || String(Date.now()) }, STATE_HDR), body: raw });
+    } catch (e) {}
+  }
+  var STATE_READY = null;
+  function stateReady() { if (!STATE_READY) STATE_READY = stateSync().catch(function () {}); return STATE_READY; }
+  async function stateSync() {
+    var ctl = new AbortController(), to = setTimeout(function () { ctl.abort(); }, 6000), r;
+    try { r = await fetch("/api/state", { credentials: "same-origin", headers: { "x-telos": "1" }, signal: ctl.signal }); } finally { clearTimeout(to); }
+    if (!r || !r.ok) return;
+    var j = await r.json(), seen = {};
+    (j.items || []).forEach(function (it) {
+      seen[it.key] = 1;
+      var local = localStorage.getItem(LS_PREFIX + it.key), lm = Number(localStorage.getItem(LS_MTIME + it.key)) || 0;
+      if (local === null || (lm && it.updatedAt > lm)) { try { localStorage.setItem(LS_PREFIX + it.key, it.value); localStorage.setItem(LS_MTIME + it.key, String(it.updatedAt)); } catch (e) {} }
+      else if (local !== it.value && (!lm || lm > it.updatedAt)) statePush(it.key);
+    });
+    for (var i = 0; i < localStorage.length; i++) {
+      var k = localStorage.key(i);
+      if (k && k.indexOf(LS_PREFIX) === 0) { var key = k.slice(LS_PREFIX.length); if (!seen[key]) statePush(key); }
+    }
+  }
   function lsCollection() {
     return { get: async () => {
+      await stateReady();
       const docs = [];
       try {
         for (let i = 0; i < localStorage.length; i++) {
@@ -27178,6 +27215,7 @@ Write a complete roleplay system prompt in the voice of instructions to the AI (
     return db.collection(`data/users/${uid}`);
   }
   async function storageGet(key, fallback) {
+    await stateReady();
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
         const ref = await docForKey(key);
@@ -27195,6 +27233,7 @@ Write a complete roleplay system prompt in the voice of instructions to the AI (
     }
   }
   async function storageGetWithStatus(key) {
+    await stateReady();
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
         const ref = await docForKey(key);

@@ -14,6 +14,7 @@ import { STYLES, WORLD_IDS, WORLD_VISUAL, worldCanon, SUB_WORLDS, MARIS_DEEP_SPE
 
 const CHUNK = 900_000;
 const MAX_JSON_BYTES = 32 * 1024;
+const MAX_STATE_VALUE = 1_900_000, MAX_STATE_KEYS = 400;
 const MAX_ECHO_POSTS = 500, MAX_ECHO_UPLOADS_PER_DAY = 30;
 function cleanCaption(c) { const t = String(c ?? '').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, ' ').trim(); if (t.length > 2200) throw new ApiError(400, 'CAPTION_TOO_LONG'); return t; }
 const PREBUILT_KIND = 'prebuilt';
@@ -52,6 +53,7 @@ export class UserState extends DurableObject {
       'CREATE TABLE IF NOT EXISTS diag(job_id TEXT PRIMARY KEY, ts INTEGER, code TEXT, detail TEXT)',
       'CREATE TABLE IF NOT EXISTS echo_refs(id TEXT PRIMARY KEY, blob_id TEXT NOT NULL, certified TEXT NOT NULL, screening TEXT, created_at INTEGER)',
       'CREATE TABLE IF NOT EXISTS echo_posts(id TEXT PRIMARY KEY, source TEXT NOT NULL, image_id TEXT, blob_id TEXT, certified TEXT, caption TEXT NOT NULL DEFAULT \'\', world TEXT, created_at INTEGER)',
+      'CREATE TABLE IF NOT EXISTS app_state(k TEXT PRIMARY KEY, v TEXT NOT NULL, updated_at INTEGER NOT NULL)',
       'CREATE TABLE IF NOT EXISTS quotes(id TEXT PRIMARY KEY, bind TEXT NOT NULL, amount INTEGER NOT NULL, state TEXT NOT NULL, expires_at INTEGER NOT NULL, created_at INTEGER)'
     ]) this.sql.exec(s);
   }
@@ -119,6 +121,7 @@ export class UserState extends DurableObject {
       if (c === 'accept' && m === 'POST') return json(this.accept(b, await this.body(request)));
     }
     if (a === 'echo') return this.echoRoute(request, m, parts);
+    if (a === 'state') return this.stateRoute(request, m, parts);
     if (a === 'prebuilt' && b && c === 'generate' && m === 'POST') return json(await this.generatePrebuilt(b, await this.body(request)));
     if (a === 'jobs' && b && m === 'GET') return json(this.jobView(b));
     if (a === 'images' && b && m === 'DELETE') return json(this.deletePrebuiltImage(b));
@@ -395,6 +398,23 @@ export class UserState extends DurableObject {
     }
     throw new ApiError(404, 'NOT_FOUND');
   }
+  // ---- Account copy of the app's own saved data (profile, Telōs, progress) so every device of this account sees the same thing ----
+  async stateRoute(request, m, parts) {
+    if (m === 'GET' && !parts[2]) return json({ items: this.q('SELECT k,v,updated_at FROM app_state').map((r) => ({ key: r.k, value: r.v, updatedAt: r.updated_at })), now: Date.now() });
+    let key = ''; try { key = decodeURIComponent(parts[2] ?? ''); } catch { key = ''; }
+    if (!/^[A-Za-z0-9_\-.~:@+]{1,190}$/.test(key)) throw new ApiError(400, 'KEY_INVALID');
+    if (m === 'PUT') {
+      const text = await request.text();
+      if (text.length > MAX_STATE_VALUE) throw new ApiError(413, 'STATE_TOO_LARGE');
+      try { JSON.parse(text); } catch { throw new ApiError(400, 'BAD_JSON'); }
+      if (!this.one('SELECT 1 x FROM app_state WHERE k=?', key) && this.one('SELECT COUNT(*) n FROM app_state').n >= MAX_STATE_KEYS) throw new ApiError(400, 'TOO_MANY_KEYS');
+      const ts = Math.min(Date.now(), Number(request.headers.get('x-saved-at')) || Date.now());
+      this.run('INSERT INTO app_state(k,v,updated_at) VALUES(?,?,?) ON CONFLICT(k) DO UPDATE SET v=excluded.v, updated_at=excluded.updated_at', key, text, ts);
+      return json({ ok: true, updatedAt: ts });
+    }
+    if (m === 'DELETE') { this.run('DELETE FROM app_state WHERE k=?', key); return json({ ok: true }); }
+    throw new ApiError(404, 'NOT_FOUND');
+  }
   // ---- Echō profile and moments (private to the owner for now: no followers or other accounts exist yet) ----
   echoProfile() {
     let prof = {}; try { prof = JSON.parse(this.meta('echoProfile') || '{}') || {}; } catch { prof = {}; }
@@ -555,6 +575,7 @@ export class UserState extends DurableObject {
   async purge(body) {
     if (body.confirm !== 'DELETE MY DATA') throw new ApiError(400, 'CONFIRM_REQUIRED');
     // Deletes photos and images; keeps the entitlement counters so a purge cannot be used to claim free generations again.
+    this.run('DELETE FROM app_state');
     for (const u of this.q('SELECT blob_id FROM uploads')) this.delBlob(u.blob_id);
     for (const i of this.q('SELECT blob_id FROM images')) this.delBlob(i.blob_id);
     for (const u of this.q('SELECT blob_id FROM echo_refs')) this.delBlob(u.blob_id);
