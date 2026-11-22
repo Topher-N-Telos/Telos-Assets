@@ -31138,6 +31138,7 @@ The user is about to begin a ${cfg.language || "language"} practice session with
     { id: "voice", label: "HOW THEY WRITE (voice and craft; protect this)", load: "full" },
     { id: "projects", label: "PROJECTS AND WHERE THEY STAND" },
     { id: "threads", label: "OPEN QUESTIONS (revisit when it fits)" },
+    { id: "speaking", label: "HOW THEY SPEAK (pace, filler words, rehearsal notes)" },
     { id: "recent", label: "RECENT SESSIONS" }
   ];
   // Units of completion, Master 19C.2D. multi = the work is divided into units the user adds; otherwise one piece marked Final.
@@ -31185,7 +31186,7 @@ The user is about to begin a ${cfg.language || "language"} practice session with
   async function scLoadMem(name) { return smLoad(SC_SKILL, name, "", SC_DEFS); }
   function scFormatMem(mem) {
     if (!mem) return "";
-    const main = smRead(mem, ["voice", "projects", "threads"]);
+    const main = smRead(mem, ["voice", "projects", "threads", "speaking"]);
     const r = smRead({ ...mem, cubicles: { recent: { ...mem.cubicles.recent, items: mem.cubicles.recent.items.slice(-3) } } }, ["recent"]);
     const body = [main, r].filter(Boolean).join("\n\n").trim();
     if (!body) return "";
@@ -31372,6 +31373,130 @@ The user is about to begin a ${cfg.language || "language"} practice session with
           h("div", { style: { flex: 1 } }, h(ChamferField, { size: "sm", borderColor: color + "40", activeBorderColor: color + "CC", fillColor: "rgba(25,16,45,0.8)" }, h("textarea", { value: input, onChange: (e) => setInput(e.target.value.slice(0, 4000)), placeholder: "ask…", rows: 2, style: { width: "100%", padding: "10px 14px", background: "transparent", border: "none", outline: "none", color: "#EEE8DD", fontSize: 16, lineHeight: 1.5, fontFamily: "Cormorant Garamond, Georgia, serif", resize: "none", boxSizing: "border-box" } }))),
           h("div", { style: { width: 72 } }, h(ChamferBtn, { size: "sm", variant: "primary", disabled: !input.trim() || busy, onClick: () => send(), style: { width: "100%", fontSize: 10 } }, "SEND")))));
   }
+  // Present mode and public-speaking rehearsal (Master 19C.2C), voice and Q&A. Camera and body-mechanics feedback are NOT built:
+  // they need an on-device pose/face model that the web app does not have yet. Only measures (pace, fillers, length) and a short
+  // coach note are kept; the transcript is discarded after the feedback and no audio is stored by Scribe.
+  var SC_FILLERS = ["um", "uh", "er", "like", "you know", "basically", "actually", "sort of", "kind of"];
+  function scSlides(units) {
+    const slides = [];
+    (units || []).forEach((u) => {
+      const txt = String(u.text || "").trim();
+      if (!txt) return;
+      const parts = txt.includes("\n---\n") ? txt.split(/\n---\n/) : txt.split(/\n{2,}/);
+      parts.map((x) => x.trim()).filter(Boolean).forEach((body, i) => slides.push({ title: u.title, body, first: i === 0 }));
+    });
+    return slides;
+  }
+  function scSpeechMetrics(transcript, secs) {
+    const words = (transcript || "").trim().split(/\s+/).filter(Boolean);
+    const lower = " " + words.join(" ").toLowerCase().replace(/[^\p{L}\p{N} ']/gu, "") + " ";
+    const fillers = {};
+    SC_FILLERS.forEach((f) => { const m = lower.split(" " + f + " ").length - 1; if (m > 0) fillers[f] = m; });
+    const total = Object.values(fillers).reduce((a, b) => a + b, 0);
+    return { words: words.length, secs, wpm: secs > 5 ? Math.round(words.length / (secs / 60)) : 0, fillers, fillerTotal: total };
+  }
+  function ScribePresent({ proj, units, telosList, defaultTelo, color, accent, onClose, onSaveSpeaking }) {
+    const R = import_react, h = R.createElement;
+    const slides = R.useMemo(() => scSlides(units), []);
+    const [i, setI] = R.useState(0);
+    const [mode, setMode] = R.useState("present");
+    const [presenter, setPresenter] = R.useState("me");
+    const [avatarId, setAvatarId] = R.useState(null);
+    const [rec, setRec] = R.useState(false);
+    const [secs, setSecs] = R.useState(0);
+    const [transcript, setTranscript] = R.useState("");
+    const [result, setResult] = R.useState(null);
+    const [fb, setFb] = R.useState("");
+    const [fbBusy, setFbBusy] = R.useState(false);
+    const [qa, setQa] = R.useState([]);
+    const [qaIn, setQaIn] = R.useState("");
+    const [qaBusy, setQaBusy] = R.useState(false);
+    const srRef = R.useRef(null);
+    const finalRef = R.useRef("");
+    const timerRef = R.useRef(null);
+    const SR = typeof window !== "undefined" ? (window.SpeechRecognition || window.webkitSpeechRecognition) : null;
+    const coach = telosList.find((t) => t.name === defaultTelo) || telosList[0] || null;
+    R.useEffect(() => { let dead = false; (async () => { try { const pr = await TelosImg.call("/api/echo/profile"); if (!dead && pr && pr.avatarImageId) setAvatarId(pr.avatarImageId); } catch (e) {} })(); return () => { dead = true; stopRec(true); }; }, []);
+    const slide = slides[i] || { title: proj.title, body: "Nothing to present yet.", first: true };
+    const pres = presenter === "me" ? null : telosList.find((t) => t.name === presenter);
+    const pcolor = pres ? ((WORLDS[pres.world] || {}).color || color) : color;
+    const presenterUi = h("div", { style: { display: "flex", alignItems: "center", gap: 10 } },
+      h("div", { style: { width: 44, height: 44, borderRadius: "50%", border: "1px solid " + pcolor + "88", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", background: "radial-gradient(circle at 35% 35%, " + pcolor + "55, #0E0618)" } },
+        presenter === "me" && avatarId ? h("img", { src: "/api/images/" + encodeURIComponent(avatarId), alt: "", style: { width: "100%", height: "100%", objectFit: "cover" } }) : h(TeloGlyph, { world: pres ? pres.world : "UMBRA", size: 20, color: pcolor })),
+      h("select", { value: presenter, onChange: (e) => setPresenter(e.target.value), style: { background: "rgba(25,16,45,0.8)", color: "#EEE8DD", border: "1px solid " + color + "40", padding: "8px 10px", fontSize: 13, fontFamily: "Cormorant Garamond, Georgia, serif" } }, h("option", { value: "me" }, "Your avatar"), telosList.map((t) => h("option", { key: t.name, value: t.name }, t.name))));
+    const stopRec = (silent) => {
+      try { if (srRef.current) { srRef.current.onend = null; srRef.current.stop(); srRef.current = null; } } catch (e) {}
+      if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+      if (!silent) setRec(false);
+    };
+    const startRec = () => {
+      setResult(null); setFb(""); setTranscript(""); finalRef.current = ""; setSecs(0);
+      if (SR) {
+        const r = new SR(); r.continuous = true; r.interimResults = true; r.lang = (navigator.language || "en-US");
+        r.onresult = (e) => { let fin = "", interim = ""; for (let k = 0; k < e.results.length; k++) { const t = e.results[k][0].transcript; if (e.results[k].isFinal) fin += t + " "; else interim += t; } finalRef.current = fin; setTranscript((fin + interim).trim()); };
+        r.onend = () => { try { r.start(); } catch (e) {} };
+        try { r.start(); srRef.current = r; } catch (e) {}
+      }
+      const t0 = Date.now();
+      timerRef.current = setInterval(() => setSecs(Math.round((Date.now() - t0) / 1000)), 500);
+      setRec(true);
+    };
+    const finish = async () => {
+      stopRec();
+      const text = (SR ? (finalRef.current || transcript) : transcript).trim();
+      const m = scSpeechMetrics(text, secs);
+      setResult(m);
+      if (!text) return;
+      setFbBusy(true);
+      const system = (coach && coach.system ? coach.system : "You are a public speaking coach.") + "\n\nYou are this person's public speaking coach. You heard a spoken run-through of their work. You can judge only what a transcript and timing show: clarity, structure, pace, filler words, whether it fits the material. You cannot see them, so never comment on posture, gestures, eye contact or appearance. Give three short specific points: what worked, what to change, and one thing to try next time. Be warm and direct.";
+      try {
+        const reply = await callClaude(system, [{ role: "user", content: "THE MATERIAL THEY WERE PRESENTING:\n" + slides.map((s) => s.body).join("\n\n").slice(0, 3500) + "\n\nWHAT THEY SAID (transcript):\n" + text.slice(0, 3500) + "\n\nMEASURES: " + m.words + " words in " + m.secs + " seconds (" + m.wpm + " words per minute); filler words: " + (m.fillerTotal ? Object.entries(m.fillers).map(([k, v]) => k + " x" + v).join(", ") : "none detected") }], 600);
+        setFb(reply || "");
+        try { onSaveSpeaking("Rehearsal of \"" + proj.title + "\": " + m.wpm + " words per minute, " + m.fillerTotal + " filler words, " + m.secs + " seconds." + (reply ? " Coach note: " + reply.replace(/\s+/g, " ").slice(0, 280) : "")); } catch (e) {}
+      } catch (e) { setFb(""); }
+      setTranscript(""); finalRef.current = "";
+      setFbBusy(false);
+    };
+    const qaSystem = () => (coach && coach.system ? coach.system : "You are a public speaking coach.") + "\n\nYou are playing a thoughtful audience member after a presentation, and then coaching. Ask ONE question at a time about the material below. After the person answers, give one sentence of coaching on the answer, then ask the next question. After three questions, say what they handled well and what to prepare. Keep every turn short.\n\nTHE MATERIAL:\n" + slides.map((s) => s.body).join("\n\n").slice(0, 4000);
+    const qaSend = async (text) => {
+      if (qaBusy) return;
+      const next = text === null ? [{ role: "user", content: "I have finished presenting. Ask me your first question." }] : [...qa, { role: "user", content: text }];
+      setQa(next); setQaIn(""); setQaBusy(true);
+      let reply = "";
+      try { reply = await callClaude(qaSystem(), next, 500); } catch (e) { reply = ""; }
+      setQa([...next, { role: "assistant", content: reply || "Something interrupted. Try again." }]); setQaBusy(false);
+    };
+    const bar = (lbl, onClick, on, dis) => h(ChamferBtn, { size: "sm", variant: on ? "accent" : "ghost", accentColor: color, textColor: on ? accent : "rgba(200,190,170,0.6)", fillColor: on ? undefined : "rgba(10,6,20,0.62)", disabled: !!dis, onClick, style: { fontSize: 9, padding: "7px 10px", width: "auto" } }, lbl);
+    const pill = (t, extra) => h("div", { style: { fontSize: 11, color: "rgba(200,190,170,0.6)", fontStyle: "italic", lineHeight: 1.5, ...extra } }, t);
+    return h("div", { style: { position: "absolute", inset: 0, zIndex: 50, display: "flex", flexDirection: "column", background: "#06040F" } },
+      h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", borderBottom: "1px solid rgba(255,255,255,0.06)", gap: 8, flexWrap: "wrap" } },
+        presenterUi,
+        h("div", { style: { display: "flex", gap: 6 } }, bar("PRESENT", () => { stopRec(); setMode("present"); }, mode === "present"), bar("REHEARSE", () => setMode("rehearse"), mode === "rehearse"), bar("Q AND A", () => { setMode("qa"); if (qa.length === 0) qaSend(null); }, mode === "qa"), bar("EXIT", () => { stopRec(); onClose(); }))),
+      mode === "present" && h(R.Fragment, null,
+        h("div", { style: { flex: 1, overflowY: "auto", padding: "26px 22px", display: "flex", flexDirection: "column", justifyContent: "center", gap: 14 } },
+          h("div", { style: { fontFamily: "Cinzel, serif", fontSize: 11, letterSpacing: 3, color: color + "CC" } }, slide.title.toUpperCase()),
+          h("div", { style: { fontSize: 22, lineHeight: 1.6, color: "#EEE8DD", fontFamily: "Cormorant Garamond, Georgia, serif", whiteSpace: "pre-wrap" } }, slide.body)),
+        h("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", paddingBottom: "max(12px, env(safe-area-inset-bottom))", borderTop: "1px solid rgba(255,255,255,0.06)" } },
+          bar("‹ BACK", () => setI(Math.max(0, i - 1)), false, i === 0), pill((slides.length ? i + 1 : 0) + " / " + slides.length), bar("NEXT ›", () => setI(Math.min(slides.length - 1, i + 1)), false, i >= slides.length - 1))),
+      mode === "rehearse" && h("div", { style: { flex: 1, overflowY: "auto", padding: "18px 18px 24px", display: "flex", flexDirection: "column", gap: 12 } },
+        pill("Speak your talk out loud. Scribe measures pace, filler words and length, then your coach gives feedback on what the words and timing show. Scribe keeps only those measures and a short note, never the audio or the transcript." + (SR ? " Your browser's speech recognition may send the audio to its provider to turn it into text." : "")),
+        pill("Camera and posture feedback is not available yet."),
+        !SR && h("textarea", { value: transcript, onChange: (e) => setTranscript(e.target.value.slice(0, 8000)), placeholder: "This device has no speech recognition. Type or paste what you said…", rows: 5, style: { width: "100%", padding: 12, background: "rgba(25,16,45,0.8)", color: "#EEE8DD", border: "1px solid " + color + "40", fontSize: 15, fontFamily: "Cormorant Garamond, Georgia, serif", boxSizing: "border-box" } }),
+        h("div", { style: { fontFamily: "Cinzel, serif", fontSize: 26, color: "#EEE8DD", textAlign: "center" } }, Math.floor(secs / 60) + ":" + String(secs % 60).padStart(2, "0")),
+        SR && rec && h("div", { style: { fontSize: 14, color: "#D8CEBA", fontStyle: "italic", maxHeight: 120, overflowY: "auto" } }, transcript || "Listening…"),
+        h("div", { style: { display: "flex", gap: 8, justifyContent: "center" } }, !rec ? bar("START", startRec, true) : bar("FINISH", finish, true), !SR && rec && null),
+        result && h("div", { style: { fontSize: 14, color: "#D8CEBA", lineHeight: 1.6 } }, "Pace: " + result.wpm + " words per minute (" + result.words + " words, " + result.secs + " seconds). Filler words: " + (result.fillerTotal ? Object.entries(result.fillers).map(([k, v]) => k + " x" + v).join(", ") : "none detected") + "."),
+        fbBusy && pill("Your coach is listening back…"),
+        fb && h("div", { style: { fontSize: 15, color: "#EEE8DD", lineHeight: 1.65, whiteSpace: "pre-wrap" } }, fb)),
+      mode === "qa" && h(R.Fragment, null,
+        h("div", { style: { flex: 1, overflowY: "auto", padding: "16px", display: "flex", flexDirection: "column", gap: 12 } },
+          pill("An audience member asks about your material. Answer in your own words."),
+          qa.slice(1).map((m, k) => h("div", { key: k, style: { alignSelf: m.role === "user" ? "flex-end" : "flex-start", maxWidth: "92%", fontSize: 15, lineHeight: 1.6, color: m.role === "user" ? accent : "#EEE8DD", whiteSpace: "pre-wrap" } }, m.content)),
+          qaBusy && pill("…")),
+        h("div", { style: { display: "flex", gap: 8, padding: "12px 16px", paddingBottom: "max(12px, env(safe-area-inset-bottom))", borderTop: "1px solid rgba(255,255,255,0.06)" } },
+          h("textarea", { value: qaIn, onChange: (e) => setQaIn(e.target.value.slice(0, 3000)), placeholder: "your answer…", rows: 2, style: { flex: 1, padding: 10, background: "rgba(25,16,45,0.8)", color: "#EEE8DD", border: "1px solid " + color + "40", fontSize: 15, fontFamily: "Cormorant Garamond, Georgia, serif", resize: "none" } }),
+          bar("SEND", () => qaSend(qaIn.trim()), true, !qaIn.trim() || qaBusy))));
+  }
   function ScribeScreen({ onExit }) {
     const R = import_react, h = R.createElement;
     const [telos, setTelos] = R.useState([]);
@@ -31412,6 +31537,7 @@ The user is about to begin a ${cfg.language || "language"} practice session with
     const [planText, setPlanText] = R.useState("");
     const [planUnit, setPlanUnit] = R.useState("");
     const [planPair, setPlanPair] = R.useState("");
+    const [present, setPresent] = R.useState(false);
     const [impOpen, setImpOpen] = R.useState(false);
     const [impTitle, setImpTitle] = R.useState("");
     const [impText, setImpText] = R.useState("");
@@ -31662,7 +31788,7 @@ The user is about to begin a ${cfg.language || "language"} practice session with
           scMakeHandoff(p, tail).then((hf) => { if (hf) updP(p.id, (q) => ({ ...q, handoff: hf })); }).catch(() => {});
         }
       }
-      setPid(null); setOpenU(null); setChk(null); setConfirmDel(null); setVerOpen(null); setVerView(null); setResearch(null); setSnapOpen(false); setSelText("");
+      setPid(null); setOpenU(null); setChk(null); setConfirmDel(null); setVerOpen(null); setVerView(null); setResearch(null); setPresent(false); setSnapOpen(false); setSelText("");
     };
     const archiveProject = () => { updP(proj.id, (p) => ({ ...p, archived: true })); leaveProject(); say("Archived. Restore it from the projects list."); };
     const restoreProject = (id) => { updP(id, (p) => ({ ...p, archived: false })); say("Restored"); };
@@ -31758,6 +31884,13 @@ The user is about to begin a ${cfg.language || "language"} practice session with
         setTimeout(() => { try { f.contentWindow.focus(); f.contentWindow.print(); } catch (e) { say("Print not available"); } setTimeout(() => f.remove(), 4000); }, 300);
       } catch (e) { say("Print not available"); }
     };
+    const saveSpeaking = async (text) => {
+      try { await memPromiseRef.current; } catch (e) {}
+      if (!memRef.current || !tel) return;
+      const m = smAddEntry(memRef.current, "speaking", text);
+      if (m !== memRef.current) { memRef.current = m; await smSave(SC_SKILL, tel.name, "", m); }
+    };
+    const presentUnits = () => { const canon = (proj.units || []).filter(scIsCanon).map((u) => ({ title: u.title, text: u.approvedText })); return canon.length ? canon : (proj.units || []).filter((u) => (u.text || "").trim()).map((u) => ({ title: u.title, text: u.text })); };
     const copyMs = async () => { try { await navigator.clipboard.writeText(scManuscript(proj)); say("Copied"); } catch (e) { say("Copy not available"); } };
     const downloadMs = () => {
       try {
@@ -31917,6 +32050,7 @@ The user is about to begin a ${cfg.language || "language"} practice session with
             h("div", { style: { display: "flex", gap: 8 } }, btn("WORD (.DOC)", exportWord, { variant: "ghost" }), btn("PRINT OR PDF", exportPdf, { variant: "ghost" })),
             note("PowerPoint export is not available yet.")),
           rule(),
+          (proj.units || []).some((u) => (u.text || "").trim()) && btn("PRESENT OR REHEARSE", () => setPresent(true), { variant: "ghost" }),
           btn(impOpen ? "HIDE IMPORT" : "IMPORT WITH REVIEW", () => setImpOpen(!impOpen), { variant: "ghost" }),
           impOpen && h(R.Fragment, null,
             note("Paste an existing story or character dossier. Scribe finds the facts and characters in it, marks duplicates and conflicts against your ledger, and nothing is added until you accept."),
@@ -32028,6 +32162,7 @@ The user is about to begin a ${cfg.language || "language"} practice session with
       !loaded ? h("div", { style: { flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "rgba(200,190,170,0.5)", fontStyle: "italic" } }, "…") : h("div", { style: { flex: 1, display: "flex", flexDirection: "column", minHeight: 0, position: "relative" } }, content),
       proj && pickerUi,
       proj && research && h(ScribeResearch, { key: research.n, proj, seed: research.seed, color, accent, onPin: pinRef, onClose: () => setResearch(null) }),
+      proj && present && h(ScribePresent, { proj, units: presentUnits(), telosList: telos, defaultTelo: tel ? tel.name : "", color, accent, onClose: () => setPresent(false), onSaveSpeaking: saveSpeaking }),
       conflictUi,
       toast && h("div", { style: { position: "absolute", left: 0, right: 0, bottom: 90, display: "flex", justifyContent: "center", zIndex: 70, pointerEvents: "none" } }, h(ChamferBox, { size: "sm", borderColor: color + "88", fillColor: "rgba(12,8,24,0.97)" }, h("div", { style: { padding: "9px 18px", fontFamily: "Cinzel, serif", fontSize: 10, letterSpacing: 2, color: accent } }, toast.toUpperCase()))));
   }
