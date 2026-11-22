@@ -31412,6 +31412,14 @@ The user is about to begin a ${cfg.language || "language"} practice session with
     const [planText, setPlanText] = R.useState("");
     const [planUnit, setPlanUnit] = R.useState("");
     const [planPair, setPlanPair] = R.useState("");
+    const [impOpen, setImpOpen] = R.useState(false);
+    const [impTitle, setImpTitle] = R.useState("");
+    const [impText, setImpText] = R.useState("");
+    const [impBusy, setImpBusy] = R.useState(false);
+    const [impErr, setImpErr] = R.useState("");
+    const [impRes, setImpRes] = R.useState(null);
+    const [impDec, setImpDec] = R.useState({});
+    const [impAlso, setImpAlso] = R.useState(true);
     const bottomRef = R.useRef(null);
     const memRef = R.useRef(null);
     const memPromiseRef = R.useRef(null);
@@ -31691,6 +31699,65 @@ The user is about to begin a ${cfg.language || "language"} practice session with
     };
     const delPlan = (iid) => updP(proj.id, (p) => ({ ...p, plan: { items: ((p.plan && p.plan.items) || []).filter((i) => i.id !== iid).map((i) => i.pair === iid ? { ...i, pair: "" } : i) } }));
     const togglePlan = (iid) => updP(proj.id, (p) => ({ ...p, plan: { items: ((p.plan && p.plan.items) || []).map((i) => i.id === iid ? { ...i, done: !i.done } : i) } }));
+    // ----- import with review (19C.2I): nothing enters the ledger until the author accepts it -----
+    const analyzeImport = async () => {
+      const text = impText.trim();
+      if (text.length < 40 || impBusy || !proj) return;
+      setImpBusy(true); setImpErr(""); setImpRes(null);
+      const existing = (proj.ledger || []).filter((e) => e.kind !== "reference").map((e) => ({ id: e.id, kind: e.kind, text: e.text }));
+      const system = "You review text a person wants to import into a writing project's canon ledger. Use ONLY the supplied text. If the text contains sexual or suggestive content involving a minor or a minor-presenting character, return {\"blocked\":true,\"items\":[]}. Otherwise extract the lasting facts (kind \"fact\": places, history, rules, objects, events) and character notes (kind \"character\": who they are, voice, relationships), each as one short sentence. Compare each against the EXISTING LEDGER: status \"duplicate\" if it says the same thing as an existing entry, \"conflict\" if it contradicts an existing entry, otherwise \"new\". For duplicate and conflict give existingId. Return ONLY valid JSON: {\"blocked\":false,\"items\":[{\"kind\":\"fact or character\",\"text\":\"...\",\"status\":\"new|duplicate|conflict\",\"existingId\":\"\"}]}. At most 40 items.";
+      try {
+        const raw = await callClaudeLong(system, [{ role: "user", content: "EXISTING LEDGER:\n" + (existing.length ? JSON.stringify(existing) : "(empty)") + "\n\nIMPORTED TEXT:\n" + text.slice(0, 12000) }], 2200, 60000);
+        const j = lgParseJson(raw);
+        if (!j || (!Array.isArray(j.items) && !j.blocked)) { setImpErr("I could not read that. Try a shorter passage."); }
+        else if (j.blocked) { setImpErr("That text cannot be imported."); }
+        else {
+          const items = j.items.slice(0, 40).map((it, i) => ({ id: "imp" + i, kind: it.kind === "character" ? "character" : "fact", text: String(it.text || "").slice(0, 500), status: ["duplicate", "conflict"].includes(it.status) ? it.status : "new", existingId: it.existingId || "" })).filter((it) => it.text);
+          const dec = {}; items.forEach((it) => { dec[it.id] = it.status === "new" ? "keep" : "discard"; });
+          setImpRes(items); setImpDec(dec);
+        }
+      } catch (e) { setImpErr("That did not go through. Try again."); }
+      setImpBusy(false);
+    };
+    const acceptImport = () => {
+      if (!impRes || !proj) return;
+      const src = "Imported: " + (impTitle.trim() || "pasted text").slice(0, 50);
+      updP(proj.id, (p) => {
+        let ledger = [...(p.ledger || [])];
+        impRes.forEach((it) => {
+          const d = impDec[it.id];
+          if (d === "keep" || d === "both") ledger.push({ id: scUid(), kind: it.kind, text: it.text, source: src, from: "", ts: Date.now() });
+          else if (d === "replace" && it.existingId) ledger = ledger.map((e) => e.id === it.existingId ? { ...e, text: it.text, source: src } : e);
+        });
+        const units = (impAlso && scType(p).multi) ? [...p.units, { ...scNewUnit((impTitle.trim() || "Imported text").slice(0, 80)), text: impText.slice(0, 60000) }] : p.units;
+        return { ...p, ledger, units };
+      });
+      setImpRes(null); setImpText(""); setImpTitle(""); setImpOpen(false); say("Import accepted");
+    };
+    // ----- exports (19C.2): Word-readable document and print-to-PDF -----
+    const msHtml = () => {
+      const esc = (x) => String(x).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      const parts = (proj.units || []).filter(scIsCanon).map((u) => (scType(proj).multi ? "<h2>" + esc(u.title) + "</h2>" : "") + u.approvedText.split(/\n{2,}/).map((para) => "<p>" + esc(para).replace(/\n/g, "<br>") + "</p>").join(""));
+      return "<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word'><head><meta charset='utf-8'><title>" + esc(proj.title) + "</title><style>body{font-family:Georgia,serif;line-height:1.5} h1{text-align:center} h2{margin-top:28px}</style></head><body><h1>" + esc(proj.title) + "</h1>" + parts.join("") + "</body></html>";
+    };
+    const exportWord = () => {
+      try {
+        const blob = new Blob(["\ufeff", msHtml()], { type: "application/msword" });
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob); a.download = proj.title.replace(/[^\w\- ]+/g, "").trim().replace(/\s+/g, "_") + ".doc";
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+      } catch (e) { say("Export not available"); }
+    };
+    const exportPdf = () => {
+      try {
+        const f = document.createElement("iframe");
+        f.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0";
+        document.body.appendChild(f);
+        f.contentDocument.open(); f.contentDocument.write(msHtml()); f.contentDocument.close();
+        setTimeout(() => { try { f.contentWindow.focus(); f.contentWindow.print(); } catch (e) { say("Print not available"); } setTimeout(() => f.remove(), 4000); }, 300);
+      } catch (e) { say("Print not available"); }
+    };
     const copyMs = async () => { try { await navigator.clipboard.writeText(scManuscript(proj)); say("Copied"); } catch (e) { say("Copy not available"); } };
     const downloadMs = () => {
       try {
@@ -31845,8 +31912,28 @@ The user is about to begin a ${cfg.language || "language"} practice session with
           approved > 0 && h(R.Fragment, null,
             rule(),
             label("MANUSCRIPT"),
-            note(approved + " approved. Copies and downloads as plain text for now."),
-            h("div", { style: { display: "flex", gap: 8 } }, btn("COPY", copyMs, { variant: "ghost" }), btn("DOWNLOAD .TXT", downloadMs, { variant: "ghost" }))),
+            note(approved + " approved."),
+            h("div", { style: { display: "flex", gap: 8 } }, btn("COPY", copyMs, { variant: "ghost" }), btn("DOWNLOAD .TXT", downloadMs, { variant: "ghost" })),
+            h("div", { style: { display: "flex", gap: 8 } }, btn("WORD (.DOC)", exportWord, { variant: "ghost" }), btn("PRINT OR PDF", exportPdf, { variant: "ghost" })),
+            note("PowerPoint export is not available yet.")),
+          rule(),
+          btn(impOpen ? "HIDE IMPORT" : "IMPORT WITH REVIEW", () => setImpOpen(!impOpen), { variant: "ghost" }),
+          impOpen && h(R.Fragment, null,
+            note("Paste an existing story or character dossier. Scribe finds the facts and characters in it, marks duplicates and conflicts against your ledger, and nothing is added until you accept."),
+            fieldInput(impTitle, setImpTitle, "Name of what you are importing (optional)…", 60),
+            fieldArea(impText, setImpText, "Paste text here…", 6, 12000),
+            t.multi && h("div", { onClick: () => setImpAlso(!impAlso), style: { cursor: "pointer", ...body, fontSize: 13 } }, (impAlso ? "☑ " : "☐ ") + "Also add the text as a draft " + t.unit.toLowerCase()),
+            btn(impBusy ? "READING…" : "REVIEW IMPORT", analyzeImport, { variant: "primary", disabled: impBusy || impText.trim().length < 40 }),
+            impErr && note(impErr),
+            impRes && h(R.Fragment, null,
+              impRes.length === 0 && note("Nothing to add was found."),
+              impRes.map((it) => card(h(R.Fragment, null,
+                h("div", { style: { fontSize: 9, color: color + "CC", fontFamily: "Cinzel, serif", letterSpacing: 1.5, marginBottom: 4 } }, (it.kind === "character" ? "CHARACTER" : "FACT") + " · " + it.status.toUpperCase()),
+                h("div", { style: { ...body, fontSize: 14 } }, it.text),
+                it.existingId && h("div", { style: { fontSize: 11, color: "rgba(200,190,170,0.55)", fontStyle: "italic", marginTop: 4 } }, "Your ledger: " + (((proj.ledger || []).find((e) => e.id === it.existingId) || {}).text || "an entry that was removed")),
+                h("div", { style: { display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 } },
+                  (it.status === "new" ? [["keep", "KEEP"], ["discard", "DISCARD"]] : it.status === "duplicate" ? [["discard", "DISCARD"], ["both", "KEEP BOTH"]] : [["discard", "KEEP MINE"], ["replace", "USE IMPORTED"], ["both", "KEEP BOTH"]]).map(([v, lb]) => h("div", { key: v }, btn(lb, () => setImpDec({ ...impDec, [it.id]: v }), { variant: impDec[it.id] === v ? "accent" : "ghost", auto: true, pad: "5px 10px" }))))), it.id)),
+              btn("ACCEPT IMPORT", acceptImport, { variant: "primary" }))),
           rule(),
           btn(snapOpen ? "HIDE SNAPSHOTS" : "SNAPSHOTS AND RECOVERY", openSnaps, { variant: "ghost" }),
           snapOpen && h(R.Fragment, null,
