@@ -36,3 +36,12 @@ Headless Chrome, mocked API: 12-step foundation flow and the 10-step slice-1 flo
 
 ## Still not built (Master v209, later slices)
 Planning (19C.2G outline/arcs/clues/payoffs), branches (19C.2H), import with review (19C.2I), screenplay structure (19C.2J), the other skill bridges (Language Teacher, VA, Wellness, Concierge, Coding Mentor), images, Present mode, camera.
+
+---
+
+# App v132 — Scribe: Master v210 rulings
+
+- Approval (19C.2K): continuity findings now carry a type. A contradiction with a locked fact needs a one-line intentional exception (stored on the unit, last 20 kept) before approval; voice, repetition, atmosphere and unearned-beat findings are advice and can be approved directly. Hard limits are not part of this check and are not exceptions.
+- Research window (19C.6A): control renamed "Review for accuracy". A selected passage now asks for confirmation ("This passage will go into your Encyclopædia conversation, and the Encyclopædia keeps a memory...") before it is sent, and the Encyclopædia memory update is told to record subjects and questions only, never the text of the work.
+- Not yet built from v210: story-time markers (19C.2F), archive/restore and downgrade read-only handling (19C.1B), Personal Canon / publication rules (19C.3; no canon promotion or Library exists in the app yet).
+- Tests: foundation flow now 13 steps (adds exception flow and passage confirmation), slice-1 flow 10 steps; both pass.

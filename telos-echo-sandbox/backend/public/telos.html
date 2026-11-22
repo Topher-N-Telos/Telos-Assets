@@ -31288,14 +31288,14 @@ The user is about to begin a ${cfg.language || "language"} practice session with
     const msgsRef = R.useRef([]);
     const telRef = R.useRef(null);
     const bottomRef = R.useRef(null);
-    const seededRef = R.useRef(false);
+    const [pendingSeed, setPendingSeed] = R.useState(seed || "");
     msgsRef.current = msgs; telRef.current = tel;
     const chatKey = tel ? "telos-v1-scribe-research-" + tel.name + "-" + proj.id : null;
     const sysFor = () => (tel.system || "You are " + tel.name + ".") + ENC_RULES + encFormatMem(memRef.current, null) + "\n\nThe person is writing a piece of work (" + proj.title + ") and is using you for research and fact-checking. When they send a passage, say what looks accurate, what looks doubtful or wrong, and what you cannot verify. You cannot look anything up, so say so when it matters.";
     const flush = async () => {
       const t = telRef.current;
       if (!t || pendRef.current < 2 || !memRef.current) return;
-      const convo = msgsRef.current.slice(-14).map((m) => (m.role === "user" ? "PERSON: " : t.name.toUpperCase() + ": ") + String(m.content).slice(0, 700)).join("\n");
+      const convo = "NOTE: this conversation is about a person's own creative or professional work. Record subjects and open questions only. Never quote, summarize or record the text of the work itself.\n" + msgsRef.current.slice(-14).map((m) => (m.role === "user" ? "PERSON: " : t.name.toUpperCase() + ": ") + String(m.content).slice(0, 700)).join("\n");
       pendRef.current = 0;
       const next = await encUpdateMem(t.name, memRef.current, convo);
       if (next) memRef.current = next;
@@ -31337,12 +31337,7 @@ The user is about to begin a ${cfg.language || "language"} practice session with
       pendRef.current += 1;
       if (pendRef.current >= 6) flushRef.current();
     };
-    R.useEffect(() => {
-      if (state === "ready" && seed && !seededRef.current) {
-        seededRef.current = true;
-        send("Fact-check this passage from my work. Tell me what looks accurate, what looks doubtful or wrong, and what you cannot verify.\n\n\"" + seed.slice(0, 3000) + "\"");
-      }
-    }, [state]);
+    const sendPassage = () => { const ps = pendingSeed; setPendingSeed(""); send("Review this passage from my work for accuracy. Tell me what looks accurate, what looks doubtful or wrong, and what you cannot verify.\n\n\"" + ps.slice(0, 3000) + "\""); };
     const small = (t, onClick, dis) => h(ChamferBtn, { size: "sm", variant: "ghost", accentColor: color, textColor: accent, fillColor: "rgba(10,6,20,0.62)", disabled: !!dis, onClick, style: { width: "auto", padding: "6px 10px", fontSize: 9 } }, t);
     return h("div", { style: { position: "absolute", left: 0, right: 0, bottom: 0, height: "64%", zIndex: 40, display: "flex", flexDirection: "column", background: "rgba(8,5,18,0.985)", borderTop: "1px solid " + color + "66", boxShadow: "0 -14px 36px rgba(0,0,0,0.55)" } },
       h("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 16px", borderBottom: "1px solid rgba(255,255,255,0.06)", flexShrink: 0 } },
@@ -31353,6 +31348,10 @@ The user is about to begin a ${cfg.language || "language"} practice session with
       state === "ready" && h(R.Fragment, null,
         h("div", { style: { flex: 1, overflowY: "auto", padding: "12px 16px 0", display: "flex", flexDirection: "column", gap: 14, scrollbarWidth: "none" } },
           h("div", { style: { fontSize: 11, color: "rgba(200,190,170,0.5)", fontStyle: "italic", textAlign: "center" } }, "General knowledge only. It cannot look anything up, so it can flag a likely error but not verify a fact."),
+          pendingSeed && h(ChamferBox, { size: "sm", borderColor: color + "66", fillColor: "rgba(18,12,32,0.8)" }, h("div", { style: { padding: "12px 14px", display: "flex", flexDirection: "column", gap: 8 } },
+            h("div", { style: { fontSize: 12, color: "#D8CEBA", lineHeight: 1.5 } }, "This passage will go into your Encyclopædia conversation, and the Encyclopædia keeps a memory of what you discuss with it. Send it?"),
+            h("div", { style: { fontSize: 12, color: "rgba(200,190,170,0.65)", fontStyle: "italic", maxHeight: 90, overflowY: "auto", whiteSpace: "pre-wrap" } }, pendingSeed.slice(0, 600)),
+            h("div", { style: { display: "flex", gap: 6 } }, small("SEND PASSAGE", sendPassage), small("CANCEL", () => setPendingSeed(""))))),
           msgs.map((m, i) => h("div", { key: i, style: { alignSelf: m.role === "user" ? "flex-end" : "flex-start", maxWidth: "94%" } },
             h(MessageBubble, { msg: m, isFirst: false, worldColor: color, worldAccent: accent, cfg: tel.cfg }),
             (m.role === "assistant" && !busy) && h("div", { style: { marginTop: 6, marginLeft: 4 } }, small("PIN TO LEDGER", () => onPin(m.content))))),
@@ -31395,6 +31394,7 @@ The user is about to begin a ${cfg.language || "language"} practice session with
     const [research, setResearch] = R.useState(null);
     const [selText, setSelText] = R.useState("");
     const [hfBusy, setHfBusy] = R.useState(false);
+    const [excReason, setExcReason] = R.useState("");
     const bottomRef = R.useRef(null);
     const memRef = R.useRef(null);
     const memPromiseRef = R.useRef(null);
@@ -31552,13 +31552,13 @@ The user is about to begin a ${cfg.language || "language"} practice session with
     // Editing an approved unit opens a revision; the approved version stays canon until the revision is approved (19C.2E).
     const setText = (u, v) => { touchedRef.current = true; setUnit(u.id, { text: v, ...(u.status === "Approved" && v !== u.approvedText ? { status: "Under Revision" } : {}) }, true); };
     const delUnit = (uid) => { updP(proj.id, (p) => ({ ...p, units: p.units.filter((u) => u.id !== uid) })); setOpenU(null); setChk(null); setConfirmDel(null); };
-    const doApprove = (u) => {
+    const doApprove = (u, exc) => {
       touchedRef.current = true;
       const revised = !!(u.approvedText && u.approvedText !== u.text);
       updP(proj.id, (p) => {
         const at = p.units.findIndex((x) => x.id === u.id);
         return { ...p, units: p.units.map((x, i) => {
-          if (x.id === u.id) return { ...x, status: "Approved", approvedText: x.text, needsReview: "", history: revised ? [...(x.history || []), { id: scUid(), text: x.approvedText, title: x.title, ts: Date.now(), label: "Approved version" }].slice(-30) : (x.history || []) };
+          if (x.id === u.id) return { ...x, status: "Approved", approvedText: x.text, needsReview: "", exceptions: exc ? [...(x.exceptions || []), exc].slice(-20) : (x.exceptions || []), history: revised ? [...(x.history || []), { id: scUid(), text: x.approvedText, title: x.title, ts: Date.now(), label: "Approved version" }].slice(-30) : (x.history || []) };
           if (revised && i > at && scIsCanon(x) && !x.needsReview) return { ...x, needsReview: "Earlier unit \"" + u.title + "\" was revised" };
           return x;
         }) };
@@ -31573,7 +31573,7 @@ The user is about to begin a ${cfg.language || "language"} practice session with
       if (proj.category !== "Creative") { doApprove(u); return; }
       if (chkBusy) return;
       setChkBusy(true); setChk(null);
-      const system = "You check a draft against a creative project's established facts before the author approves it. Return ONLY valid JSON: {\"flags\":[{\"issue\":\"short label\",\"detail\":\"one or two sentences\"}]}. Flag: contradictions with the recorded facts or character notes, drift from an established character voice, repetitive dialogue or beats, false atmosphere, and emotional beats that are not earned. Only the facts listed are true at this point in the work. If you find nothing, return {\"flags\":[]}. Use ONLY the supplied material.";
+      const system = "You check a draft against a creative project's established facts before the author approves it. Return ONLY valid JSON: {\"flags\":[{\"type\":\"contradiction or advisory\",\"issue\":\"short label\",\"detail\":\"one or two sentences\"}]}. Each flag has a type. Use type \"contradiction\" ONLY for a contradiction with a recorded fact or character note. Use type \"advisory\" for drift from an established character voice, repetitive dialogue or beats, false atmosphere, and emotional beats that are not earned. Only the facts listed are true at this point in the work. If you find nothing, return {\"flags\":[]}. Use ONLY the supplied material.";
       const facts = [...scFactsFor(proj, u.id, "fact").map((e) => "FACT: " + e.text), ...scFactsFor(proj, u.id, "character").map((e) => "CHARACTER: " + e.text)].join("\n");
       let flags = [];
       try {
@@ -31743,12 +31743,18 @@ The user is about to begin a ${cfg.language || "language"} practice session with
                   h("div", null, btn(chkBusy && chk === null && openU === u.id ? "CHECKING…" : (t.multi ? "APPROVE" : "MARK FINAL"), () => approve(u), { variant: "primary", auto: true, pad: "7px 14px", disabled: chkBusy || (u.status === "Approved" && u.text === u.approvedText) || !(u.text || "").trim() }))),
                 h("div", { style: { display: "flex", flexWrap: "wrap", gap: 6 } },
                   btn("RESEARCH", () => setResearch({ seed: "", n: Date.now() }), { variant: "ghost", auto: true, pad: "6px 12px" }),
-                  selText && btn("FACT-CHECK SELECTION", () => { setResearch({ seed: selText, n: Date.now() }); setSelText(""); }, { variant: "ghost", auto: true, pad: "6px 12px" }),
+                  selText && btn("REVIEW FOR ACCURACY", () => { setResearch({ seed: selText, n: Date.now() }); setSelText(""); }, { variant: "ghost", auto: true, pad: "6px 12px" }),
                   (versions.length > 0 || u.approvedText) && btn(verOpen === u.id ? "HIDE VERSIONS" : "VERSIONS (" + versions.length + ")", () => { setVerOpen(verOpen === u.id ? null : u.id); setVerView(null); }, { variant: "ghost", auto: true, pad: "6px 12px" })),
                 (chk && chk.uid === u.id) && h("div", { style: { display: "flex", flexDirection: "column", gap: 8 } },
                   chk.failed ? note("I could not run the check just now. You can still approve it.") : label("CONTINUITY FLAGS", { color: accent + "CC" }),
                   (chk.flags || []).map((f, i) => h("div", { key: i, style: { ...body, fontSize: 14 } }, h("span", { style: { color: "#EEE8DD" } }, String(f.issue || "Flag") + ": "), String(f.detail || ""))),
-                  h("div", { style: { display: "flex", gap: 6 } }, btn("APPROVE ANYWAY", () => doApprove(u), { variant: "ghost", auto: true, pad: "7px 12px" }), btn("KEEP REVISING", () => { setUnit(u.id, { status: "Under Revision" }); setChk(null); }, { variant: "ghost", auto: true, pad: "7px 12px" }))),
+                  (chk.flags || []).some((f) => f.type === "contradiction") && h(R.Fragment, null, note("A contradiction with a locked fact must be fixed, or recorded here as an intentional exception, before this can be approved."), fieldInput(excReason, setExcReason, "Why this is intentional (one line)…", 160)),
+                  h("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" } },
+                    (chk.flags || []).some((f) => f.type === "contradiction")
+                      ? btn("APPROVE WITH EXCEPTION", () => { const r = excReason.trim(); doApprove(u, { reason: r, ts: Date.now(), flags: (chk.flags || []).filter((f) => f.type === "contradiction").map((f) => String(f.issue || "")).slice(0, 5) }); setExcReason(""); }, { variant: "ghost", auto: true, pad: "7px 12px", disabled: !excReason.trim() })
+                      : btn(chk.failed ? "APPROVE ANYWAY" : "APPROVE", () => doApprove(u), { variant: "ghost", auto: true, pad: "7px 12px" }),
+                    btn("KEEP REVISING", () => { setUnit(u.id, { status: "Under Revision" }); setChk(null); setExcReason(""); }, { variant: "ghost", auto: true, pad: "7px 12px" }))),
+                (u.exceptions || []).length > 0 && h("div", { style: { fontSize: 11, color: "rgba(200,190,170,0.55)", fontStyle: "italic" } }, "Intentional exception recorded: " + u.exceptions[u.exceptions.length - 1].reason),
                 verOpen === u.id && h("div", { style: { display: "flex", flexDirection: "column", gap: 8 } },
                   label("VERSIONS"),
                   versions.length === 0 && note("No earlier versions yet."),
