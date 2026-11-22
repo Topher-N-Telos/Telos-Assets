@@ -31211,23 +31211,29 @@ The user is about to begin a ${cfg.language || "language"} practice session with
   }
   // ---- v131 foundation helpers (Master 19C.2E, 19C.2F, 19C.2G) ----
   function scHash(str) { let x = 5381; for (let i = 0; i < str.length; i++) x = ((x << 5) + x + str.charCodeAt(i)) | 0; return String(x) + ":" + str.length; }
-  function scNewUnit(title) { return { id: scUid(), title: String(title).slice(0, 80), text: "", status: "Draft", created: Date.now(), approvedText: "", history: [], needsReview: "" }; }
+  function scNewUnit(title) { return { id: scUid(), title: String(title).slice(0, 80), text: "", status: "Draft", created: Date.now(), approvedText: "", history: [], needsReview: "", storyOrder: "" }; }
   function scMigrate(p) {
     const units = (p.units || []).map((u) => ({ ...u, approvedText: typeof u.approvedText === "string" ? u.approvedText : (u.status === "Approved" ? (u.text || "") : ""), history: Array.isArray(u.history) ? u.history : [], needsReview: u.needsReview || "" }));
     const ledger = (p.ledger || []).map((e) => ({ source: e.kind === "reference" ? "General knowledge, unverified" : "Author note", from: "", ...e }));
-    return { ...p, units, ledger, updated: p.updated || p.created || 0, handoff: p.handoff || null };
+    return { ...p, units, ledger, updated: p.updated || p.created || 0, handoff: p.handoff || null, plan: (p.plan && Array.isArray(p.plan.items)) ? p.plan : { items: [] }, archived: !!p.archived, parentId: p.parentId || "", branchName: p.branchName || "" };
   }
   function scIsCanon(u) { return !!(u.approvedText && u.approvedText.trim()); }
   function scFmtDate(ts) { try { return new Date(ts).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }); } catch (e) { return ""; } }
   // Facts and character notes are effective only from the unit they are marked "true from" (19C.2F).
   function scFactsFor(p, unitId, kind) {
     const units = p.units || [];
+    // Story position: the author's story-time number when set, otherwise reading order (19C.2F).
+    const pos = (u, i) => { const n = parseFloat(u && u.storyOrder); return isFinite(n) ? n : i + 1; };
     const at = unitId ? units.findIndex((u) => u.id === unitId) : units.length - 1;
     return (p.ledger || []).filter((e) => e.kind === kind).filter((e) => {
       if (!e.from) return true;
       const fi = units.findIndex((u) => u.id === e.from);
-      return fi < 0 || at < 0 || fi <= at;
+      return fi < 0 || at < 0 || pos(units[fi], fi) <= pos(units[at], at);
     });
+  }
+  // Screenplay units hold structured blocks; the plain text is generated from them so counts, approval and the manuscript all keep working (19C.2J).
+  function scFormatScene(heading, blocks) {
+    return [String(heading || "").trim().toUpperCase(), ...(blocks || []).map((b) => b.type === "dialogue" ? (String(b.character || "").trim().toUpperCase() + "\n" + (b.text || "")) : (b.text || ""))].filter((x) => x.trim() !== "").join("\n\n");
   }
   function scProjectCtx(p, unitId) {
     if (!p) return "";
@@ -31244,6 +31250,11 @@ The user is about to begin a ${cfg.language || "language"} practice session with
     if (facts.length) lines.push("CANON LEDGER (locked facts):\n" + facts.slice(-60).map((e) => "- " + e.text).join("\n"));
     if (people.length) lines.push("CHARACTER AND RELATIONSHIP BIBLES:\n" + people.slice(-40).map((e) => "- " + e.text).join("\n"));
     if (refs.length) lines.push("REFERENCES (general knowledge, unverified; not canon):\n" + refs.slice(-20).map((e) => "- " + e.text).join("\n"));
+    const planItems = (p.plan && p.plan.items) || [];
+    const beats = planItems.filter((i) => i.kind === "outline").slice(0, 30), threads = planItems.filter((i) => i.kind === "thread" && !i.done).slice(0, 15), loose = planItems.filter((i) => i.kind === "clue" && !i.pair).slice(0, 15);
+    if (beats.length) lines.push("OUTLINE (the author's plan):\n" + beats.map((i) => "- " + i.text).join("\n"));
+    if (threads.length) lines.push("OPEN THREADS:\n" + threads.map((i) => "- " + i.text).join("\n"));
+    if (loose.length) lines.push("PLANTED CLUES WITH NO PAYOFF YET:\n" + loose.map((i) => "- " + i.text).join("\n"));
     if (p.handoff && (p.handoff.stop || p.handoff.next)) lines.push("WHERE THE AUTHOR LEFT OFF: " + (p.handoff.stop || "") + (p.handoff.next ? " Intended next beat: " + p.handoff.next : ""));
     return lines.join("\n");
   }
@@ -31395,6 +31406,12 @@ The user is about to begin a ${cfg.language || "language"} practice session with
     const [selText, setSelText] = R.useState("");
     const [hfBusy, setHfBusy] = R.useState(false);
     const [excReason, setExcReason] = R.useState("");
+    const [showArch, setShowArch] = R.useState(false);
+    const [branchName, setBranchName] = R.useState("");
+    const [planKind, setPlanKind] = R.useState("outline");
+    const [planText, setPlanText] = R.useState("");
+    const [planUnit, setPlanUnit] = R.useState("");
+    const [planPair, setPlanPair] = R.useState("");
     const bottomRef = R.useRef(null);
     const memRef = R.useRef(null);
     const memPromiseRef = R.useRef(null);
@@ -31639,6 +31656,41 @@ The user is about to begin a ${cfg.language || "language"} practice session with
       }
       setPid(null); setOpenU(null); setChk(null); setConfirmDel(null); setVerOpen(null); setVerView(null); setResearch(null); setSnapOpen(false); setSelText("");
     };
+    const archiveProject = () => { updP(proj.id, (p) => ({ ...p, archived: true })); leaveProject(); say("Archived. Restore it from the projects list."); };
+    const restoreProject = (id) => { updP(id, (p) => ({ ...p, archived: false })); say("Restored"); };
+    const forkBranch = () => {
+      const name = branchName.trim();
+      if (!name || !proj) return;
+      const cur = dataRef.current;
+      const copy = scMigrate({ ...JSON.parse(JSON.stringify(proj)), id: scUid(), title: (proj.title + " (branch: " + name + ")").slice(0, 80), parentId: proj.id, branchName: name, created: Date.now(), updated: Date.now(), handoff: null, archived: false });
+      persist({ ...cur, projects: [copy, ...cur.projects] });
+      setBranchName(""); say("Branch created. It stays separate from the main project.");
+    };
+    // A unit moves from a branch to the main project only by the author's choice, as a draft that must pass the continuity check again (19C.2H).
+    const sendToMain = (u) => {
+      const parent = dataRef.current.projects.find((x) => x.id === proj.parentId);
+      if (!parent) { say("The main project is gone"); return; }
+      const nu = { ...scNewUnit(u.title + " (from branch)"), text: u.text || "", heading: u.heading, blocks: u.blocks };
+      updP(parent.id, (p) => ({ ...p, units: [...p.units, nu] }));
+      say("Sent to " + parent.title + " as a draft");
+    };
+    const setScene = (u, patch) => {
+      touchedRef.current = true;
+      const heading = patch.heading !== undefined ? patch.heading : (u.heading || "");
+      const blocks = patch.blocks || u.blocks || [{ id: "init", type: "action", text: u.text || "" }];
+      const text = scFormatScene(heading, blocks);
+      setUnit(u.id, { heading, blocks, text, ...(u.status === "Approved" && text !== u.approvedText ? { status: "Under Revision" } : {}) }, true);
+    };
+    const addPlan = () => {
+      const text = planText.trim();
+      if (!text || !proj) return;
+      const id = scUid();
+      const item = { id, kind: planKind, text: text.slice(0, 400), unit: planUnit, pair: (planKind === "clue" || planKind === "payoff") ? planPair : "", done: false, ts: Date.now() };
+      updP(proj.id, (p) => { const items = [...((p.plan && p.plan.items) || []), item].map((i) => (item.pair && i.id === item.pair) ? { ...i, pair: id } : i); return { ...p, plan: { items } }; });
+      setPlanText(""); setPlanUnit(""); setPlanPair("");
+    };
+    const delPlan = (iid) => updP(proj.id, (p) => ({ ...p, plan: { items: ((p.plan && p.plan.items) || []).filter((i) => i.id !== iid).map((i) => i.pair === iid ? { ...i, pair: "" } : i) } }));
+    const togglePlan = (iid) => updP(proj.id, (p) => ({ ...p, plan: { items: ((p.plan && p.plan.items) || []).map((i) => i.id === iid ? { ...i, done: !i.done } : i) } }));
     const copyMs = async () => { try { await navigator.clipboard.writeText(scManuscript(proj)); say("Copied"); } catch (e) { say("Copy not available"); } };
     const downloadMs = () => {
       try {
@@ -31663,6 +31715,22 @@ The user is about to begin a ${cfg.language || "language"} practice session with
     const rule = () => h("div", { style: { height: 1, background: "rgba(255,255,255,0.06)", margin: "6px 0" } });
     const fromSel = (v, set) => h("select", { value: v, onChange: (e) => set(e.target.value), style: { width: "100%", padding: "10px 12px", background: "rgba(25,16,45,0.8)", color: "#EEE8DD", border: "1px solid " + color + "40", fontSize: 14, fontFamily: "Cormorant Garamond, Georgia, serif" } }, h("option", { value: "" }, "True from the start"), ((proj && proj.units) || []).map((u) => h("option", { key: u.id, value: u.id }, "True from " + u.title)));
     const unitName = (id) => { const u = proj && (proj.units || []).find((x) => x.id === id); return u ? u.title : ""; };
+
+    // ----- screenplay editor and storyboard links (19C.2J) -----
+    const storyboardOptions = () => { const out = []; (dataRef.current.projects || []).forEach((p) => { if (p.typeId === "storyboard" && !p.archived) (p.units || []).forEach((u2) => out.push({ value: p.id + "|" + u2.id, label: p.title + " / " + u2.title })); }); return out; };
+    const linkedFrom = (u) => { const key = proj.id + "|" + u.id; for (const p of (dataRef.current.projects || [])) { if (p.typeId !== "screenplay") continue; const m = (p.units || []).find((x) => x.link === key); if (m) return p.title + " / " + m.title; } return ""; };
+    const sceneEditor = (u) => {
+      const blocks = u.blocks || [{ id: "init", type: "action", text: u.text || "" }];
+      const setB = (bid, patch) => setScene(u, { blocks: blocks.map((x) => x.id === bid ? { ...x, ...patch } : x) });
+      return h("div", { style: { display: "flex", flexDirection: "column", gap: 8 } },
+        fieldInput(u.heading || "", (v) => setScene(u, { heading: v }), "INT. LOCATION — DAY", 80),
+        blocks.map((b) => h("div", { key: b.id, style: { display: "flex", flexDirection: "column", gap: 6 } },
+          label(b.type === "dialogue" ? "DIALOGUE" : "ACTION"),
+          b.type === "dialogue" && fieldInput(b.character || "", (v) => setB(b.id, { character: v }), "Character…", 40),
+          fieldArea(b.text || "", (v) => setB(b.id, { text: v }), b.type === "dialogue" ? "Line…" : "Action…", 3, 4000),
+          blocks.length > 1 && h("div", null, btn("REMOVE BLOCK", () => setScene(u, { blocks: blocks.filter((x) => x.id !== b.id) }), { variant: "ghost", auto: true, pad: "4px 10px" })))),
+        h("div", { style: { display: "flex", gap: 6 } }, btn("ADD ACTION", () => setScene(u, { blocks: [...blocks, { id: scUid(), type: "action", text: "" }] }), { variant: "ghost", auto: true, pad: "6px 12px" }), btn("ADD DIALOGUE", () => setScene(u, { blocks: [...blocks, { id: scUid(), type: "dialogue", character: "", text: "" }] }), { variant: "ghost", auto: true, pad: "6px 12px" })));
+    };
 
     // ----- picker: choose a unit to receive a reply -----
     const pickerUi = picker && h("div", { onClick: () => setPicker(null), style: { position: "absolute", inset: 0, zIndex: 20, background: "rgba(4,3,8,0.88)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 } },
@@ -31693,15 +31761,17 @@ The user is about to begin a ${cfg.language || "language"} practice session with
       const chip = (t) => h("div", { key: t.id }, h(ChamferBtn, { size: "sm", variant: nType === t.id ? "accent" : "ghost", accentColor: color, textColor: nType === t.id ? accent : "rgba(200,190,170,0.55)", fillColor: nType === t.id ? undefined : "rgba(10,6,20,0.62)", onClick: () => setNType(t.id), style: { fontSize: 9, padding: "7px 11px", width: "auto" } }, t.label.toUpperCase()));
       content = scroller(
         label("YOUR PROJECTS"),
-        data.projects.length === 0 && note("Nothing here yet. Start a project below."),
-        data.projects.map((p) => {
+        data.projects.filter((p) => !p.archived).length === 0 && note("Nothing here yet. Start a project below."),
+        data.projects.filter((p) => !p.archived).map((p) => {
           const t = scType(p), n = (p.units || []).length, ok = (p.units || []).filter(scIsCanon).length;
           return h("div", { key: p.id, onClick: () => { setPid(p.id); setPtab("units"); setOpenU(null); setChk(null); }, style: { cursor: "pointer" } },
             card(h(R.Fragment, null,
               h("div", { style: { fontFamily: "Cinzel, serif", fontSize: 14, color: "#EEE8DD", letterSpacing: 1, marginBottom: 4 } }, p.title),
-              h("div", { style: { fontSize: 10, color: color + "CC", fontFamily: "Cinzel, serif", letterSpacing: 1.5 } }, t.label.toUpperCase() + " · " + (p.category === "Creative" ? "SANDBOX" : "PROFESSIONAL")),
+              h("div", { style: { fontSize: 10, color: color + "CC", fontFamily: "Cinzel, serif", letterSpacing: 1.5 } }, t.label.toUpperCase() + " · " + (p.category === "Creative" ? "SANDBOX" : "PROFESSIONAL") + (p.parentId ? " · BRANCH" : "")),
               h("div", { style: { ...body, fontSize: 13, marginTop: 6 } }, t.multi ? ok + " of " + n + " " + t.unit.toLowerCase() + (n === 1 ? "" : "s") + " approved" : ((p.units[0] && scIsCanon(p.units[0])) ? "Final" : (p.units[0] ? p.units[0].status : "Draft"))))));
         }),
+        data.projects.some((p) => p.archived) && h(R.Fragment, null, rule(), btn(showArch ? "HIDE ARCHIVED" : "ARCHIVED (" + data.projects.filter((p) => p.archived).length + ")", () => setShowArch(!showArch), { variant: "ghost" }),
+          showArch && data.projects.filter((p) => p.archived).map((p) => card(h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 } }, h("div", { style: { fontFamily: "Cinzel, serif", fontSize: 13, color: "#EEE8DD" } }, p.title), btn("RESTORE", () => restoreProject(p.id), { variant: "ghost", auto: true, pad: "6px 12px" })), p.id))),
         rule(),
         label("NEW PROJECT"),
         fieldInput(nTitle, setNTitle, "Title…", 80),
@@ -31737,7 +31807,11 @@ The user is about to begin a ${cfg.language || "language"} practice session with
               open && h("div", { style: { marginTop: 12, display: "flex", flexDirection: "column", gap: 10 } },
                 u.needsReview && h("div", { style: { display: "flex", flexDirection: "column", gap: 6 } }, h("div", { style: { ...body, fontSize: 13 } }, u.needsReview + ". Read it against the change, then clear this."), btn("CLEAR REVIEW", () => setUnit(u.id, { needsReview: "" }), { variant: "ghost", auto: true, pad: "6px 12px" })),
                 t.multi && fieldInput(u.title, (v) => setUnit(u.id, { title: v }, true), "Title…", 80),
-                fieldArea(u.text || "", (v) => setText(u, v), "Write or paste here…", 10, 60000, (s) => setSelText(s)),
+                proj.typeId === "screenplay" ? sceneEditor(u) : fieldArea(u.text || "", (v) => setText(u, v), "Write or paste here…", 10, 60000, (s) => setSelText(s)),
+                t.multi && h(R.Fragment, null, fieldInput(String(u.storyOrder === undefined ? "" : u.storyOrder), (v) => setUnit(u.id, { storyOrder: v.replace(/[^\d.\-]/g, "") }, true), "Story position (optional number)…", 8), note("Leave empty to follow reading order. Give a flashback an earlier number, for example 0.5, so facts that come true later stay out of it.")),
+                proj.typeId === "screenplay" && storyboardOptions().length > 0 && h("select", { value: u.link || "", onChange: (e) => setUnit(u.id, { link: e.target.value }), style: { width: "100%", padding: "10px 12px", background: "rgba(25,16,45,0.8)", color: "#EEE8DD", border: "1px solid " + color + "40", fontSize: 14, fontFamily: "Cormorant Garamond, Georgia, serif" } }, h("option", { value: "" }, "No storyboard linked"), storyboardOptions().map((o) => h("option", { key: o.value, value: o.value }, "Storyboard: " + o.label))),
+                proj.typeId === "storyboard" && linkedFrom(u) && h("div", { style: { fontSize: 11, color: "rgba(200,190,170,0.6)", fontStyle: "italic" } }, "Linked from screenplay scene: " + linkedFrom(u)),
+                proj.parentId && btn("SEND TO MAIN AS DRAFT", () => sendToMain(u), { variant: "ghost", auto: true, pad: "6px 12px" }),
                 h("div", { style: { display: "flex", flexWrap: "wrap", gap: 6 } },
                   ["Draft", "Under Revision", "Abandoned"].map((s) => h("div", { key: s }, btn(s.toUpperCase(), () => { setUnit(u.id, { status: s }); setChk(null); }, { variant: u.status === s ? "accent" : "ghost", auto: true, pad: "7px 11px" }))),
                   h("div", null, btn(chkBusy && chk === null && openU === u.id ? "CHECKING…" : (t.multi ? "APPROVE" : "MARK FINAL"), () => approve(u), { variant: "primary", auto: true, pad: "7px 14px", disabled: chkBusy || (u.status === "Approved" && u.text === u.approvedText) || !(u.text || "").trim() }))),
@@ -31782,7 +31856,36 @@ The user is about to begin a ${cfg.language || "language"} practice session with
               h("div", { style: { ...body, fontSize: 13 } }, h("span", { style: { color: "#EEE8DD" } }, s.label), " · " + scFmtDate(s.ts) + " · " + (s.units || []).reduce((n, u) => n + scWords(u.text), 0) + " words"),
               confirmDel === "snap:" + s.id ? h("div", { style: { display: "flex", gap: 6, marginTop: 8 } }, btn("RESTORE", () => restoreSnap(s), { variant: "primary", auto: true, pad: "6px 12px" }), btn("CANCEL", () => setConfirmDel(null), { variant: "ghost", auto: true, pad: "6px 12px" })) : h("div", { style: { marginTop: 8 } }, btn("RESTORE THIS SNAPSHOT", () => setConfirmDel("snap:" + s.id), { variant: "ghost", auto: true, pad: "6px 12px" }))), s.id))),
           rule(),
+          proj.parentId && note("This is a branch of the main project. Nothing here enters the main manuscript unless you send a unit across."),
+          (proj.category === "Creative" && !proj.parentId) && h(R.Fragment, null, label("ALTERNATE BRANCH"), note("Fork a copy to try a \"what if\" without touching the main work."), fieldInput(branchName, setBranchName, "Branch name…", 40), btn("FORK A BRANCH", forkBranch, { variant: "ghost", disabled: !branchName.trim() }), rule()),
+          btn("ARCHIVE PROJECT", archiveProject, { variant: "ghost" }),
           confirmDel === "project" ? h("div", { style: { display: "flex", gap: 6 } }, btn("DELETE PROJECT FOR GOOD", () => { const cur = dataRef.current; persist({ ...cur, projects: cur.projects.filter((p) => p.id !== proj.id) }); setPid(null); setConfirmDel(null); }, { variant: "ghost" }), btn("CANCEL", () => setConfirmDel(null), { variant: "ghost" })) : btn("DELETE PROJECT", () => setConfirmDel("project"), { variant: "ghost" }));
+      } else if (ptab === "plan") {
+        const items = (proj.plan && proj.plan.items) || [];
+        const kinds = [["outline", "OUTLINE BEAT"], ["arc", "CHARACTER ARC"], ["clue", "PLANTED CLUE"], ["payoff", "PLANNED PAYOFF"], ["thread", "OPEN THREAD"]];
+        const byKind = (k) => items.filter((i) => i.kind === k);
+        const sel = (v, set, ph, opts) => h("select", { value: v, onChange: (e) => set(e.target.value), style: { width: "100%", padding: "10px 12px", background: "rgba(25,16,45,0.8)", color: "#EEE8DD", border: "1px solid " + color + "40", fontSize: 14, fontFamily: "Cormorant Garamond, Georgia, serif" } }, h("option", { value: "" }, ph), opts.map((o) => h("option", { key: o.value, value: o.value }, o.label)));
+        const unitOpts = (proj.units || []).map((u) => ({ value: u.id, label: u.title }));
+        const pairOpts = (planKind === "clue" ? byKind("payoff") : planKind === "payoff" ? byKind("clue") : []).map((i) => ({ value: i.id, label: i.text.slice(0, 50) }));
+        const itemText = (id) => { const i = items.find((x) => x.id === id); return i ? i.text.slice(0, 50) : ""; };
+        const planRow = (i) => card(h("div", { style: { display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" } },
+          h("div", null, h("div", { style: { ...body, fontSize: 14, textDecoration: i.done ? "line-through" : "none" } }, i.text),
+            h("div", { style: { fontSize: 10, color: "rgba(200,190,170,0.5)", fontStyle: "italic", marginTop: 4 } }, [i.unit ? (i.kind === "clue" ? "Planted in " : i.kind === "payoff" ? "Due in " : "Linked to ") + (unitName(i.unit) || "an earlier unit") : "", i.pair ? (i.kind === "clue" ? "Pays off: " : "Sets up: ") + itemText(i.pair) : ""].filter(Boolean).join(" · ")),
+            i.kind === "thread" && h("div", { style: { marginTop: 6 } }, btn(i.done ? "REOPEN" : "MARK RESOLVED", () => togglePlan(i.id), { variant: "ghost", auto: true, pad: "4px 10px" }))),
+          h("button", { onClick: () => delPlan(i.id), "aria-label": "Remove", style: { background: "transparent", border: "none", color: "rgba(200,190,170,0.5)", cursor: "pointer", fontSize: 16, padding: 0 } }, "×")), i.id);
+        const loose = [...byKind("clue").filter((i) => !i.pair).map((i) => "Clue with no payoff: " + i.text.slice(0, 60)), ...byKind("payoff").filter((i) => !i.pair).map((i) => "Payoff with no clue: " + i.text.slice(0, 60))];
+        content = scroller(
+          label("PLAN"),
+          note("Your outline, arcs, clues and payoffs, linked to the units where they appear. Loose ends are advice only and never block anything."),
+          loose.length > 0 && card(h(R.Fragment, null, label("LOOSE ENDS", { color: accent + "CC", marginBottom: 6 }), loose.map((l, i) => h("div", { key: i, style: { ...body, fontSize: 13 } }, l)))),
+          kinds.map(([k, lb]) => byKind(k).length > 0 && h(R.Fragment, { key: k }, label(lb + "S"), byKind(k).map(planRow))),
+          rule(),
+          label("ADD TO THE PLAN"),
+          h("div", { style: { display: "flex", flexWrap: "wrap", gap: 6 } }, kinds.map(([k, lb]) => h("div", { key: k }, h(ChamferBtn, { size: "sm", variant: planKind === k ? "accent" : "ghost", accentColor: color, textColor: planKind === k ? accent : "rgba(200,190,170,0.55)", fillColor: planKind === k ? undefined : "rgba(10,6,20,0.62)", onClick: () => { setPlanKind(k); setPlanPair(""); }, style: { fontSize: 9, padding: "7px 11px", width: "auto" } }, lb)))),
+          fieldArea(planText, setPlanText, planKind === "outline" ? "A story beat…" : planKind === "arc" ? "A character and where their arc goes…" : planKind === "clue" ? "A clue you plan to plant…" : planKind === "payoff" ? "A payoff you plan to deliver…" : "An unresolved question…", 2, 400),
+          (planKind === "outline" || planKind === "clue" || planKind === "payoff") && (proj.units || []).length > 0 && sel(planUnit, setPlanUnit, planKind === "clue" ? "Planted in…" : planKind === "payoff" ? "Due in…" : "Linked to…", unitOpts),
+          pairOpts.length > 0 && sel(planPair, setPlanPair, planKind === "clue" ? "Pays off in…" : "Sets up…", pairOpts),
+          btn("ADD", addPlan, { variant: "primary", disabled: !planText.trim() }));
       } else if (ptab === "archive") {
         const facts = (proj.ledger || []).filter((e) => e.kind === "fact"), people = (proj.ledger || []).filter((e) => e.kind === "character"), refs = (proj.ledger || []).filter((e) => e.kind === "reference");
         const row = (e) => card(h("div", { style: { display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" } },
@@ -31823,7 +31926,7 @@ The user is about to begin a ${cfg.language || "language"} practice session with
       }
     }
 
-    const tabs = proj ? (proj.category === "Creative" ? [["units", scType(proj).multi ? scType(proj).unit.toUpperCase() + "S" : "PIECE"], ["archive", "ARCHIVE"], ["write", "WRITE"]] : [["units", scType(proj).multi ? scType(proj).unit.toUpperCase() + "S" : "PIECE"], ["write", "WRITE"]]) : [];
+    const tabs = proj ? (proj.category === "Creative" ? [["units", scType(proj).multi ? scType(proj).unit.toUpperCase() + "S" : "PIECE"], ["plan", "PLAN"], ["archive", "ARCHIVE"], ["write", "WRITE"]] : [["units", scType(proj).multi ? scType(proj).unit.toUpperCase() + "S" : "PIECE"], ["write", "WRITE"]]) : [];
     return h("div", { style: { position: "fixed", inset: 0, zIndex: 100, display: "flex", flexDirection: "column", background: "radial-gradient(ellipse at 20% 10%, " + color + "22 0%, transparent 55%), #06040F", paddingTop: "env(safe-area-inset-top, 0px)" } },
       h("div", { style: { padding: "12px 16px 12px", borderBottom: "1px solid rgba(255,255,255,0.06)", background: "rgba(6,4,15,0.92)", flexShrink: 0 } },
         h("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 } },

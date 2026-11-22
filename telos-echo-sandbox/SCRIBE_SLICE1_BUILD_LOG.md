@@ -45,3 +45,15 @@ Planning (19C.2G outline/arcs/clues/payoffs), branches (19C.2H), import with rev
 - Research window (19C.6A): control renamed "Review for accuracy". A selected passage now asks for confirmation ("This passage will go into your Encyclopædia conversation, and the Encyclopædia keeps a memory...") before it is sent, and the Encyclopædia memory update is told to record subjects and questions only, never the text of the work.
 - Not yet built from v210: story-time markers (19C.2F), archive/restore and downgrade read-only handling (19C.1B), Personal Canon / publication rules (19C.3; no canon promotion or Library exists in the app yet).
 - Tests: foundation flow now 13 steps (adds exception flow and passage confirmation), slice-1 flow 10 steps; both pass.
+
+---
+
+# App v133 — Scribe: remaining buildable parts of Master v210
+
+- Archive and restore (19C.1B): archived projects leave the list and can be restored. Tier cap and read-only downgrade handling are NOT built: the app has no user subscription tier to read yet.
+- Story time (19C.2F): optional numeric story position per unit; "true from" uses it when set, reading order when not (tested: a later fact stays out of an earlier chapter, and reaches it once the chapter is given a later story position).
+- Plan tab (19C.2G): outline beats, character arcs, planted clues, planned payoffs, open threads, linked to units; clue/payoff pairing; loose ends listed as advice only; plan is given to the co-author as context.
+- Alternate branches (19C.2H): fork a Creative project into a separate copy (stays Sandbox, not a project of its own for caps); "Send to main as draft" moves one unit across as a new draft that must pass the continuity check before approval. Branch ledger changes never merge.
+- Screenplay structure (19C.2J): scene heading, action and dialogue blocks; formatted text is generated from them so counts, approval and the manuscript keep working; scenes link to storyboard scenes, and the storyboard shows the reverse link.
+- Not built, waiting on other parts: import with review (19C.2I needs the 14B.2A screening module, still a stub), images, Present mode, camera rehearsal, the other skill bridges (later build per v210), Personal Canon / Library rules (no canon promotion in the app yet), exports to PDF/Word/PowerPoint.
+- Tests: three headless suites (10, 13 and 9 steps) all pass.
