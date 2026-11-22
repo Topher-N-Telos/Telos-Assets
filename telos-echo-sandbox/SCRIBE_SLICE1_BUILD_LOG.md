@@ -57,3 +57,16 @@ Planning (19C.2G outline/arcs/clues/payoffs), branches (19C.2H), import with rev
 - Screenplay structure (19C.2J): scene heading, action and dialogue blocks; formatted text is generated from them so counts, approval and the manuscript keep working; scenes link to storyboard scenes, and the storyboard shows the reverse link.
 - Not built, waiting on other parts: import with review (19C.2I needs the 14B.2A screening module, still a stub), images, Present mode, camera rehearsal, the other skill bridges (later build per v210), Personal Canon / Library rules (no canon promotion in the app yet), exports to PDF/Word/PowerPoint.
 - Tests: three headless suites (10, 13 and 9 steps) all pass.
+
+## App v134 - Import with review, Word/print export
+Import-with-review and export (see Master 19C.2I). Tested (run_test4).
+
+## App v135 - Present mode, voice rehearsal, Q and A
+Slides view, filler-word and pace metrics, audience question. Tested (run_test5). Not built: PowerPoint export, camera/posture analysis.
+
+## App v136 - Skill bridges
+Scribe to Language Teacher (professional work only) and Wellness Coach (warm-up request, no text). Items sit in per-skill inbox keys, shown exactly as sent. Wellness tested both sides (run_test6); the Language Teacher receiving card is syntax-checked only.
+Not built: VA, Coding Mentor, Concierge bridges (those skills are not in the app).
+
+## App v137 - Scribe image generation (19C.2A)
+ILLUSTRATE button per unit opens a generator through the existing Echo image service (/api/echo/options, quote, generate, /api/jobs). Prompt pre-filled from the unit's latest text and character notes, editable, with "suggest another"; characters removable; style defaults to the avatar's; price shown from the server quote; 18+ and approval boxes required; images attach to the unit (max 12) and can be removed. Tested with mocked API (run_test7). Not verified against the live Worker. Uses Echo's world rules (world picked from the Telosian or avatar species) and its existing minor-terms block; no separate Scribe screening exists.

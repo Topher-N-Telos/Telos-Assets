@@ -31513,7 +31513,95 @@ The user is about to begin a ${cfg.language || "language"} practice session with
           h("textarea", { value: qaIn, onChange: (e) => setQaIn(e.target.value.slice(0, 3000)), placeholder: "your answer…", rows: 2, style: { flex: 1, padding: 10, background: "rgba(25,16,45,0.8)", color: "#EEE8DD", border: "1px solid " + color + "40", fontSize: 15, fontFamily: "Cormorant Garamond, Georgia, serif", resize: "none" } }),
           bar("SEND", () => qaSend(qaIn.trim()), true, !qaIn.trim() || qaBusy))));
   }
-  function ScribeScreen({ onExit }) {
+  // Image generator (Master 19C.2A). Scribe images are made through the same image service Echō uses (same quote, same Sköl wallet, same checks), so no
+  // Scribe-specific price exists. The prompt opens pre-filled from the person's most recent content; nothing is generated or charged until they approve it.
+  function ScribeImage({ proj, unit, tel, userProfile, color, accent, onClose, onAttach, onStyle }) {
+    const R = import_react, h = R.createElement;
+    const [opts, setOpts] = R.useState(null);
+    const [loadErr, setLoadErr] = R.useState("");
+    const [prompt, setPrompt] = R.useState("");
+    const [sugBusy, setSugBusy] = R.useState(false);
+    const [chips, setChips] = R.useState([]);
+    const [quote, setQuote] = R.useState(null);
+    const [qErr, setQErr] = R.useState("");
+    const [conf, setConf] = R.useState(false);
+    const [adult, setAdult] = R.useState(false);
+    const [busy, setBusy] = R.useState(false);
+    const [msg, setMsg] = R.useState("");
+    const [result, setResult] = R.useState(null);
+    const [styleSel, setStyleSel] = R.useState(proj.imgStyle || "");
+    const keyRef = R.useRef(TelosImg.newKey());
+    const alive = R.useRef(true);
+    R.useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
+    const people = scFactsFor(proj, unit.id, "character");
+    R.useEffect(() => { setChips(people.slice(-6).map((e) => ({ id: e.id, text: e.text }))); }, []);
+    const species = (userProfile && userProfile.species) || "Human";
+    const openWorlds = opts ? (opts.worlds || []).filter((w) => getCompatibleWorlds(species).indexOf(w) >= 0) : [];
+    const effWorld = openWorlds.indexOf(tel && tel.world) >= 0 ? tel.world : openWorlds.indexOf(getNativeWorld(species)) >= 0 ? getNativeWorld(species) : openWorlds[0] || null;
+    const allDeep = opts ? (opts.marisDeepSpecies || []).indexOf(species) >= 0 : false;
+    const effSub = effWorld === "MARIS" ? (allDeep ? "deep" : "outpost") : null;
+    const inherited = (() => { const l = String((userProfile && userProfile.style) || "").toLowerCase(); const m = ((opts && opts.styles) || []).filter((s) => s.label.toLowerCase() === l || s.id === l)[0]; return m ? m.id : "realism"; })();
+    const style = styleSel || inherited;
+    const suggest = async (another) => {
+      setSugBusy(true);
+      const system = "You write ONE image-generation prompt for an illustration of the scene a writer is working on. Describe what is seen: setting, the characters present with their looks, the moment, mood, light and composition. Plain description, under 120 words, no text or lettering in the picture. Never describe a minor or minor-presenting character in a sexual or suggestive way. Return ONLY the prompt.";
+      const tail = String(unit.text || "").slice(-1400);
+      const body = "WORK: " + proj.title + " (" + scType(proj).label + "), " + unit.title + "\nMOST RECENT CONTENT:\n" + (tail || "(nothing written yet)") + "\nCHARACTER NOTES:\n" + (chips.map((c) => "- " + c.text).join("\n") || "(none)") + (another ? "\nGive a different framing from the last suggestion." : "");
+      let out = "";
+      try { out = (await callClaude(system, [{ role: "user", content: body }], 350)) || ""; } catch (e) { out = ""; }
+      if (!alive.current) return;
+      setPrompt((out.trim() || ("An illustration for \"" + proj.title + "\": " + unit.title + ".")).slice(0, 1200));
+      setSugBusy(false);
+    };
+    R.useEffect(() => { (async () => { try { const o = await TelosImg.call("/api/echo/options"); if (alive.current) setOpts(o); } catch (e) { if (alive.current) setLoadErr("Image generation isn't available right now."); } })(); suggest(false); }, []);
+    R.useEffect(() => {
+      setQuote(null); setQErr(""); setConf(false);
+      if (!opts) return;
+      let dead = false;
+      (async () => { try { const q = await TelosImg.call("/api/echo/quote", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ format: "single" }) }); if (!dead && alive.current) setQuote(q); } catch (e) { if (!dead && alive.current) setQErr((e && e.code === "INSUFFICIENT_SKOL") ? "Not enough Sköl for this image." : "Image generation isn't available right now."); } })();
+      return () => { dead = true; };
+    }, [!!opts]);
+    const canGo = !!(opts && quote && conf && adult && !busy && prompt.trim().length >= 3 && effWorld && !qErr);
+    const generate = async () => {
+      if (!canGo) return;
+      setBusy(true); setMsg("");
+      const composed = (prompt.trim() + (chips.length ? "\nCharacters: " + chips.map((c) => c.text).join(" | ") : "")).slice(0, 1500);
+      const body = { prompt: composed, direction: "", style, adultAttested: true, idempotencyKey: keyRef.current, quoteId: quote.quoteId, refs: [], world: effWorld, species: [species], format: "single", aspect: "portrait" };
+      if (effSub) body.subWorld = effSub;
+      try {
+        let j = await TelosImg.call("/api/echo/generate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+        const deadline = Date.now() + 5 * 60 * 1000;
+        while ((j.state === "created" || j.state === "working") && Date.now() < deadline) { await new Promise((r) => setTimeout(r, 2000)); if (!alive.current) return; j = await TelosImg.call("/api/jobs/" + j.id); }
+        keyRef.current = TelosImg.newKey();
+        if (j.state === "complete") { if (alive.current) setResult(j.imageId); }
+        else if (j.state === "failed") setMsg("That image could not be created. Nothing was used, and nothing was charged.");
+        else setMsg("This is taking longer than expected.");
+      } catch (e) { setMsg(e && e.code === "BLOCKED_MINOR_TERMS" ? "That prompt cannot be used." : "That did not go through. Nothing was charged."); }
+      if (alive.current) setBusy(false);
+    };
+    const small = (t, onClick, dis, on) => h(ChamferBtn, { size: "sm", variant: on ? "accent" : "ghost", accentColor: color, textColor: accent, fillColor: on ? undefined : "rgba(10,6,20,0.62)", disabled: !!dis, onClick, style: { width: "auto", padding: "7px 12px", fontSize: 9 } }, t);
+    const note = (t) => h("div", { style: { fontSize: 11, color: "rgba(200,190,170,0.55)", fontStyle: "italic", lineHeight: 1.5 } }, t);
+    const cost = quote ? (quote.charged ? quote.amountSkol + " Sköl will be charged (you have " + quote.balance + ")." : "No charge: this image is covered by your allowance.") : (qErr || "Checking the price…");
+    return h("div", { style: { position: "absolute", inset: 0, zIndex: 55, display: "flex", flexDirection: "column", background: "#06040F" } },
+      h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", borderBottom: "1px solid rgba(255,255,255,0.06)" } }, h("div", { style: { fontFamily: "Cinzel, serif", fontSize: 11, letterSpacing: 2.5, color: accent } }, "ILLUSTRATE · " + unit.title.toUpperCase()), small("CLOSE", onClose)),
+      h("div", { style: { flex: 1, overflowY: "auto", padding: "16px", display: "flex", flexDirection: "column", gap: 12 } },
+        loadErr && note(loadErr),
+        result ? h(R.Fragment, null,
+          h("img", { src: "/api/images/" + encodeURIComponent(result), alt: "", style: { width: "100%", maxHeight: 420, objectFit: "contain", border: "1px solid " + color + "44" } }),
+          h("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" } }, small("ATTACH TO " + unit.title.toUpperCase(), () => { onAttach(result, prompt); onClose(); }, false, true), small("MAKE ANOTHER", () => { setResult(null); setConf(false); keyRef.current = TelosImg.newKey(); }))) : h(R.Fragment, null,
+          note("Suggested from your most recent content. Approve it as written, edit it, or write your own. Nothing is made or charged until you approve."),
+          h(ChamferField, { size: "sm", borderColor: color + "40", activeBorderColor: color + "CC", fillColor: "rgba(25,16,45,0.8)" }, h("textarea", { value: prompt, onChange: (e) => { setPrompt(e.target.value.slice(0, 1200)); setConf(false); }, rows: 7, placeholder: sugBusy ? "Writing a suggestion…" : "Describe the picture…", style: { width: "100%", padding: "12px 15px", background: "transparent", border: "none", outline: "none", color: "#EEE8DD", fontSize: 16, lineHeight: 1.5, fontFamily: "Cormorant Garamond, Georgia, serif", resize: "none", boxSizing: "border-box" } })),
+          h("div", { style: { display: "flex", gap: 8 } }, small(sugBusy ? "WRITING…" : "SUGGEST ANOTHER", () => suggest(true), sugBusy)),
+          chips.length > 0 && h("div", { style: { display: "flex", flexDirection: "column", gap: 6 } }, h("div", { style: { fontFamily: "Cinzel, serif", fontSize: 9, letterSpacing: 3, color: "rgba(200,190,170,0.4)" } }, "CHARACTER REFERENCES"), chips.map((c) => h("div", { key: c.id, onClick: () => setChips(chips.filter((x) => x.id !== c.id)), style: { cursor: "pointer", fontSize: 12, color: "#D8CEBA", border: "1px solid " + color + "44", padding: "6px 10px" } }, "✕  " + c.text.slice(0, 90)))),
+          opts && h("select", { value: style, onChange: (e) => { setStyleSel(e.target.value); onStyle(e.target.value); }, style: { width: "100%", padding: "10px 12px", background: "rgba(25,16,45,0.8)", color: "#EEE8DD", border: "1px solid " + color + "40", fontSize: 14, fontFamily: "Cormorant Garamond, Georgia, serif" } }, (opts.styles || []).map((s) => h("option", { key: s.id, value: s.id }, "Style: " + s.label))),
+          note(cost),
+          h("div", { onClick: () => setAdult(!adult), style: { cursor: "pointer", fontSize: 13, color: "#D8CEBA" } }, (adult ? "☑ " : "☐ ") + "I am 18 or older."),
+          h("div", { onClick: () => quote && setConf(!conf), style: { cursor: "pointer", fontSize: 13, color: "#D8CEBA" } }, (conf ? "☑ " : "☐ ") + "I approve this prompt and the cost."),
+          msg && note(msg),
+          h(ChamferBtn, { size: "sm", variant: "primary", disabled: !canGo, onClick: generate, style: { width: "100%", fontSize: 10 } }, busy ? "MAKING THE IMAGE…" : "MAKE THE IMAGE"),
+          note("Images are made in a style that defaults to your avatar's, and the same checks as every image on the platform apply."))));
+  }
+  function ScribeScreen({ onExit, userProfile }) {
     const R = import_react, h = R.createElement;
     const [telos, setTelos] = R.useState([]);
     const [idx, setIdx] = R.useState(0);
@@ -31554,6 +31642,7 @@ The user is about to begin a ${cfg.language || "language"} practice session with
     const [planUnit, setPlanUnit] = R.useState("");
     const [planPair, setPlanPair] = R.useState("");
     const [present, setPresent] = R.useState(false);
+    const [imageFor, setImageFor] = R.useState(null);
     const [bridgeFor, setBridgeFor] = R.useState(null);
     const [bridgeSkills, setBridgeSkills] = R.useState([]);
     const [impOpen, setImpOpen] = R.useState(false);
@@ -31806,7 +31895,7 @@ The user is about to begin a ${cfg.language || "language"} practice session with
           scMakeHandoff(p, tail).then((hf) => { if (hf) updP(p.id, (q) => ({ ...q, handoff: hf })); }).catch(() => {});
         }
       }
-      setPid(null); setOpenU(null); setChk(null); setConfirmDel(null); setVerOpen(null); setVerView(null); setResearch(null); setPresent(false); setSnapOpen(false); setSelText("");
+      setPid(null); setOpenU(null); setChk(null); setConfirmDel(null); setVerOpen(null); setVerView(null); setResearch(null); setPresent(false); setImageFor(null); setSnapOpen(false); setSelText("");
     };
     const archiveProject = () => { updP(proj.id, (p) => ({ ...p, archived: true })); leaveProject(); say("Archived. Restore it from the projects list."); };
     const restoreProject = (id) => { updP(id, (p) => ({ ...p, archived: false })); say("Restored"); };
@@ -32049,6 +32138,7 @@ The user is about to begin a ${cfg.language || "language"} practice session with
                 t.multi && h(R.Fragment, null, fieldInput(String(u.storyOrder === undefined ? "" : u.storyOrder), (v) => setUnit(u.id, { storyOrder: v.replace(/[^\d.\-]/g, "") }, true), "Story position (optional number)…", 8), note("Leave empty to follow reading order. Give a flashback an earlier number, for example 0.5, so facts that come true later stay out of it.")),
                 proj.typeId === "screenplay" && storyboardOptions().length > 0 && h("select", { value: u.link || "", onChange: (e) => setUnit(u.id, { link: e.target.value }), style: { width: "100%", padding: "10px 12px", background: "rgba(25,16,45,0.8)", color: "#EEE8DD", border: "1px solid " + color + "40", fontSize: 14, fontFamily: "Cormorant Garamond, Georgia, serif" } }, h("option", { value: "" }, "No storyboard linked"), storyboardOptions().map((o) => h("option", { key: o.value, value: o.value }, "Storyboard: " + o.label))),
                 proj.typeId === "storyboard" && linkedFrom(u) && h("div", { style: { fontSize: 11, color: "rgba(200,190,170,0.6)", fontStyle: "italic" } }, "Linked from screenplay scene: " + linkedFrom(u)),
+                (u.images || []).length > 0 && h("div", { style: { display: "flex", flexWrap: "wrap", gap: 8 } }, u.images.map((im) => h("div", { key: im.id, style: { position: "relative" } }, h("img", { src: "/api/images/" + encodeURIComponent(im.id), alt: "", style: { width: 96, height: 128, objectFit: "cover", border: "1px solid " + color + "44" } }), h("button", { onClick: () => setUnit(u.id, { images: u.images.filter((x) => x.id !== im.id) }), "aria-label": "Remove image", style: { position: "absolute", top: 2, right: 2, background: "rgba(0,0,0,0.6)", border: "none", color: "#EEE8DD", cursor: "pointer", fontSize: 14, padding: "0 6px" } }, "×")))),
                 proj.parentId && btn("SEND TO MAIN AS DRAFT", () => sendToMain(u), { variant: "ghost", auto: true, pad: "6px 12px" }),
                 h("div", { style: { display: "flex", flexWrap: "wrap", gap: 6 } },
                   ["Draft", "Under Revision", "Abandoned"].map((s) => h("div", { key: s }, btn(s.toUpperCase(), () => { setUnit(u.id, { status: s }); setChk(null); }, { variant: u.status === s ? "accent" : "ghost", auto: true, pad: "7px 11px" }))),
@@ -32056,6 +32146,7 @@ The user is about to begin a ${cfg.language || "language"} practice session with
                 h("div", { style: { display: "flex", flexWrap: "wrap", gap: 6 } },
                   btn("RESEARCH", () => setResearch({ seed: "", n: Date.now() }), { variant: "ghost", auto: true, pad: "6px 12px" }),
                   selText && btn("REVIEW FOR ACCURACY", () => { setResearch({ seed: selText, n: Date.now() }); setSelText(""); }, { variant: "ghost", auto: true, pad: "6px 12px" }),
+                  btn("ILLUSTRATE", () => setImageFor(u.id), { variant: "ghost", auto: true, pad: "6px 12px" }),
                   (u.text || "").trim() && btn(bridgeFor === u.id ? "CLOSE SEND" : "SEND TO…", () => openBridge(u.id), { variant: "ghost", auto: true, pad: "6px 12px" }),
                   (versions.length > 0 || u.approvedText) && btn(verOpen === u.id ? "HIDE VERSIONS" : "VERSIONS (" + versions.length + ")", () => { setVerOpen(verOpen === u.id ? null : u.id); setVerView(null); }, { variant: "ghost", auto: true, pad: "6px 12px" })),
                 (chk && chk.uid === u.id) && h("div", { style: { display: "flex", flexDirection: "column", gap: 8 } },
@@ -32214,6 +32305,7 @@ The user is about to begin a ${cfg.language || "language"} practice session with
       proj && pickerUi,
       proj && research && h(ScribeResearch, { key: research.n, proj, seed: research.seed, color, accent, onPin: pinRef, onClose: () => setResearch(null) }),
       proj && present && h(ScribePresent, { proj, units: presentUnits(), telosList: telos, defaultTelo: tel ? tel.name : "", color, accent, onClose: () => setPresent(false), onSaveSpeaking: saveSpeaking }),
+      proj && imageFor && (() => { const iu = (proj.units || []).find((x) => x.id === imageFor); return iu ? h(ScribeImage, { key: imageFor, proj, unit: iu, tel, userProfile, color, accent, onClose: () => setImageFor(null), onAttach: (id, pr) => setUnit(iu.id, { images: [...(iu.images || []), { id, prompt: String(pr).slice(0, 300), ts: Date.now() }].slice(-12) }), onStyle: (sid) => updP(proj.id, (p) => ({ ...p, imgStyle: sid })) }) : null; })(),
       conflictUi,
       toast && h("div", { style: { position: "absolute", left: 0, right: 0, bottom: 90, display: "flex", justifyContent: "center", zIndex: 70, pointerEvents: "none" } }, h(ChamferBox, { size: "sm", borderColor: color + "88", fillColor: "rgba(12,8,24,0.97)" }, h("div", { style: { padding: "9px 18px", fontFamily: "Cinzel, serif", fontSize: 10, letterSpacing: 2, color: accent } }, toast.toUpperCase()))));
   }
@@ -40364,7 +40456,7 @@ initRemote();
         screen === "echoImage" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EchoImageScreen, { userProfile, onExit: () => { if (echoReturn === "profile") setScreen("echoProfile"); else if (echoReturn === "archives") { setScreen("main"); setActiveTab("archives"); } else setScreen(echoReturn === "home" ? "home" : "settings"); } }),
         screen === "avatarImage" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AvatarImageScreen, { userProfile, onExit: () => setScreen("settings"), onSaved: (ad) => setUserProfile(ad) }),
         screen === "encyclopaedia" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EncyclopaediaScreen, { onExit: () => setScreen("home") }),
-        screen === "scribe" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ScribeScreen, { onExit: () => setScreen("home") }),
+        screen === "scribe" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ScribeScreen, { userProfile, onExit: () => setScreen("home") }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(LanguagePracticeScreen, { active: screen === "languages", onExit: () => setScreen("home") }),
         viewingTownSquareWorld && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
           TownSquareScreen,
