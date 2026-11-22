@@ -31127,7 +31127,7 @@ The user is about to begin a ${cfg.language || "language"} practice session with
       pickerUi,
       toast && h("div", { style: { position: "absolute", left: 0, right: 0, bottom: 90, display: "flex", justifyContent: "center", zIndex: 30, pointerEvents: "none" } }, h(ChamferBox, { size: "sm", borderColor: color + "88", fillColor: "rgba(12,8,24,0.97)" }, h("div", { style: { padding: "9px 18px", fontFamily: "Cinzel, serif", fontSize: 10, letterSpacing: 2, color: accent } }, toast.toUpperCase()))));
   }
-  // ADDED (App v130) -- SCRIBE skill screen, slice 1 (Master 19C as written in v207/v208). Built ONLY from existing parts, the same way
+  // ADDED (App v130, extended v131) -- SCRIBE skill screen, slice 1 + foundation (Master 19C.2E, 2F partial, 2G handoff, 19C.6A research window) (Master 19C as written in v207/v208). Built ONLY from existing parts, the same way
   // EncyclopaediaScreen is: ChamferBox / ChamferBtn / ChamferField, MessageBubble, the Wellness-style header, and the skill-memory framework
   // (Master 8.16A: bins, no compression, verbatim archive). Text only. NOT in this slice: images (19C.2A), presenting and public speaking
   // (19C.2C), the Library (19C.4), Personal Canon promotion, the tier project cap (19C.1B) and the World Roots / RDP hooks. Creative projects
@@ -31209,22 +31209,158 @@ The user is about to begin a ${cfg.language || "language"} practice session with
       return m;
     } catch (e) { return null; }
   }
-  function scProjectCtx(p) {
+  // ---- v131 foundation helpers (Master 19C.2E, 19C.2F, 19C.2G) ----
+  function scHash(str) { let x = 5381; for (let i = 0; i < str.length; i++) x = ((x << 5) + x + str.charCodeAt(i)) | 0; return String(x) + ":" + str.length; }
+  function scNewUnit(title) { return { id: scUid(), title: String(title).slice(0, 80), text: "", status: "Draft", created: Date.now(), approvedText: "", history: [], needsReview: "" }; }
+  function scMigrate(p) {
+    const units = (p.units || []).map((u) => ({ ...u, approvedText: typeof u.approvedText === "string" ? u.approvedText : (u.status === "Approved" ? (u.text || "") : ""), history: Array.isArray(u.history) ? u.history : [], needsReview: u.needsReview || "" }));
+    const ledger = (p.ledger || []).map((e) => ({ source: e.kind === "reference" ? "General knowledge, unverified" : "Author note", from: "", ...e }));
+    return { ...p, units, ledger, updated: p.updated || p.created || 0, handoff: p.handoff || null };
+  }
+  function scIsCanon(u) { return !!(u.approvedText && u.approvedText.trim()); }
+  function scFmtDate(ts) { try { return new Date(ts).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }); } catch (e) { return ""; } }
+  // Facts and character notes are effective only from the unit they are marked "true from" (19C.2F).
+  function scFactsFor(p, unitId, kind) {
+    const units = p.units || [];
+    const at = unitId ? units.findIndex((u) => u.id === unitId) : units.length - 1;
+    return (p.ledger || []).filter((e) => e.kind === kind).filter((e) => {
+      if (!e.from) return true;
+      const fi = units.findIndex((u) => u.id === e.from);
+      return fi < 0 || at < 0 || fi <= at;
+    });
+  }
+  function scProjectCtx(p, unitId) {
     if (!p) return "";
     const t = scType(p);
     const lines = ["\n\nTHE PROJECT YOU ARE WORKING ON (the author's own words and decisions; treat the recorded facts as locked)", "Title: " + p.title, "Kind: " + t.label + " (" + p.category + "; designation " + (p.category === "Creative" ? "Creative" : "Professional/Educational") + ")"];
     const units = p.units || [];
     if (units.length) lines.push("Units: " + units.map((u) => u.title + " [" + scStatusLabel(p, u.status) + "]").join("; "));
-    const last = units.filter((u) => u.status === "Approved" && u.text).slice(-1)[0];
-    if (last) lines.push("Most recent approved unit, " + last.title + " (ending): " + last.text.slice(-1200));
-    const facts = (p.ledger || []).filter((e) => e.kind === "fact");
-    const people = (p.ledger || []).filter((e) => e.kind === "character");
+    const wu = units.find((u) => u.id === unitId);
+    if (wu) lines.push("The author is working on: " + wu.title + ". Only facts that are true by this point are listed below.");
+    const last = units.filter(scIsCanon).slice(-1)[0];
+    if (last) lines.push("Most recent approved unit, " + last.title + " (ending): " + last.approvedText.slice(-1200));
+    const facts = scFactsFor(p, unitId, "fact"), people = scFactsFor(p, unitId, "character");
+    const refs = (p.ledger || []).filter((e) => e.kind === "reference");
     if (facts.length) lines.push("CANON LEDGER (locked facts):\n" + facts.slice(-60).map((e) => "- " + e.text).join("\n"));
     if (people.length) lines.push("CHARACTER AND RELATIONSHIP BIBLES:\n" + people.slice(-40).map((e) => "- " + e.text).join("\n"));
+    if (refs.length) lines.push("REFERENCES (general knowledge, unverified; not canon):\n" + refs.slice(-20).map((e) => "- " + e.text).join("\n"));
+    if (p.handoff && (p.handoff.stop || p.handoff.next)) lines.push("WHERE THE AUTHOR LEFT OFF: " + (p.handoff.stop || "") + (p.handoff.next ? " Intended next beat: " + p.handoff.next : ""));
     return lines.join("\n");
   }
   function scManuscript(p) {
-    return (p.units || []).filter((u) => u.status === "Approved").map((u) => (scType(p).multi ? u.title + "\n\n" : "") + (u.text || "")).join("\n\n---\n\n");
+    return (p.units || []).filter(scIsCanon).map((u) => (scType(p).multi ? u.title + "\n\n" : "") + u.approvedText).join("\n\n---\n\n");
+  }
+  function scSnapKey(pid) { return "telos-v1-scribe-snap-" + pid; }
+  async function scSnapList(pid) { try { const l = await storageGet(scSnapKey(pid), []); return Array.isArray(l) ? l : []; } catch (e) { return []; } }
+  async function scSnapTake(pid, label, units) {
+    try {
+      const arr = await scSnapList(pid);
+      const sig = scHash(JSON.stringify((units || []).map((u) => [u.id, u.title, u.text, u.approvedText, u.status])));
+      if (arr.length && arr[arr.length - 1].sig === sig) return arr;
+      const next = [...arr, { id: scUid(), ts: Date.now(), label, sig, units }].slice(-20);
+      await storageSet(scSnapKey(pid), next);
+      return next;
+    } catch (e) { return null; }
+  }
+  async function scMakeHandoff(p, chatTail) {
+    const system = "You write a short handoff note for a writer who will return to a long project later. Use ONLY the supplied material. Return ONLY valid JSON: {\"stop\":\"where the work stopped, one or two sentences\",\"decisions\":[\"recent decisions, up to 4\"],\"questions\":[\"unresolved questions, up to 4\"],\"next\":\"the intended next beat, one sentence\"}. If something is not in the material, leave it empty instead of guessing.";
+    const units = (p.units || []).map((u) => u.title + " [" + scStatusLabel(p, u.status) + ", " + scWords(u.text) + " words]").join("; ");
+    const recent = (p.units || []).slice().sort((a, b) => (b.created || 0) - (a.created || 0))[0];
+    const body = "PROJECT: " + p.title + " (" + scType(p).label + ")\nUNITS: " + (units || "none yet") + (recent && recent.text ? "\nEND OF LATEST UNIT (" + recent.title + "): " + recent.text.slice(-600) : "") + "\nRECENT CONVERSATION WITH THE CO-AUTHOR:\n" + (chatTail || "(none)");
+    try {
+      const raw = await callClaudeLong(system, [{ role: "user", content: body }], 700, 40000);
+      const j = parseJsonLoose(raw);
+      if (!j || typeof j !== "object") return null;
+      const arr = (v) => (Array.isArray(v) ? v : []).map((x) => String(x).slice(0, 200)).filter(Boolean).slice(0, 4);
+      return { ts: Date.now(), stop: String(j.stop || "").slice(0, 400), decisions: arr(j.decisions), questions: arr(j.questions), next: String(j.next || "").slice(0, 300) };
+    } catch (e) { return null; }
+  }
+  // Research window (Master 19C.6A): the Encyclopaedia opened over the Scribe screen. Same Encyclopaedia conversation, memory and rules.
+  function ScribeResearch({ proj, seed, color, accent, onPin, onClose }) {
+    const R = import_react, h = R.createElement;
+    const [state, setState] = R.useState("loading");
+    const [tel, setTel] = R.useState(null);
+    const [msgs, setMsgs] = R.useState([]);
+    const [input, setInput] = R.useState("");
+    const [busy, setBusy] = R.useState(false);
+    const memRef = R.useRef(null);
+    const pendRef = R.useRef(0);
+    const msgsRef = R.useRef([]);
+    const telRef = R.useRef(null);
+    const bottomRef = R.useRef(null);
+    const seededRef = R.useRef(false);
+    msgsRef.current = msgs; telRef.current = tel;
+    const chatKey = tel ? "telos-v1-scribe-research-" + tel.name + "-" + proj.id : null;
+    const sysFor = () => (tel.system || "You are " + tel.name + ".") + ENC_RULES + encFormatMem(memRef.current, null) + "\n\nThe person is writing a piece of work (" + proj.title + ") and is using you for research and fact-checking. When they send a passage, say what looks accurate, what looks doubtful or wrong, and what you cannot verify. You cannot look anything up, so say so when it matters.";
+    const flush = async () => {
+      const t = telRef.current;
+      if (!t || pendRef.current < 2 || !memRef.current) return;
+      const convo = msgsRef.current.slice(-14).map((m) => (m.role === "user" ? "PERSON: " : t.name.toUpperCase() + ": ") + String(m.content).slice(0, 700)).join("\n");
+      pendRef.current = 0;
+      const next = await encUpdateMem(t.name, memRef.current, convo);
+      if (next) memRef.current = next;
+    };
+    const flushRef = R.useRef(flush); flushRef.current = flush;
+    R.useEffect(() => {
+      let dead = false;
+      (async () => {
+        let list = [];
+        try { list = await loadMyTelosians(); } catch (e) { list = []; }
+        const rec = (list || []).find((r) => r && r.skillModule === ENC_SKILL);
+        if (dead) return;
+        if (!rec) { setState("locked"); return; }
+        const name = rec.firstName || "Companion";
+        let cfg = COMPANION_CONFIGS[name];
+        if (!cfg) { const k = Object.keys(COMPANION_CONFIGS).find((n) => COMPANION_CONFIGS[n].world === rec.world); cfg = COMPANION_CONFIGS[k || "Seraphine"]; }
+        const system = rec.generatedSystem || buildFallbackSystem(name, { occupation: rec.occupation, flaw: rec.flaw, backstory: rec.backstory, coreTraits: rec.coreTraits });
+        const t = { name, world: rec.world || cfg.world, system, cfg };
+        memRef.current = await encLoadMem(name);
+        const saved = await storageGet("telos-v1-scribe-research-" + name + "-" + proj.id, []);
+        if (dead) return;
+        setTel(t); setMsgs(Array.isArray(saved) ? saved : []); setState("ready");
+      })();
+      return () => { dead = true; };
+    }, []);
+    R.useEffect(() => () => { try { flushRef.current(); } catch (e) {} }, []);
+    R.useEffect(() => { if (bottomRef.current) bottomRef.current.scrollIntoView({ block: "end" }); }, [msgs, busy, state]);
+    const send = async (override) => {
+      const t = (override !== undefined ? override : input).trim();
+      if (!t || busy || !telRef.current) return;
+      const next = [...msgsRef.current, { role: "user", content: t }];
+      setMsgs(next); setInput(""); setBusy(true);
+      let reply = "";
+      try { reply = await callClaude(sysFor(), next.map((m) => ({ role: m.role, content: m.content })), 800); } catch (e) { reply = ""; }
+      const done = [...next, { role: "assistant", content: reply || "Something interrupted. Try again." }];
+      setMsgs(done); setBusy(false);
+      storageSet("telos-v1-scribe-research-" + telRef.current.name + "-" + proj.id, done.slice(-200)).catch(() => {});
+      try { smArchiveAppend(ENC_SKILL2, telRef.current.name, "", [done[done.length - 2], done[done.length - 1]]); } catch (e) {}
+      pendRef.current += 1;
+      if (pendRef.current >= 6) flushRef.current();
+    };
+    R.useEffect(() => {
+      if (state === "ready" && seed && !seededRef.current) {
+        seededRef.current = true;
+        send("Fact-check this passage from my work. Tell me what looks accurate, what looks doubtful or wrong, and what you cannot verify.\n\n\"" + seed.slice(0, 3000) + "\"");
+      }
+    }, [state]);
+    const small = (t, onClick, dis) => h(ChamferBtn, { size: "sm", variant: "ghost", accentColor: color, textColor: accent, fillColor: "rgba(10,6,20,0.62)", disabled: !!dis, onClick, style: { width: "auto", padding: "6px 10px", fontSize: 9 } }, t);
+    return h("div", { style: { position: "absolute", left: 0, right: 0, bottom: 0, height: "64%", zIndex: 40, display: "flex", flexDirection: "column", background: "rgba(8,5,18,0.985)", borderTop: "1px solid " + color + "66", boxShadow: "0 -14px 36px rgba(0,0,0,0.55)" } },
+      h("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 16px", borderBottom: "1px solid rgba(255,255,255,0.06)", flexShrink: 0 } },
+        h("div", { style: { fontFamily: "Cinzel, serif", fontSize: 11, letterSpacing: 2.5, color: accent } }, "RESEARCH" + (tel ? " · " + tel.name.toUpperCase() : "")),
+        small("CLOSE", () => { try { flushRef.current(); } catch (e) {} onClose(); })),
+      state === "loading" && h("div", { style: { flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "rgba(200,190,170,0.5)", fontStyle: "italic" } }, "…"),
+      state === "locked" && h("div", { style: { flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 28, textAlign: "center", color: "rgba(200,190,170,0.7)", fontSize: 14, lineHeight: 1.6, fontStyle: "italic" } }, "The research window opens the Encyclopædia. Attach an Encyclopædia Telōsian to use it."),
+      state === "ready" && h(R.Fragment, null,
+        h("div", { style: { flex: 1, overflowY: "auto", padding: "12px 16px 0", display: "flex", flexDirection: "column", gap: 14, scrollbarWidth: "none" } },
+          h("div", { style: { fontSize: 11, color: "rgba(200,190,170,0.5)", fontStyle: "italic", textAlign: "center" } }, "General knowledge only. It cannot look anything up, so it can flag a likely error but not verify a fact."),
+          msgs.map((m, i) => h("div", { key: i, style: { alignSelf: m.role === "user" ? "flex-end" : "flex-start", maxWidth: "94%" } },
+            h(MessageBubble, { msg: m, isFirst: false, worldColor: color, worldAccent: accent, cfg: tel.cfg }),
+            (m.role === "assistant" && !busy) && h("div", { style: { marginTop: 6, marginLeft: 4 } }, small("PIN TO LEDGER", () => onPin(m.content))))),
+          busy && h("div", { style: { color: "rgba(200,190,170,0.6)", fontStyle: "italic", fontSize: 13 } }, "…"),
+          h("div", { ref: bottomRef })),
+        h("div", { style: { padding: "10px 16px", paddingBottom: "max(10px, env(safe-area-inset-bottom))", borderTop: "1px solid rgba(180,150,120,0.07)", flexShrink: 0, display: "flex", gap: 8, alignItems: "flex-end" } },
+          h("div", { style: { flex: 1 } }, h(ChamferField, { size: "sm", borderColor: color + "40", activeBorderColor: color + "CC", fillColor: "rgba(25,16,45,0.8)" }, h("textarea", { value: input, onChange: (e) => setInput(e.target.value.slice(0, 4000)), placeholder: "ask…", rows: 2, style: { width: "100%", padding: "10px 14px", background: "transparent", border: "none", outline: "none", color: "#EEE8DD", fontSize: 16, lineHeight: 1.5, fontFamily: "Cormorant Garamond, Georgia, serif", resize: "none", boxSizing: "border-box" } }))),
+          h("div", { style: { width: 72 } }, h(ChamferBtn, { size: "sm", variant: "primary", disabled: !input.trim() || busy, onClick: () => send(), style: { width: "100%", fontSize: 10 } }, "SEND")))));
   }
   function ScribeScreen({ onExit }) {
     const R = import_react, h = R.createElement;
@@ -31242,12 +31378,23 @@ The user is about to begin a ${cfg.language || "language"} practice session with
     const [chkBusy, setChkBusy] = R.useState(false);
     const [ledIn, setLedIn] = R.useState("");
     const [bibIn, setBibIn] = R.useState("");
+    const [ledSrc, setLedSrc] = R.useState("");
+    const [ledFrom, setLedFrom] = R.useState("");
+    const [bibFrom, setBibFrom] = R.useState("");
     const [msgs, setMsgs] = R.useState([]);
     const [input, setInput] = R.useState("");
     const [busy, setBusy] = R.useState(false);
     const [picker, setPicker] = R.useState(null);
     const [confirmDel, setConfirmDel] = R.useState(null);
     const [toast, setToast] = R.useState("");
+    const [verOpen, setVerOpen] = R.useState(null);
+    const [verView, setVerView] = R.useState(null);
+    const [snapOpen, setSnapOpen] = R.useState(false);
+    const [snaps, setSnaps] = R.useState([]);
+    const [conflict, setConflict] = R.useState(null);
+    const [research, setResearch] = R.useState(null);
+    const [selText, setSelText] = R.useState("");
+    const [hfBusy, setHfBusy] = R.useState(false);
     const bottomRef = R.useRef(null);
     const memRef = R.useRef(null);
     const memPromiseRef = R.useRef(null);
@@ -31255,6 +31402,12 @@ The user is about to begin a ${cfg.language || "language"} practice session with
     const msgsRef = R.useRef([]);
     msgsRef.current = msgs;
     const telRef = R.useRef(null);
+    const dataRef = R.useRef({ projects: [] });
+    const baseRef = R.useRef({});
+    const conflictRef = R.useRef(null);
+    const saveTimer = R.useRef(null);
+    const latestRef = R.useRef(null);
+    const touchedRef = R.useRef(false);
     const tel = telos[idx] || null;
     telRef.current = tel;
     const cfg = tel ? tel.cfg : COMPANION_CONFIGS.Seraphine;
@@ -31263,20 +31416,61 @@ The user is about to begin a ${cfg.language || "language"} practice session with
     const color = wc.color || T("123,94,167", true);
     const accent = wc.accent || "#9B7EC8";
     const proj = pid ? (data.projects || []).find((p) => p.id === pid) : null;
-    const sysFor = () => (tel ? (tel.system || "You are " + tel.name + ".") + SC_RULES + scFormatMem(memRef.current) + scProjectCtx(proj) : "");
+    const sysFor = () => (tel ? (tel.system || "You are " + tel.name + ".") + SC_RULES + scFormatMem(memRef.current) + scProjectCtx(proj, openU) : "");
     const chatKey = tel && proj ? "telos-v1-scribe-chat-" + tel.name + "-" + proj.id : null;
-    const say = (t) => { setToast(t); setTimeout(() => setToast(""), 2200); };
-    const saveTimer = R.useRef(null);
-    const latestRef = R.useRef(null);
-    // Typing is saved after a short pause, not on every keystroke; every other change saves at once.
-    const persist = (next, lazy) => {
-      setData(next); latestRef.current = next;
-      if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; }
-      if (lazy) saveTimer.current = setTimeout(() => { saveTimer.current = null; storageSet(SC_KEY, next).catch(() => {}); }, 900);
-      else storageSet(SC_KEY, next).catch(() => {});
+    const say = (t) => { setToast(t); setTimeout(() => setToast(""), 2400); };
+
+    // ----- saving: pauses while typing, checks for a change made on another device first (Master 19C.2E) -----
+    const writeNow = async (next) => {
+      let stored = null;
+      try { stored = await storageGet(SC_KEY, null); } catch (e) { stored = null; }
+      if (stored && Array.isArray(stored.projects)) {
+        for (const sp of stored.projects) {
+          const b = baseRef.current[sp.id];
+          const mine = next.projects.find((p) => p.id === sp.id);
+          if (mine && b !== undefined && (sp.updated || 0) > b && (sp.updated || 0) !== (mine.updated || 0)) {
+            conflictRef.current = { theirs: sp, mine }; setConflict({ theirs: sp, mine });
+            return false;
+          }
+        }
+      }
+      next.projects.forEach((p) => { baseRef.current[p.id] = p.updated || 0; });
+      try { await storageSet(SC_KEY, next); } catch (e) {}
+      return true;
     };
-    const updP = (id, fn, lazy) => persist({ ...data, projects: data.projects.map((p) => p.id === id ? fn(p) : p) }, lazy);
-    R.useEffect(() => () => { if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; if (latestRef.current) storageSet(SC_KEY, latestRef.current).catch(() => {}); } }, []);
+    const persist = (next, lazy) => {
+      dataRef.current = next; latestRef.current = next; setData(next);
+      if (conflictRef.current) return;
+      if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; }
+      if (lazy) saveTimer.current = setTimeout(() => { saveTimer.current = null; writeNow(latestRef.current); }, 900);
+      else writeNow(next);
+    };
+    const updP = (id, fn, lazy) => { const cur = dataRef.current; persist({ ...cur, projects: cur.projects.map((p) => p.id === id ? { ...fn(p), updated: Date.now() } : p) }, lazy); };
+    const flushSave = () => { if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; if (latestRef.current && !conflictRef.current) writeNow(latestRef.current); } };
+    R.useEffect(() => {
+      const onVis = async () => {
+        if (document.visibilityState === "hidden") { flushSave(); return; }
+        if (saveTimer.current || conflictRef.current) return;
+        let d = null;
+        try { d = await storageGet(SC_KEY, null); } catch (e) { d = null; }
+        if (!d || !Array.isArray(d.projects)) return;
+        const m = { projects: d.projects.map(scMigrate) };
+        if (JSON.stringify(m) !== JSON.stringify(dataRef.current)) { m.projects.forEach((p) => { baseRef.current[p.id] = p.updated || 0; }); dataRef.current = m; setData(m); }
+      };
+      document.addEventListener("visibilitychange", onVis);
+      window.addEventListener("pagehide", flushSave);
+      return () => { document.removeEventListener("visibilitychange", onVis); window.removeEventListener("pagehide", flushSave); flushSave(); };
+    }, []);
+    const resolveConflict = (choice) => {
+      const c = conflictRef.current;
+      if (!c) return;
+      conflictRef.current = null; setConflict(null);
+      const cur = dataRef.current, id = c.mine.id;
+      baseRef.current[id] = c.theirs.updated || 0;
+      if (choice === "mine") persist({ ...cur, projects: cur.projects.map((p) => p.id === id ? { ...p, updated: Date.now() } : p) });
+      else if (choice === "theirs") { const t = scMigrate(c.theirs); persist({ ...cur, projects: cur.projects.map((p) => p.id === id ? t : p) }); }
+      else { const copy = { ...scMigrate(c.theirs), id: scUid(), title: (c.theirs.title + " (other device)").slice(0, 80), updated: Date.now() }; persist({ ...cur, projects: [copy, ...cur.projects.map((p) => p.id === id ? { ...p, updated: Date.now() } : p)] }); }
+    };
 
     R.useEffect(() => {
       let dead = false;
@@ -31284,9 +31478,10 @@ The user is about to begin a ${cfg.language || "language"} practice session with
         const d = await storageGet(SC_KEY, { projects: [] });
         const t = await scResolveTelos();
         if (dead) return;
-        setData(d && Array.isArray(d.projects) ? d : { projects: [] });
-        setTelos(t);
-        setLoaded(true);
+        const m = { projects: (d && Array.isArray(d.projects) ? d.projects : []).map(scMigrate) };
+        m.projects.forEach((p) => { baseRef.current[p.id] = p.updated || 0; });
+        dataRef.current = m; latestRef.current = m;
+        setData(m); setTelos(t); setLoaded(true);
       })();
       return () => { dead = true; };
     }, []);
@@ -31312,12 +31507,19 @@ The user is about to begin a ${cfg.language || "language"} practice session with
       return () => { dead = true; };
     }, [chatKey]);
     R.useEffect(() => { if (bottomRef.current && ptab === "write") bottomRef.current.scrollIntoView({ block: "end" }); }, [msgs, busy, ptab]);
+    // Snapshot every five minutes while a project is open and its content has changed.
+    R.useEffect(() => {
+      if (!pid) return;
+      const iv = setInterval(() => { const p = dataRef.current.projects.find((x) => x.id === pid); if (p) scSnapTake(p.id, "Autosave", p.units); }, 300000);
+      return () => clearInterval(iv);
+    }, [pid]);
 
     const saveChat = (list) => { if (chatKey) storageSet(chatKey, list.slice(-300)).catch(() => {}); };
     const send = async () => {
       const t = input.trim();
       if (!t || busy || !tel || !proj) return;
       try { await memPromiseRef.current; } catch (e) {}
+      touchedRef.current = true;
       const next = [...msgs, { role: "user", content: t }];
       setMsgs(next); setInput(""); setBusy(true);
       let reply = "";
@@ -31334,46 +31536,108 @@ The user is about to begin a ${cfg.language || "language"} practice session with
       if (!title) return;
       const t = SC_TYPES.find((x) => x.id === nType) || SC_TYPES[0];
       const id = scUid();
-      const units = t.multi ? [] : [{ id: scUid(), title, text: "", status: "Draft", created: Date.now() }];
-      persist({ ...data, projects: [{ id, title: title.slice(0, 80), typeId: t.id, category: t.cat, created: Date.now(), units, ledger: [] }, ...data.projects] });
+      const units = t.multi ? [] : [scNewUnit(title)];
+      const cur = dataRef.current;
+      persist({ ...cur, projects: [scMigrate({ id, title: title.slice(0, 80), typeId: t.id, category: t.cat, created: Date.now(), updated: Date.now(), units, ledger: [] }), ...cur.projects] });
       setNTitle(""); setPid(id); setPtab("units"); setOpenU(units[0] ? units[0].id : null); setChk(null);
     };
     const addUnit = () => {
       const title = newUnit.trim();
       if (!title || !proj) return;
-      const u = { id: scUid(), title: title.slice(0, 80), text: "", status: "Draft", created: Date.now() };
+      const u = scNewUnit(title);
       updP(proj.id, (p) => ({ ...p, units: [...p.units, u] }));
       setNewUnit(""); setOpenU(u.id);
     };
     const setUnit = (uid, patch, lazy) => updP(proj.id, (p) => ({ ...p, units: p.units.map((u) => u.id === uid ? { ...u, ...patch } : u) }), lazy);
+    // Editing an approved unit opens a revision; the approved version stays canon until the revision is approved (19C.2E).
+    const setText = (u, v) => { touchedRef.current = true; setUnit(u.id, { text: v, ...(u.status === "Approved" && v !== u.approvedText ? { status: "Under Revision" } : {}) }, true); };
     const delUnit = (uid) => { updP(proj.id, (p) => ({ ...p, units: p.units.filter((u) => u.id !== uid) })); setOpenU(null); setChk(null); setConfirmDel(null); };
+    const doApprove = (u) => {
+      touchedRef.current = true;
+      const revised = !!(u.approvedText && u.approvedText !== u.text);
+      updP(proj.id, (p) => {
+        const at = p.units.findIndex((x) => x.id === u.id);
+        return { ...p, units: p.units.map((x, i) => {
+          if (x.id === u.id) return { ...x, status: "Approved", approvedText: x.text, needsReview: "", history: revised ? [...(x.history || []), { id: scUid(), text: x.approvedText, title: x.title, ts: Date.now(), label: "Approved version" }].slice(-30) : (x.history || []) };
+          if (revised && i > at && scIsCanon(x) && !x.needsReview) return { ...x, needsReview: "Earlier unit \"" + u.title + "\" was revised" };
+          return x;
+        }) };
+      });
+      setChk(null);
+      const p2 = dataRef.current.projects.find((x) => x.id === proj.id);
+      if (p2) scSnapTake(p2.id, "Approved: " + u.title, p2.units);
+      const flagged = revised ? proj.units.slice(proj.units.findIndex((x) => x.id === u.id) + 1).filter(scIsCanon).length : 0;
+      say(flagged ? "Approved. " + flagged + " later unit" + (flagged === 1 ? "" : "s") + " to review" : "Approved");
+    };
     const approve = async (u) => {
-      if (proj.category !== "Creative") { setUnit(u.id, { status: "Approved" }); setChk(null); return; }
+      if (proj.category !== "Creative") { doApprove(u); return; }
       if (chkBusy) return;
       setChkBusy(true); setChk(null);
-      const system = "You check a draft against a creative project's established facts before the author approves it. Return ONLY valid JSON: {\"flags\":[{\"issue\":\"short label\",\"detail\":\"one or two sentences\"}]}. Flag: contradictions with the recorded facts or character notes, drift from an established character voice, repetitive dialogue or beats, false atmosphere, and emotional beats that are not earned. If you find nothing, return {\"flags\":[]}. Use ONLY the supplied material.";
-      const facts = (proj.ledger || []).map((e) => (e.kind === "character" ? "CHARACTER: " : "FACT: ") + e.text).join("\n");
+      const system = "You check a draft against a creative project's established facts before the author approves it. Return ONLY valid JSON: {\"flags\":[{\"issue\":\"short label\",\"detail\":\"one or two sentences\"}]}. Flag: contradictions with the recorded facts or character notes, drift from an established character voice, repetitive dialogue or beats, false atmosphere, and emotional beats that are not earned. Only the facts listed are true at this point in the work. If you find nothing, return {\"flags\":[]}. Use ONLY the supplied material.";
+      const facts = [...scFactsFor(proj, u.id, "fact").map((e) => "FACT: " + e.text), ...scFactsFor(proj, u.id, "character").map((e) => "CHARACTER: " + e.text)].join("\n");
       let flags = [];
       try {
-        const raw = await callClaudeLong(system, [{ role: "user", content: "RECORDED FACTS AND CHARACTERS:\n" + (facts || "(none recorded yet)") + "\n\nDRAFT (" + u.title + "):\n" + (u.text || "").slice(0, 9000) }], 900, 45000);
+        const raw = await callClaudeLong(system, [{ role: "user", content: "RECORDED FACTS AND CHARACTERS (true by this unit):\n" + (facts || "(none recorded yet)") + "\n\nDRAFT (" + u.title + "):\n" + (u.text || "").slice(0, 9000) }], 900, 45000);
         const j = lgParseJson(raw);
         flags = j && Array.isArray(j.flags) ? j.flags.slice(0, 8) : null;
       } catch (e) { flags = null; }
       setChkBusy(false);
       if (flags === null) { setChk({ uid: u.id, failed: true, flags: [] }); return; }
-      if (!flags.length) { setUnit(u.id, { status: "Approved" }); setChk(null); say("Approved"); return; }
+      if (!flags.length) { doApprove(u); return; }
       setChk({ uid: u.id, flags });
     };
-    const addLedger = (kind, text, clear) => {
+    const addLedger = (kind, text, clear, from, src) => {
       const t = text.trim();
       if (!t || !proj) return;
-      updP(proj.id, (p) => ({ ...p, ledger: [...(p.ledger || []), { id: scUid(), kind, text: t.slice(0, 600), ts: Date.now() }] }));
+      updP(proj.id, (p) => ({ ...p, ledger: [...(p.ledger || []), { id: scUid(), kind, text: t.slice(0, 600), source: (src || "").trim().slice(0, 80) || "Author note", from: from || "", ts: Date.now() }] }));
       clear("");
     };
     const delLedger = (eid) => updP(proj.id, (p) => ({ ...p, ledger: (p.ledger || []).filter((e) => e.id !== eid) }));
+    const pinRef = (text) => {
+      if (!proj) return;
+      updP(proj.id, (p) => ({ ...p, ledger: [...(p.ledger || []), { id: scUid(), kind: "reference", text: String(text).slice(0, 600), source: "General knowledge, unverified", from: "", ts: Date.now() }] }));
+      say("Pinned as a reference");
+    };
     const addToUnit = (uid, text) => {
-      updP(proj.id, (p) => ({ ...p, units: p.units.map((u) => u.id === uid ? { ...u, text: ((u.text ? u.text + "\n\n" : "") + text).slice(0, 60000), status: u.status === "Abandoned" ? "Draft" : u.status } : u) }));
+      touchedRef.current = true;
+      updP(proj.id, (p) => ({ ...p, units: p.units.map((u) => u.id === uid ? { ...u, text: ((u.text ? u.text + "\n\n" : "") + text).slice(0, 60000), status: u.status === "Abandoned" ? "Draft" : (u.status === "Approved" ? "Under Revision" : u.status) } : u) }));
       setPicker(null); say("Added to " + (proj.units.find((u) => u.id === uid) || {}).title);
+    };
+    const restoreVersion = (u, v) => {
+      const cur = u.text || "";
+      updP(proj.id, (p) => ({ ...p, units: p.units.map((x) => {
+        if (x.id !== u.id) return x;
+        const keep = cur.trim() && cur !== x.approvedText && !(x.history || []).some((hh) => hh.text === cur);
+        return { ...x, history: keep ? [...(x.history || []), { id: scUid(), text: cur, title: x.title, ts: Date.now(), label: "Draft before restore" }].slice(-30) : (x.history || []), text: v.text, status: x.approvedText ? "Under Revision" : "Draft" };
+      }) }));
+      setVerView(null); say("Restored as a new draft");
+    };
+    const openSnaps = async () => { const next = !snapOpen; setSnapOpen(next); if (next && proj) setSnaps(await scSnapList(proj.id)); };
+    const restoreSnap = async (s) => {
+      await scSnapTake(proj.id, "Before restore", proj.units);
+      updP(proj.id, (p) => ({ ...p, units: (s.units || []).map((u) => scMigrate({ units: [u] }).units[0]) }));
+      setConfirmDel(null); setOpenU(null); setChk(null); setSnaps(await scSnapList(proj.id)); say("Restored from snapshot");
+    };
+    const updateHandoff = async () => {
+      if (!proj || hfBusy) return;
+      setHfBusy(true);
+      const tail = msgsRef.current.slice(-10).map((m) => (m.role === "user" ? "AUTHOR: " : "CO-AUTHOR: ") + String(m.content).slice(0, 500)).join("\n");
+      const hf = await scMakeHandoff(proj, tail);
+      setHfBusy(false);
+      if (hf) updP(proj.id, (p) => ({ ...p, handoff: hf })); else say("Could not update just now");
+    };
+    const leaveProject = () => {
+      try { flushRef.current(); } catch (e) {}
+      const p = proj, touched = touchedRef.current;
+      touchedRef.current = false;
+      if (p) {
+        scSnapTake(p.id, "Left project", p.units);
+        if (touched && tel) {
+          const tail = msgsRef.current.slice(-10).map((m) => (m.role === "user" ? "AUTHOR: " : "CO-AUTHOR: ") + String(m.content).slice(0, 500)).join("\n");
+          scMakeHandoff(p, tail).then((hf) => { if (hf) updP(p.id, (q) => ({ ...q, handoff: hf })); }).catch(() => {});
+        }
+      }
+      setPid(null); setOpenU(null); setChk(null); setConfirmDel(null); setVerOpen(null); setVerView(null); setResearch(null); setSnapOpen(false); setSelText("");
     };
     const copyMs = async () => { try { await navigator.clipboard.writeText(scManuscript(proj)); say("Copied"); } catch (e) { say("Copy not available"); } };
     const downloadMs = () => {
@@ -31393,9 +31657,12 @@ The user is about to begin a ${cfg.language || "language"} practice session with
     const btn = (t, onClick, o) => h(ChamferBtn, { size: "sm", variant: (o && o.variant) || "accent", accentColor: color, textColor: (o && o.variant === "primary") ? undefined : accent, fillColor: (o && o.variant === "primary") ? undefined : "rgba(10,6,20,0.62)", disabled: !!(o && o.disabled), onClick, style: { width: (o && o.auto) ? "auto" : "100%", padding: (o && o.pad) || undefined, fontSize: 10 } }, t);
     const field = (child) => h(ChamferField, { size: "sm", borderColor: color + "40", activeBorderColor: color + "CC", fillColor: "rgba(25,16,45,0.8)" }, child);
     const fieldInput = (v, set, ph, max) => field(h("input", { value: v, onChange: (e) => set(e.target.value.slice(0, max || 80)), placeholder: ph, style: { width: "100%", padding: "12px 15px", background: "transparent", border: "none", outline: "none", color: "#EEE8DD", fontSize: 16, fontFamily: "Cormorant Garamond, Georgia, serif", boxSizing: "border-box" } }));
-    const fieldArea = (v, set, ph, rows, max) => field(h("textarea", { value: v, onChange: (e) => set(e.target.value.slice(0, max)), placeholder: ph, rows, style: { width: "100%", padding: "12px 15px", background: "transparent", border: "none", outline: "none", color: "#EEE8DD", fontSize: 16, lineHeight: 1.5, fontFamily: "Cormorant Garamond, Georgia, serif", resize: "none", boxSizing: "border-box" } }));
+    const fieldArea = (v, set, ph, rows, max, onSel) => field(h("textarea", { value: v, onChange: (e) => set(e.target.value.slice(0, max)), onSelect: onSel ? (e) => { const el = e.target; const s = el.value.slice(el.selectionStart, el.selectionEnd); if (s.trim()) onSel(s); } : undefined, placeholder: ph, rows, style: { width: "100%", padding: "12px 15px", background: "transparent", border: "none", outline: "none", color: "#EEE8DD", fontSize: 16, lineHeight: 1.5, fontFamily: "Cormorant Garamond, Georgia, serif", resize: "none", boxSizing: "border-box" } }));
     const note = (t) => h("div", { style: { fontSize: 11, color: "rgba(200,190,170,0.5)", fontStyle: "italic", lineHeight: 1.5, textAlign: "center", padding: "0 6px" } }, t);
     const scroller = (...kids) => h("div", { style: { flex: 1, overflowY: "auto", padding: "16px", display: "flex", flexDirection: "column", gap: 12, scrollbarWidth: "none" } }, ...kids);
+    const rule = () => h("div", { style: { height: 1, background: "rgba(255,255,255,0.06)", margin: "6px 0" } });
+    const fromSel = (v, set) => h("select", { value: v, onChange: (e) => set(e.target.value), style: { width: "100%", padding: "10px 12px", background: "rgba(25,16,45,0.8)", color: "#EEE8DD", border: "1px solid " + color + "40", fontSize: 14, fontFamily: "Cormorant Garamond, Georgia, serif" } }, h("option", { value: "" }, "True from the start"), ((proj && proj.units) || []).map((u) => h("option", { key: u.id, value: u.id }, "True from " + u.title)));
+    const unitName = (id) => { const u = proj && (proj.units || []).find((x) => x.id === id); return u ? u.title : ""; };
 
     // ----- picker: choose a unit to receive a reply -----
     const pickerUi = picker && h("div", { onClick: () => setPicker(null), style: { position: "absolute", inset: 0, zIndex: 20, background: "rgba(4,3,8,0.88)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 } },
@@ -31407,6 +31674,18 @@ The user is about to begin a ${cfg.language || "language"} practice session with
             (proj.units || []).map((u) => h("div", { key: u.id }, btn(u.title.toUpperCase(), () => addToUnit(u.id, picker.text), { variant: "ghost" }))),
             btn("CANCEL", () => setPicker(null), { variant: "ghost" })))));
 
+    // ----- save-conflict screen: two devices changed the same project (19C.2E) -----
+    const conflictUi = conflict && h("div", { style: { position: "absolute", inset: 0, zIndex: 60, background: "rgba(4,3,8,0.94)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 } },
+      h(ChamferBox, { size: "lg", borderColor: color + "77", fillColor: "rgba(12,8,24,0.98)", style: { width: "100%", maxWidth: 380 } },
+        h("div", { style: { padding: "20px 18px", display: "flex", flexDirection: "column", gap: 12 } },
+          label("TWO VERSIONS OF THIS PROJECT", { textAlign: "center" }),
+          h("div", { style: { ...body, fontSize: 14, textAlign: "center" } }, "\"" + conflict.mine.title + "\" was changed on another device while you were editing here. Nothing has been overwritten. Choose what to keep."),
+          card(h("div", { style: { ...body, fontSize: 13 } }, "This device: " + scFmtDate(conflict.mine.updated) + " · " + (conflict.mine.units || []).reduce((n, u) => n + scWords(u.text), 0) + " words")),
+          card(h("div", { style: { ...body, fontSize: 13 } }, "Other device: " + scFmtDate(conflict.theirs.updated) + " · " + (conflict.theirs.units || []).reduce((n, u) => n + scWords(u.text), 0) + " words")),
+          btn("KEEP THIS DEVICE", () => resolveConflict("mine"), { variant: "ghost" }),
+          btn("KEEP OTHER DEVICE", () => resolveConflict("theirs"), { variant: "ghost" }),
+          btn("KEEP BOTH (OTHER BECOMES A COPY)", () => resolveConflict("both"), { variant: "primary" }))));
+
     // ----- views -----
     let content = null;
     if (!proj) {
@@ -31416,14 +31695,14 @@ The user is about to begin a ${cfg.language || "language"} practice session with
         label("YOUR PROJECTS"),
         data.projects.length === 0 && note("Nothing here yet. Start a project below."),
         data.projects.map((p) => {
-          const t = scType(p), n = (p.units || []).length, ok = (p.units || []).filter((u) => u.status === "Approved").length;
+          const t = scType(p), n = (p.units || []).length, ok = (p.units || []).filter(scIsCanon).length;
           return h("div", { key: p.id, onClick: () => { setPid(p.id); setPtab("units"); setOpenU(null); setChk(null); }, style: { cursor: "pointer" } },
             card(h(R.Fragment, null,
               h("div", { style: { fontFamily: "Cinzel, serif", fontSize: 14, color: "#EEE8DD", letterSpacing: 1, marginBottom: 4 } }, p.title),
               h("div", { style: { fontSize: 10, color: color + "CC", fontFamily: "Cinzel, serif", letterSpacing: 1.5 } }, t.label.toUpperCase() + " · " + (p.category === "Creative" ? "SANDBOX" : "PROFESSIONAL")),
-              h("div", { style: { ...body, fontSize: 13, marginTop: 6 } }, t.multi ? ok + " of " + n + " " + t.unit.toLowerCase() + (n === 1 ? "" : "s") + " approved" : ((p.units[0] && p.units[0].status === "Approved") ? "Final" : (p.units[0] ? p.units[0].status : "Draft"))))));
+              h("div", { style: { ...body, fontSize: 13, marginTop: 6 } }, t.multi ? ok + " of " + n + " " + t.unit.toLowerCase() + (n === 1 ? "" : "s") + " approved" : ((p.units[0] && scIsCanon(p.units[0])) ? "Final" : (p.units[0] ? p.units[0].status : "Draft"))))));
         }),
-        h("div", { style: { height: 1, background: "rgba(255,255,255,0.06)", margin: "6px 0" } }),
+        rule(),
         label("NEW PROJECT"),
         fieldInput(nTitle, setNTitle, "Title…", 80),
         label("CREATIVE", { marginTop: 2 }),
@@ -31435,51 +31714,93 @@ The user is about to begin a ${cfg.language || "language"} practice session with
     } else {
       const t = scType(proj);
       if (ptab === "units") {
-        const approved = (proj.units || []).filter((u) => u.status === "Approved").length;
+        const approved = (proj.units || []).filter(scIsCanon).length;
+        const hf = proj.handoff;
         content = scroller(
+          hf && (hf.stop || hf.next) && card(h(R.Fragment, null,
+            label("WHERE YOU LEFT OFF", { marginBottom: 6 }),
+            hf.stop && h("div", { style: { ...body, fontSize: 14 } }, hf.stop),
+            hf.next && h("div", { style: { ...body, fontSize: 14, marginTop: 6 } }, h("span", { style: { color: "#EEE8DD" } }, "Next: "), hf.next),
+            (hf.decisions || []).map((d, i) => h("div", { key: "d" + i, style: { ...body, fontSize: 13, marginTop: 4 } }, h("span", { style: { color: "#EEE8DD" } }, "Decided: "), d)),
+            (hf.questions || []).map((d, i) => h("div", { key: "q" + i, style: { ...body, fontSize: 13, marginTop: 4 } }, h("span", { style: { color: "#EEE8DD" } }, "Open: "), d)),
+            h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 10 } }, h("div", { style: { fontSize: 10, color: "rgba(200,190,170,0.45)", fontStyle: "italic" } }, scFmtDate(hf.ts)), btn(hfBusy ? "UPDATING…" : "UPDATE NOW", updateHandoff, { variant: "ghost", auto: true, pad: "6px 10px", disabled: hfBusy })))),
           label(t.multi ? t.unit.toUpperCase() + "S" : "THE PIECE"),
-          note(t.cat === "Creative" ? "Only approved " + t.unit.toLowerCase() + "s count as canon. Images for this kind of work arrive in a later update." : "Mark a " + t.unit.toLowerCase() + " approved when it is done."),
+          note(t.cat === "Creative" ? "Only approved " + t.unit.toLowerCase() + "s count as canon. Editing an approved one opens a revision and keeps the approved version until you approve the new one." : "Mark a " + t.unit.toLowerCase() + " approved when it is done."),
           (proj.units || []).map((u) => {
             const open = openU === u.id;
+            const versions = [...(u.approvedText && u.approvedText !== u.text ? [{ id: "approved", label: "Approved version", text: u.approvedText, ts: null }] : []), ...[...(u.history || [])].reverse()];
             return card(h(R.Fragment, null,
-              h("div", { onClick: () => { setOpenU(open ? null : u.id); setChk(null); }, style: { cursor: "pointer", display: "flex", justifyContent: "space-between", gap: 10, alignItems: "baseline" } },
+              h("div", { onClick: () => { setOpenU(open ? null : u.id); setChk(null); setVerOpen(null); setVerView(null); setSelText(""); }, style: { cursor: "pointer", display: "flex", justifyContent: "space-between", gap: 10, alignItems: "baseline" } },
                 h("div", { style: { fontFamily: "Cinzel, serif", fontSize: 13, color: "#EEE8DD" } }, u.title),
                 h("div", { style: { fontSize: 9, color: color + "CC", fontFamily: "Cinzel, serif", letterSpacing: 1.5, whiteSpace: "nowrap" } }, scStatusLabel(proj, u.status).toUpperCase() + " · " + scWords(u.text) + " W")),
+              u.needsReview && h("div", { style: { fontSize: 10, color: accent, fontFamily: "Cinzel, serif", letterSpacing: 1.5, marginTop: 6 } }, "NEEDS REVIEW"),
               open && h("div", { style: { marginTop: 12, display: "flex", flexDirection: "column", gap: 10 } },
+                u.needsReview && h("div", { style: { display: "flex", flexDirection: "column", gap: 6 } }, h("div", { style: { ...body, fontSize: 13 } }, u.needsReview + ". Read it against the change, then clear this."), btn("CLEAR REVIEW", () => setUnit(u.id, { needsReview: "" }), { variant: "ghost", auto: true, pad: "6px 12px" })),
                 t.multi && fieldInput(u.title, (v) => setUnit(u.id, { title: v }, true), "Title…", 80),
-                fieldArea(u.text || "", (v) => setUnit(u.id, { text: v }, true), "Write or paste here…", 10, 60000),
+                fieldArea(u.text || "", (v) => setText(u, v), "Write or paste here…", 10, 60000, (s) => setSelText(s)),
                 h("div", { style: { display: "flex", flexWrap: "wrap", gap: 6 } },
                   ["Draft", "Under Revision", "Abandoned"].map((s) => h("div", { key: s }, btn(s.toUpperCase(), () => { setUnit(u.id, { status: s }); setChk(null); }, { variant: u.status === s ? "accent" : "ghost", auto: true, pad: "7px 11px" }))),
-                  h("div", null, btn(chkBusy && chk === null && openU === u.id ? "CHECKING…" : (t.multi ? "APPROVE" : "MARK FINAL"), () => approve(u), { variant: "primary", auto: true, pad: "7px 14px", disabled: chkBusy || u.status === "Approved" || !(u.text || "").trim() }))),
+                  h("div", null, btn(chkBusy && chk === null && openU === u.id ? "CHECKING…" : (t.multi ? "APPROVE" : "MARK FINAL"), () => approve(u), { variant: "primary", auto: true, pad: "7px 14px", disabled: chkBusy || (u.status === "Approved" && u.text === u.approvedText) || !(u.text || "").trim() }))),
+                h("div", { style: { display: "flex", flexWrap: "wrap", gap: 6 } },
+                  btn("RESEARCH", () => setResearch({ seed: "", n: Date.now() }), { variant: "ghost", auto: true, pad: "6px 12px" }),
+                  selText && btn("FACT-CHECK SELECTION", () => { setResearch({ seed: selText, n: Date.now() }); setSelText(""); }, { variant: "ghost", auto: true, pad: "6px 12px" }),
+                  (versions.length > 0 || u.approvedText) && btn(verOpen === u.id ? "HIDE VERSIONS" : "VERSIONS (" + versions.length + ")", () => { setVerOpen(verOpen === u.id ? null : u.id); setVerView(null); }, { variant: "ghost", auto: true, pad: "6px 12px" })),
                 (chk && chk.uid === u.id) && h("div", { style: { display: "flex", flexDirection: "column", gap: 8 } },
                   chk.failed ? note("I could not run the check just now. You can still approve it.") : label("CONTINUITY FLAGS", { color: accent + "CC" }),
                   (chk.flags || []).map((f, i) => h("div", { key: i, style: { ...body, fontSize: 14 } }, h("span", { style: { color: "#EEE8DD" } }, String(f.issue || "Flag") + ": "), String(f.detail || ""))),
-                  h("div", { style: { display: "flex", gap: 6 } }, btn("APPROVE ANYWAY", () => { setUnit(u.id, { status: "Approved" }); setChk(null); }, { variant: "ghost", auto: true, pad: "7px 12px" }), btn("KEEP REVISING", () => { setUnit(u.id, { status: "Under Revision" }); setChk(null); }, { variant: "ghost", auto: true, pad: "7px 12px" }))),
+                  h("div", { style: { display: "flex", gap: 6 } }, btn("APPROVE ANYWAY", () => doApprove(u), { variant: "ghost", auto: true, pad: "7px 12px" }), btn("KEEP REVISING", () => { setUnit(u.id, { status: "Under Revision" }); setChk(null); }, { variant: "ghost", auto: true, pad: "7px 12px" }))),
+                verOpen === u.id && h("div", { style: { display: "flex", flexDirection: "column", gap: 8 } },
+                  label("VERSIONS"),
+                  versions.length === 0 && note("No earlier versions yet."),
+                  versions.map((v) => h("div", { key: v.id, style: { display: "flex", flexDirection: "column", gap: 6 } },
+                    h("div", { style: { ...body, fontSize: 13 } }, h("span", { style: { color: "#EEE8DD" } }, v.label), (v.ts ? " · " + scFmtDate(v.ts) : "") + " · " + scWords(v.text) + " words (" + (scWords(v.text) - scWords(u.text) >= 0 ? "+" : "") + (scWords(v.text) - scWords(u.text)) + " vs now)"),
+                    h("div", { style: { display: "flex", gap: 6 } }, btn(verView && verView.id === v.id ? "HIDE" : "COMPARE", () => setVerView(verView && verView.id === v.id ? null : v), { variant: "ghost", auto: true, pad: "6px 12px" }), btn("RESTORE AS DRAFT", () => restoreVersion(u, v), { variant: "ghost", auto: true, pad: "6px 12px" })),
+                    verView && verView.id === v.id && h("div", { style: { display: "flex", flexDirection: "column", gap: 6 } },
+                      label("THEN"), h("div", { style: { ...body, fontSize: 13, maxHeight: 150, overflowY: "auto", whiteSpace: "pre-wrap", padding: 8, border: "1px solid rgba(255,255,255,0.08)" } }, v.text),
+                      label("NOW"), h("div", { style: { ...body, fontSize: 13, maxHeight: 150, overflowY: "auto", whiteSpace: "pre-wrap", padding: 8, border: "1px solid rgba(255,255,255,0.08)" } }, u.text || "")))),
+                  note("Restoring makes a new draft. Nothing is overwritten.")),
                 t.multi && (confirmDel === u.id ? h("div", { style: { display: "flex", gap: 6 } }, btn("DELETE FOR GOOD", () => delUnit(u.id), { variant: "ghost", auto: true, pad: "7px 12px" }), btn("CANCEL", () => setConfirmDel(null), { variant: "ghost", auto: true, pad: "7px 12px" })) : btn("DELETE " + t.unit.toUpperCase(), () => setConfirmDel(u.id), { variant: "ghost", auto: true, pad: "7px 12px" })))), u.id, open);
           }),
           t.multi && h(R.Fragment, null, fieldInput(newUnit, setNewUnit, "New " + t.unit.toLowerCase() + " title…", 80), btn("ADD " + t.unit.toUpperCase(), addUnit, { disabled: !newUnit.trim() })),
           approved > 0 && h(R.Fragment, null,
-            h("div", { style: { height: 1, background: "rgba(255,255,255,0.06)", margin: "6px 0" } }),
+            rule(),
             label("MANUSCRIPT"),
             note(approved + " approved. Copies and downloads as plain text for now."),
             h("div", { style: { display: "flex", gap: 8 } }, btn("COPY", copyMs, { variant: "ghost" }), btn("DOWNLOAD .TXT", downloadMs, { variant: "ghost" }))),
-          h("div", { style: { height: 1, background: "rgba(255,255,255,0.06)", margin: "6px 0" } }),
-          confirmDel === "project" ? h("div", { style: { display: "flex", gap: 6 } }, btn("DELETE PROJECT FOR GOOD", () => { persist({ ...data, projects: data.projects.filter((p) => p.id !== proj.id) }); setPid(null); setConfirmDel(null); }, { variant: "ghost" }), btn("CANCEL", () => setConfirmDel(null), { variant: "ghost" })) : btn("DELETE PROJECT", () => setConfirmDel("project"), { variant: "ghost" }));
+          rule(),
+          btn(snapOpen ? "HIDE SNAPSHOTS" : "SNAPSHOTS AND RECOVERY", openSnaps, { variant: "ghost" }),
+          snapOpen && h(R.Fragment, null,
+            note("Scribe saves a snapshot when you approve, when you leave, and every five minutes while you work. Restoring keeps a copy of where you are now."),
+            snaps.length === 0 && note("No snapshots yet."),
+            [...snaps].reverse().map((s) => card(h(R.Fragment, null,
+              h("div", { style: { ...body, fontSize: 13 } }, h("span", { style: { color: "#EEE8DD" } }, s.label), " · " + scFmtDate(s.ts) + " · " + (s.units || []).reduce((n, u) => n + scWords(u.text), 0) + " words"),
+              confirmDel === "snap:" + s.id ? h("div", { style: { display: "flex", gap: 6, marginTop: 8 } }, btn("RESTORE", () => restoreSnap(s), { variant: "primary", auto: true, pad: "6px 12px" }), btn("CANCEL", () => setConfirmDel(null), { variant: "ghost", auto: true, pad: "6px 12px" })) : h("div", { style: { marginTop: 8 } }, btn("RESTORE THIS SNAPSHOT", () => setConfirmDel("snap:" + s.id), { variant: "ghost", auto: true, pad: "6px 12px" }))), s.id))),
+          rule(),
+          confirmDel === "project" ? h("div", { style: { display: "flex", gap: 6 } }, btn("DELETE PROJECT FOR GOOD", () => { const cur = dataRef.current; persist({ ...cur, projects: cur.projects.filter((p) => p.id !== proj.id) }); setPid(null); setConfirmDel(null); }, { variant: "ghost" }), btn("CANCEL", () => setConfirmDel(null), { variant: "ghost" })) : btn("DELETE PROJECT", () => setConfirmDel("project"), { variant: "ghost" }));
       } else if (ptab === "archive") {
-        const facts = (proj.ledger || []).filter((e) => e.kind === "fact"), people = (proj.ledger || []).filter((e) => e.kind === "character");
-        const row = (e) => card(h("div", { style: { display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" } }, h("div", { style: { ...body, fontSize: 14 } }, e.text), h("button", { onClick: () => delLedger(e.id), "aria-label": "Remove", style: { background: "transparent", border: "none", color: "rgba(200,190,170,0.5)", cursor: "pointer", fontSize: 16, padding: 0 } }, "×")), e.id);
+        const facts = (proj.ledger || []).filter((e) => e.kind === "fact"), people = (proj.ledger || []).filter((e) => e.kind === "character"), refs = (proj.ledger || []).filter((e) => e.kind === "reference");
+        const row = (e) => card(h("div", { style: { display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" } },
+          h("div", null, h("div", { style: { ...body, fontSize: 14 } }, e.text), h("div", { style: { fontSize: 10, color: "rgba(200,190,170,0.5)", fontStyle: "italic", marginTop: 4 } }, (e.from ? "True from " + (unitName(e.from) || "an earlier unit") + " · " : "True from the start · ") + "Source: " + (e.source || "Author note"))),
+          h("button", { onClick: () => delLedger(e.id), "aria-label": "Remove", style: { background: "transparent", border: "none", color: "rgba(200,190,170,0.5)", cursor: "pointer", fontSize: 16, padding: 0 } }, "×")), e.id);
+        const refRow = (e) => card(h("div", { style: { display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" } },
+          h("div", null, h("div", { style: { ...body, fontSize: 13 } }, e.text), h("div", { style: { fontSize: 10, color: "rgba(200,190,170,0.5)", fontStyle: "italic", marginTop: 4 } }, "From general knowledge, unverified. Not canon.")),
+          h("button", { onClick: () => delLedger(e.id), "aria-label": "Remove", style: { background: "transparent", border: "none", color: "rgba(200,190,170,0.5)", cursor: "pointer", fontSize: 16, padding: 0 } }, "×")), e.id);
         content = scroller(
           label("CANON LEDGER"),
-          note("Locked facts about the world, places, history and rules of this work. Scribe holds the work to these."),
+          note("Locked facts about the world, places, history and rules of this work. Each is true from the unit you choose, so a later fact never leaks into an earlier scene."),
           facts.map(row),
           fieldArea(ledIn, setLedIn, "A fact to lock in…", 2, 600),
-          btn("ADD FACT", () => addLedger("fact", ledIn, setLedIn), { disabled: !ledIn.trim() }),
-          h("div", { style: { height: 1, background: "rgba(255,255,255,0.06)", margin: "6px 0" } }),
+          t.multi && (proj.units || []).length > 0 && fromSel(ledFrom, setLedFrom),
+          fieldInput(ledSrc, setLedSrc, "Source (optional)…", 80),
+          btn("ADD FACT", () => addLedger("fact", ledIn, setLedIn, ledFrom, ledSrc), { disabled: !ledIn.trim() }),
+          rule(),
           label("CHARACTERS AND RELATIONSHIPS"),
           note("Voice, history and how each character relates to the others."),
           people.map(row),
           fieldArea(bibIn, setBibIn, "A character, their voice, who they are to the others…", 3, 600),
-          btn("ADD CHARACTER NOTE", () => addLedger("character", bibIn, setBibIn), { disabled: !bibIn.trim() }));
+          t.multi && (proj.units || []).length > 0 && fromSel(bibFrom, setBibFrom),
+          btn("ADD CHARACTER NOTE", () => addLedger("character", bibIn, setBibIn, bibFrom, ""), { disabled: !bibIn.trim() }),
+          refs.length > 0 && h(R.Fragment, null, rule(), label("REFERENCES"), note("Pinned from the research window. Never canon on their own."), refs.map(refRow)));
       } else {
         content = h(R.Fragment, null,
           h("div", { style: { flex: 1, overflowY: "auto", padding: "14px 16px 0", display: "flex", flexDirection: "column", gap: 16, scrollbarWidth: "none" } },
@@ -31500,15 +31821,19 @@ The user is about to begin a ${cfg.language || "language"} practice session with
     return h("div", { style: { position: "fixed", inset: 0, zIndex: 100, display: "flex", flexDirection: "column", background: "radial-gradient(ellipse at 20% 10%, " + color + "22 0%, transparent 55%), #06040F", paddingTop: "env(safe-area-inset-top, 0px)" } },
       h("div", { style: { padding: "12px 16px 12px", borderBottom: "1px solid rgba(255,255,255,0.06)", background: "rgba(6,4,15,0.92)", flexShrink: 0 } },
         h("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 } },
-          h("button", { onClick: () => { if (proj) { try { flushRef.current(); } catch (e) {} setPid(null); setOpenU(null); setChk(null); setConfirmDel(null); } else onExit(); }, style: { background: "transparent", border: "none", color: "rgba(200,190,170,0.75)", fontSize: 11, letterSpacing: 1.5, fontFamily: "Cinzel, serif", cursor: "pointer", padding: "4px 0" } }, proj ? "‹ PROJECTS" : "‹ DASHBOARD"),
-          telos.length > 1 && h("div", { style: { display: "flex", gap: 4 } }, telos.map((t2, i) => h("button", { key: t2.name, onClick: () => { try { flushRef.current(); } catch (e) {} setIdx(i); }, style: { width: 28, height: 28, borderRadius: "50%", border: "1px solid " + (idx === i ? color : "rgba(255,255,255,0.1)"), background: idx === i ? color + "33" : "transparent", color: idx === i ? accent : "rgba(200,190,170,0.5)", fontSize: 10, fontFamily: "Cinzel, serif", cursor: "pointer" } }, t2.name.charAt(0))))),
+          h("button", { onClick: () => { if (proj) leaveProject(); else onExit(); }, style: { background: "transparent", border: "none", color: "rgba(200,190,170,0.75)", fontSize: 11, letterSpacing: 1.5, fontFamily: "Cinzel, serif", cursor: "pointer", padding: "4px 0" } }, proj ? "‹ PROJECTS" : "‹ DASHBOARD"),
+          h("div", { style: { display: "flex", gap: 8, alignItems: "center" } },
+            proj && h("button", { onClick: () => setResearch({ seed: "", n: Date.now() }), style: { background: "transparent", border: "1px solid " + color + "55", color: accent, fontSize: 9, letterSpacing: 2, fontFamily: "Cinzel, serif", cursor: "pointer", padding: "5px 10px" } }, "RESEARCH"),
+            telos.length > 1 && h("div", { style: { display: "flex", gap: 4 } }, telos.map((t2, i) => h("button", { key: t2.name, onClick: () => { try { flushRef.current(); } catch (e) {} setIdx(i); }, style: { width: 28, height: 28, borderRadius: "50%", border: "1px solid " + (idx === i ? color : "rgba(255,255,255,0.1)"), background: idx === i ? color + "33" : "transparent", color: idx === i ? accent : "rgba(200,190,170,0.5)", fontSize: 10, fontFamily: "Cinzel, serif", cursor: "pointer" } }, t2.name.charAt(0)))))),
         h("div", { style: { display: "flex", alignItems: "center", gap: 10, marginBottom: proj ? 12 : 0 } },
           h("div", { style: { width: 38, height: 38, borderRadius: "50%", background: "radial-gradient(circle at 35% 35%, " + color + "55, #0E0618)", border: "1px solid " + color + "44", display: "flex", alignItems: "center", justifyContent: "center" } }, h(TeloGlyph, { world, size: 17, color })),
           h("div", null, h("div", { style: { fontFamily: "Cinzel, serif", fontSize: 15, color: "#EEE8DD" } }, proj ? proj.title : (tel ? tel.name : "")), h("div", { style: { fontSize: 9, color: color + "CC", fontFamily: "Cinzel, serif" } }, (tel ? tel.name + " · " : "") + world + " · SCRIBE"))),
         proj && h("div", { style: { display: "flex", gap: 6 } }, tabs.map(([id, lb]) => h("div", { key: id, style: { flex: 1 } }, h(ChamferBtn, { size: "sm", variant: ptab === id ? "accent" : "ghost", accentColor: color, textColor: ptab === id ? accent : "rgba(200,190,170,0.5)", fillColor: ptab === id ? undefined : "rgba(10,6,20,0.62)", glowColor: ptab === id ? color + "22" : null, onClick: () => setPtab(id), style: { fontSize: 9, padding: "8px 4px" } }, lb))))),
       !loaded ? h("div", { style: { flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "rgba(200,190,170,0.5)", fontStyle: "italic" } }, "…") : h("div", { style: { flex: 1, display: "flex", flexDirection: "column", minHeight: 0, position: "relative" } }, content),
       proj && pickerUi,
-      toast && h("div", { style: { position: "absolute", left: 0, right: 0, bottom: 90, display: "flex", justifyContent: "center", zIndex: 30, pointerEvents: "none" } }, h(ChamferBox, { size: "sm", borderColor: color + "88", fillColor: "rgba(12,8,24,0.97)" }, h("div", { style: { padding: "9px 18px", fontFamily: "Cinzel, serif", fontSize: 10, letterSpacing: 2, color: accent } }, toast.toUpperCase()))));
+      proj && research && h(ScribeResearch, { key: research.n, proj, seed: research.seed, color, accent, onPin: pinRef, onClose: () => setResearch(null) }),
+      conflictUi,
+      toast && h("div", { style: { position: "absolute", left: 0, right: 0, bottom: 90, display: "flex", justifyContent: "center", zIndex: 70, pointerEvents: "none" } }, h(ChamferBox, { size: "sm", borderColor: color + "88", fillColor: "rgba(12,8,24,0.97)" }, h("div", { style: { padding: "9px 18px", fontFamily: "Cinzel, serif", fontSize: 10, letterSpacing: 2, color: accent } }, toast.toUpperCase()))));
   }
   function CustomLanguagePanel({ tel, native, onClose, onChat }) {
     const R = import_react, h = R.createElement;
