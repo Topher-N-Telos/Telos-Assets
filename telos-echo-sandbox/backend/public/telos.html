@@ -24273,7 +24273,7 @@ Most responses should be short. Let silences and short exchanges carry weight ra
       const rr = await fetch("/api/claude", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json", "x-telos": "1" }, body: payload });
       if (rr.ok) return rr;
       const eb = await rr.clone().json().catch(function () { return null; });
-      if (eb && typeof eb.error === "string" && eb.error.indexOf("CLAUDE_") === 0) throw new Error("api");
+      if (eb && typeof eb.error === "string" && eb.error.indexOf("CLAUDE_") === 0) { const ce = new Error("api"); ce.code = eb.error; throw ce; }
     } catch (e) {
       if (e && e.message === "api") throw e;
     }
@@ -31689,7 +31689,7 @@ The user is about to begin a ${cfg.language || "language"} practice session with
     const proj = pid ? (data.projects || []).find((p) => p.id === pid) : null;
     const sysFor = () => (tel ? (tel.system || "You are " + tel.name + ".") + SC_RULES + scFormatMem(memRef.current) + scProjectCtx(proj, openU) : "");
     const chatKey = tel && proj ? "telos-v1-scribe-chat-" + tel.name + "-" + proj.id : null;
-    const say = (t) => { setToast(t); setTimeout(() => setToast(""), 2400); };
+    const say = (t) => { setToast(t); setTimeout(() => setToast(""), String(t).length > 60 ? 5000 : 2400); };
 
     // ----- saving: pauses while typing, checks for a change made on another device first (Master 19C.2E) -----
     const writeNow = async (next) => {
@@ -31813,6 +31813,15 @@ The user is about to begin a ${cfg.language || "language"} practice session with
       setNTitle(""); setPid(id); setPtab("start"); setOpenU(units[0] ? units[0].id : null); setChk(null);
     };
     // ---- Start tab and authorship mode (Master 19C.2L) ----
+    const aiFail = (e) => {
+      const c = (e && e.code) || (e && e.message === "timeout" ? "TIMEOUT" : "");
+      if (c === "CLAUDE_NOT_CONFIGURED") return "Scribe's link to Claude is not switched on yet: the API key has not been added to the Worker.";
+      if (c === "CLAUDE_DISABLED") return "Scribe's link to Claude is switched off.";
+      if (c === "CLAUDE_DAILY_CAP") return "You have reached today's limit for Claude requests. It resets tomorrow.";
+      if (c === "CLAUDE_BUSY") return "Claude is busy right now. Try again in a minute.";
+      if (c === "TIMEOUT" || c === "CLAUDE_TIMEOUT") return "That took too long and was stopped. Try again, or shorten what you sent.";
+      return "Scribe could not reach Claude just now. Try again in a moment.";
+    };
     const mode = proj && proj.mode === "ghost" ? "ghost" : "co";
     const setMode = (m) => { if (proj) updP(proj.id, (p) => ({ ...p, mode: m })); };
     const makePack = async () => {
@@ -31821,11 +31830,12 @@ The user is about to begin a ${cfg.language || "language"} practice session with
       setPackBusy(true); setPackErr(""); setPack(null);
       const tt = scType(proj), creative = proj.category === "Creative";
       const system = "You help an author start a " + tt.label.toLowerCase() + " from their own idea. Use the idea; do not add story or claims it does not suggest beyond ordinary craft choices, and make every suggestion a plain offer the author can refuse. Never make a minor or minor-presenting character sexual or suggestive. Return ONLY valid JSON: {\"title\":\"working title\",\"premise\":\"one short paragraph\",\"cast\":[{\"name\":\"\",\"line\":\"one line about them\"}],\"outline\":[{\"title\":\"\",\"beat\":\"one sentence\"}]}. " + (creative ? "Give up to 6 cast members." : "Leave cast empty.") + (tt.multi ? " Give 4 to 12 outline items; each one is a " + tt.unit.toLowerCase() + "." : " Leave outline empty.");
-      let raw = "";
-      try { raw = await callClaudeLong(system, [{ role: "user", content: "THE AUTHOR'S IDEA:\n" + text.slice(0, 4000) }], 1500, 45000); } catch (e) { raw = ""; }
+      let raw = "", fail = null;
+      try { raw = await callClaudeLong(system, [{ role: "user", content: "THE AUTHOR'S IDEA:\n" + text.slice(0, 12000) }], 3500, 70000); } catch (e) { raw = ""; fail = e || {}; }
       const j = parseJsonLoose(raw);
       setPackBusy(false);
-      if (!j || typeof j !== "object") { setPackErr("Scribe could not build a starter pack from that. Try adding a little more to the idea."); return; }
+      if (fail) { setPackErr(aiFail(fail)); return; }
+      if (!j || typeof j !== "object") { setPackErr("Scribe's answer could not be read, so nothing was added. This is not about how much you wrote. Try again."); return; }
       const st = (v) => ({ text: String(v || "").slice(0, 600), s: "offer" });
       setPack({
         title: st(j.title).text ? { text: String(j.title).slice(0, 80), s: "offer" } : null,
@@ -31856,9 +31866,11 @@ The user is about to begin a ${cfg.language || "language"} practice session with
       const system = sysFor() + "\n\nGHOSTWRITER MODE: the author has asked you to write this " + tt.unit.toLowerCase() + " for them, in their own voice (use the voice notes in your memory when there are any). Write the finished text only: no commentary, no title line, no notes. Treat recorded facts as locked. The author will read it and decide whether to use it; it is never credited to you.";
       const prior = (u.text || "").trim() ? "TEXT ALREADY IN THIS " + tt.unit.toUpperCase() + ":\n" + u.text.slice(-6000) + "\n\n" : "";
       let out = "";
-      try { out = await callClaudeLong(system, [{ role: "user", content: prior + "BRIEF FOR " + u.title + ":\n" + brief }], 3500, 90000); } catch (e) { out = ""; }
+      let gfail = null;
+      try { out = await callClaudeLong(system, [{ role: "user", content: prior + "BRIEF FOR " + u.title + ":\n" + brief }], 3500, 90000); } catch (e) { out = ""; gfail = e || {}; }
       setGBusy(false);
-      if (!String(out || "").trim()) { say("Scribe could not write that just now"); return; }
+      if (gfail) { say(aiFail(gfail)); return; }
+      if (!String(out || "").trim()) { say("Scribe wrote nothing that time. Try again."); return; }
       setGDraft({ uid: u.id, text: String(out).trim(), brief });
     };
     const ghostUse = (u, how) => {
