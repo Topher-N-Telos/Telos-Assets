@@ -31256,6 +31256,7 @@ The user is about to begin a ${cfg.language || "language"} practice session with
     if (!p) return "";
     const t = scType(p);
     const lines = ["\n\nTHE PROJECT YOU ARE WORKING ON (the author's own words and decisions; treat the recorded facts as locked)", "Title: " + p.title, "Kind: " + t.label + " (" + p.category + "; designation " + (p.category === "Creative" ? "Creative" : "Professional/Educational") + ")"];
+    if (p.premise) lines.push("Premise (from the author): " + p.premise);
     const units = p.units || [];
     if (units.length) lines.push("Units: " + units.map((u) => u.title + " [" + scStatusLabel(p, u.status) + "]").join("; "));
     const wu = units.find((u) => u.id === unitId);
@@ -31643,6 +31644,14 @@ The user is about to begin a ${cfg.language || "language"} practice session with
     const [planPair, setPlanPair] = R.useState("");
     const [present, setPresent] = R.useState(false);
     const [imageFor, setImageFor] = R.useState(null);
+    const [idea, setIdea] = R.useState("");
+    const [pack, setPack] = R.useState(null);
+    const [packBusy, setPackBusy] = R.useState(false);
+    const [packErr, setPackErr] = R.useState("");
+    const [gFor, setGFor] = R.useState(null);
+    const [gBrief, setGBrief] = R.useState("");
+    const [gBusy, setGBusy] = R.useState(false);
+    const [gDraft, setGDraft] = R.useState(null);
     const [bridgeFor, setBridgeFor] = R.useState(null);
     const [bridgeSkills, setBridgeSkills] = R.useState([]);
     const [impOpen, setImpOpen] = R.useState(false);
@@ -31797,8 +31806,70 @@ The user is about to begin a ${cfg.language || "language"} practice session with
       const units = t.multi ? [] : [scNewUnit(title)];
       const cur = dataRef.current;
       persist({ ...cur, projects: [scMigrate({ id, title: title.slice(0, 80), typeId: t.id, category: t.cat, created: Date.now(), updated: Date.now(), units, ledger: [] }), ...cur.projects] });
-      setNTitle(""); setPid(id); setPtab("units"); setOpenU(units[0] ? units[0].id : null); setChk(null);
+      setNTitle(""); setPid(id); setPtab("start"); setOpenU(units[0] ? units[0].id : null); setChk(null);
     };
+    // ---- Start tab and authorship mode (Master 19C.2L) ----
+    const mode = proj && proj.mode === "ghost" ? "ghost" : "co";
+    const setMode = (m) => { if (proj) updP(proj.id, (p) => ({ ...p, mode: m })); };
+    const makePack = async () => {
+      const text = idea.trim();
+      if (!text || packBusy || !proj) return;
+      setPackBusy(true); setPackErr(""); setPack(null);
+      const tt = scType(proj), creative = proj.category === "Creative";
+      const system = "You help an author start a " + tt.label.toLowerCase() + " from their own idea. Use the idea; do not add story or claims it does not suggest beyond ordinary craft choices, and make every suggestion a plain offer the author can refuse. Never make a minor or minor-presenting character sexual or suggestive. Return ONLY valid JSON: {\"title\":\"working title\",\"premise\":\"one short paragraph\",\"cast\":[{\"name\":\"\",\"line\":\"one line about them\"}],\"outline\":[{\"title\":\"\",\"beat\":\"one sentence\"}]}. " + (creative ? "Give up to 6 cast members." : "Leave cast empty.") + (tt.multi ? " Give 4 to 12 outline items; each one is a " + tt.unit.toLowerCase() + "." : " Leave outline empty.");
+      let raw = "";
+      try { raw = await callClaudeLong(system, [{ role: "user", content: "THE AUTHOR'S IDEA:\n" + text.slice(0, 4000) }], 1500, 45000); } catch (e) { raw = ""; }
+      const j = parseJsonLoose(raw);
+      setPackBusy(false);
+      if (!j || typeof j !== "object") { setPackErr("Scribe could not build a starter pack from that. Try adding a little more to the idea."); return; }
+      const st = (v) => ({ text: String(v || "").slice(0, 600), s: "offer" });
+      setPack({
+        title: st(j.title).text ? { text: String(j.title).slice(0, 80), s: "offer" } : null,
+        premise: st(j.premise).text ? st(j.premise) : null,
+        cast: creative ? (Array.isArray(j.cast) ? j.cast : []).slice(0, 6).filter((c) => c && c.name).map((c, i) => ({ id: "c" + i, name: String(c.name).slice(0, 60), line: String(c.line || "").slice(0, 300), s: "offer" })) : [],
+        outline: tt.multi ? (Array.isArray(j.outline) ? j.outline : []).slice(0, 12).filter((o) => o && o.title).map((o, i) => ({ id: "o" + i, title: String(o.title).slice(0, 80), beat: String(o.beat || "").slice(0, 300), s: "offer" })) : []
+      });
+    };
+    const packSet = (kind, id, patch) => setPack((pk) => pk ? (kind === "title" || kind === "premise" ? { ...pk, [kind]: { ...pk[kind], ...patch } } : { ...pk, [kind]: pk[kind].map((x) => x.id === id ? { ...x, ...patch } : x) }) : pk);
+    const applyPack = (keys) => {
+      if (!pack || !proj) return;
+      const creative = proj.category === "Creative", now = Date.now();
+      const want = (kind, id) => keys.some((k) => k.kind === kind && (kind === "title" || kind === "premise" || k.id === id));
+      const newUnits = [], newPlan = [], newLedger = [];
+      (pack.outline || []).filter((o) => o.s === "offer" && want("outline", o.id)).forEach((o) => { const u = scNewUnit(o.title); newUnits.push(u); if (creative && o.beat.trim()) newPlan.push({ id: scUid(), kind: "outline", text: o.beat.trim().slice(0, 400), unit: u.id, pair: "", done: false, ts: now }); });
+      (pack.cast || []).filter((c) => c.s === "offer" && want("cast", c.id)).forEach((c) => newLedger.push({ id: scUid(), kind: "character", text: (c.name.trim() + (c.line.trim() ? ": " + c.line.trim() : "")).slice(0, 600), source: "from Scribe", from: "", ts: now }));
+      const useTitle = pack.title && pack.title.s === "offer" && want("title") && pack.title.text.trim();
+      const usePremise = pack.premise && pack.premise.s === "offer" && want("premise") && pack.premise.text.trim();
+      updP(proj.id, (p) => ({ ...p, ...(useTitle ? { title: pack.title.text.trim().slice(0, 80) } : {}), ...(usePremise ? { premise: pack.premise.text.trim().slice(0, 600) } : {}), units: [...(p.units || []), ...newUnits], ledger: [...(p.ledger || []), ...newLedger], plan: { items: [...((p.plan && p.plan.items) || []), ...newPlan] } }));
+      setPack((pk) => ({ ...pk, title: useTitle ? { ...pk.title, s: "done" } : pk.title, premise: usePremise ? { ...pk.premise, s: "done" } : pk.premise, cast: (pk.cast || []).map((c) => (c.s === "offer" && want("cast", c.id)) ? { ...c, s: "done" } : c), outline: (pk.outline || []).map((o) => (o.s === "offer" && want("outline", o.id)) ? { ...o, s: "done" } : o) }));
+      say("Added to the project");
+    };
+    const ghostWrite = async (u) => {
+      const brief = gBrief.trim();
+      if (!brief || !tel || gBusy) return;
+      setGBusy(true); setGDraft(null);
+      const tt = scType(proj);
+      const system = sysFor() + "\n\nGHOSTWRITER MODE: the author has asked you to write this " + tt.unit.toLowerCase() + " for them, in their own voice (use the voice notes in your memory when there are any). Write the finished text only: no commentary, no title line, no notes. Treat recorded facts as locked. The author will read it and decide whether to use it; it is never credited to you.";
+      const prior = (u.text || "").trim() ? "TEXT ALREADY IN THIS " + tt.unit.toUpperCase() + ":\n" + u.text.slice(-6000) + "\n\n" : "";
+      let out = "";
+      try { out = await callClaudeLong(system, [{ role: "user", content: prior + "BRIEF FOR " + u.title + ":\n" + brief }], 3500, 90000); } catch (e) { out = ""; }
+      setGBusy(false);
+      if (!String(out || "").trim()) { say("Scribe could not write that just now"); return; }
+      setGDraft({ uid: u.id, text: String(out).trim(), brief });
+    };
+    const ghostUse = (u, how) => {
+      const d = gDraft; if (!d) return;
+      const cur = u.text || "";
+      const keep = cur.trim() && cur !== u.approvedText && !(u.history || []).some((hh) => hh.text === cur);
+      const text = how === "add" && cur.trim() ? cur.replace(/\s+$/, "") + "\n\n" + d.text : d.text;
+      touchedRef.current = true;
+      setUnit(u.id, { text, ...(u.status === "Approved" ? { status: "Under Revision" } : {}), history: keep ? [...(u.history || []), { id: scUid(), text: cur, title: u.title, ts: Date.now(), label: "Before Scribe's draft" }].slice(-30) : (u.history || []), prov: [...(u.prov || []), { ts: Date.now(), by: "Scribe", brief: d.brief.slice(0, 200), how }].slice(-30) });
+      setGDraft(null); setGBrief(""); setGFor(null); say("Draft placed. Read it, then approve it when it is yours");
+    };
+    const modeRow = () => h(R.Fragment, null,
+      label("AUTHORSHIP"),
+      h("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 } }, [["co", "CO-AUTHOR"], ["ghost", "GHOSTWRITER"]].map(([m, lb]) => h("div", { key: m, style: { display: "flex" } }, h(ChamferBtn, { size: "sm", variant: mode === m ? "accent" : "ghost", accentColor: color, textColor: mode === m ? accent : "rgba(200,190,170,0.55)", fillColor: mode === m ? undefined : "rgba(10,6,20,0.62)", onClick: () => setMode(m), style: { fontSize: 9, letterSpacing: 1.5, padding: "8px 4px", width: "100%" } }, lb)))),
+      note(mode === "ghost" ? "Scribe writes whole units from your brief, in your voice. Each one arrives as a draft only you can approve, and Scribe is never credited." : "Scribe writes with you and for you in the conversation. Switch to Ghostwriter to have it draft whole units from a brief."));
     const addUnit = () => {
       const title = newUnit.trim();
       if (!title || !proj) return;
@@ -31895,7 +31966,7 @@ The user is about to begin a ${cfg.language || "language"} practice session with
           scMakeHandoff(p, tail).then((hf) => { if (hf) updP(p.id, (q) => ({ ...q, handoff: hf })); }).catch(() => {});
         }
       }
-      setPid(null); setOpenU(null); setChk(null); setConfirmDel(null); setVerOpen(null); setVerView(null); setResearch(null); setPresent(false); setImageFor(null); setSnapOpen(false); setSelText("");
+      setPid(null); setOpenU(null); setChk(null); setConfirmDel(null); setVerOpen(null); setVerView(null); setResearch(null); setPresent(false); setImageFor(null); setPack(null); setGDraft(null); setGFor(null); setSnapOpen(false); setSelText("");
     };
     const archiveProject = () => { updP(proj.id, (p) => ({ ...p, archived: true })); leaveProject(); say("Archived. Restore it from the projects list."); };
     const restoreProject = (id) => { updP(id, (p) => ({ ...p, archived: false })); say("Restored"); };
@@ -32093,7 +32164,7 @@ The user is about to begin a ${cfg.language || "language"} practice session with
         data.projects.filter((p) => !p.archived).length === 0 && note("Nothing here yet. Start a project below."),
         data.projects.filter((p) => !p.archived).map((p) => {
           const t = scType(p), n = (p.units || []).length, ok = (p.units || []).filter(scIsCanon).length;
-          return h("div", { key: p.id, onClick: () => { setPid(p.id); setPtab("units"); setOpenU(null); setChk(null); }, style: { cursor: "pointer" } },
+          return h("div", { key: p.id, onClick: () => { setPid(p.id); setPtab(((scType(p).multi ? (p.units || []).length === 0 : !((p.units || [])[0] && (p.units[0].text || "").trim())) && !(p.ledger || []).length && !p.premise) ? "start" : "units"); setOpenU(null); setChk(null); }, style: { cursor: "pointer" } },
             card(h(R.Fragment, null,
               h("div", { style: { fontFamily: "Cinzel, serif", fontSize: 14, color: "#EEE8DD", letterSpacing: 1, marginBottom: 4 } }, p.title),
               h("div", { style: { fontSize: 10, color: color + "CC", fontFamily: "Cinzel, serif", letterSpacing: 1.5 } }, t.label.toUpperCase() + " · " + (p.category === "Creative" ? "SANDBOX" : "PROFESSIONAL") + (p.parentId ? " · BRANCH" : "")),
@@ -32112,7 +32183,29 @@ The user is about to begin a ${cfg.language || "language"} practice session with
         btn("CREATE PROJECT", createProject, { variant: "primary", disabled: !nTitle.trim() }));
     } else {
       const t = scType(proj);
-      if (ptab === "units") {
+      if (ptab === "start") {
+        const creative = proj.category === "Creative";
+        const rowBox = (st, main, onAccept, onDrop) => card(h("div", { style: { display: "flex", flexDirection: "column", gap: 8, opacity: st === "gone" ? 0.4 : 1 } }, main,
+          st === "done" ? h("div", { style: { fontSize: 10, color: color + "CC", fontFamily: "Cinzel, serif", letterSpacing: 2 } }, "ADDED") : st === "gone" ? h("div", { style: { fontSize: 10, color: "rgba(200,190,170,0.5)", fontFamily: "Cinzel, serif", letterSpacing: 2 } }, "DISCARDED") : h("div", { style: { display: "flex", gap: 8 } }, btn("ACCEPT", onAccept, { variant: "primary", auto: true, pad: "6px 14px" }), btn("DISCARD", onDrop, { variant: "ghost", auto: true, pad: "6px 14px" }))));
+        const offers = pack ? [pack.title && pack.title.s === "offer" && { kind: "title" }, pack.premise && pack.premise.s === "offer" && { kind: "premise" }, ...(pack.cast || []).filter((c) => c.s === "offer").map((c) => ({ kind: "cast", id: c.id })), ...(pack.outline || []).filter((o) => o.s === "offer").map((o) => ({ kind: "outline", id: o.id }))].filter(Boolean) : [];
+        content = scroller(
+          modeRow(), rule(),
+          label("START FROM AN IDEA"),
+          note("Type an idea, a premise, a prompt or a rough paragraph. Scribe offers a starting point: a title, a premise" + (creative ? ", a cast" : "") + (scType(proj).multi ? " and an outline" : "") + ". You accept, edit or discard each part. Nothing is approved or becomes canon until you say so."),
+          proj.premise && card(h(R.Fragment, null, label("PREMISE", { marginBottom: 4 }), h("div", { style: { ...body, fontSize: 14 } }, proj.premise))),
+          fieldArea(idea, setIdea, "Your idea…", 6, 4000),
+          btn(packBusy ? "BUILDING…" : (pack ? "BUILD A NEW STARTER PACK" : "BUILD A STARTER PACK"), makePack, { variant: "primary", disabled: !idea.trim() || packBusy }),
+          packErr && note(packErr),
+          pack && h(R.Fragment, null,
+            pack.title && rowBox(pack.title.s, h("div", null, label("TITLE", { marginBottom: 4 }), fieldInput(pack.title.text, (v) => packSet("title", null, { text: v }), "Title…", 80)), () => applyPack([{ kind: "title" }]), () => packSet("title", null, { s: "gone" })),
+            pack.premise && rowBox(pack.premise.s, h("div", null, label("PREMISE", { marginBottom: 4 }), fieldArea(pack.premise.text, (v) => packSet("premise", null, { text: v }), "Premise…", 4, 600)), () => applyPack([{ kind: "premise" }]), () => packSet("premise", null, { s: "gone" })),
+            (pack.cast || []).length > 0 && label("CAST"),
+            (pack.cast || []).map((c) => rowBox(c.s, h("div", null, h("div", { style: { fontFamily: "Cinzel, serif", fontSize: 12, color: "#EEE8DD", letterSpacing: 1, marginBottom: 6 } }, c.name), fieldArea(c.line, (v) => packSet("cast", c.id, { line: v }), "One line…", 2, 300)), () => applyPack([{ kind: "cast", id: c.id }]), () => packSet("cast", c.id, { s: "gone" }))),
+            (pack.outline || []).length > 0 && label("OUTLINE"),
+            (pack.outline || []).map((o) => rowBox(o.s, h("div", null, fieldInput(o.title, (v) => packSet("outline", o.id, { title: v }), "Title…", 80), h("div", { style: { height: 6 } }), fieldArea(o.beat, (v) => packSet("outline", o.id, { beat: v }), "What happens…", 2, 300)), () => applyPack([{ kind: "outline", id: o.id }]), () => packSet("outline", o.id, { s: "gone" }))),
+            offers.length > 1 && btn("ACCEPT EVERYTHING LEFT", () => applyPack(offers), { variant: "ghost" }),
+            note("Accepted cast notes go into the Archive marked \"from Scribe\". Accepted outline items become draft " + scType(proj).unit.toLowerCase() + "s" + (creative ? " with a beat in the Plan" : "") + ".")));
+      } else if (ptab === "units") {
         const approved = (proj.units || []).filter(scIsCanon).length;
         const hf = proj.handoff;
         content = scroller(
@@ -32123,6 +32216,7 @@ The user is about to begin a ${cfg.language || "language"} practice session with
             (hf.decisions || []).map((d, i) => h("div", { key: "d" + i, style: { ...body, fontSize: 13, marginTop: 4 } }, h("span", { style: { color: "#EEE8DD" } }, "Decided: "), d)),
             (hf.questions || []).map((d, i) => h("div", { key: "q" + i, style: { ...body, fontSize: 13, marginTop: 4 } }, h("span", { style: { color: "#EEE8DD" } }, "Open: "), d)),
             h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 10 } }, h("div", { style: { fontSize: 10, color: "rgba(200,190,170,0.45)", fontStyle: "italic" } }, scFmtDate(hf.ts)), btn(hfBusy ? "UPDATING…" : "UPDATE NOW", updateHandoff, { variant: "ghost", auto: true, pad: "6px 10px", disabled: hfBusy })))),
+          modeRow(), rule(),
           label(t.multi ? t.unit.toUpperCase() + "S" : "THE PIECE"),
           note(t.cat === "Creative" ? "Only approved " + t.unit.toLowerCase() + "s count as canon. Editing an approved one opens a revision and keeps the approved version until you approve the new one." : "Mark a " + t.unit.toLowerCase() + " approved when it is done."),
           (proj.units || []).map((u) => {
@@ -32137,6 +32231,13 @@ The user is about to begin a ${cfg.language || "language"} practice session with
                 u.needsReview && h("div", { style: { display: "flex", flexDirection: "column", gap: 6 } }, h("div", { style: { ...body, fontSize: 13 } }, u.needsReview + ". Read it against the change, then clear this."), btn("CLEAR REVIEW", () => setUnit(u.id, { needsReview: "" }), { variant: "ghost", auto: true, pad: "6px 12px" })),
                 t.multi && fieldInput(u.title, (v) => setUnit(u.id, { title: v }, true), "Title…", 80),
                 proj.typeId === "screenplay" ? sceneEditor(u) : fieldArea(u.text || "", (v) => setText(u, v), "Write or paste here…", 10, 60000, (s) => setSelText(s)),
+                mode === "ghost" && (proj.typeId === "screenplay" ? note("Ghostwriter drafting is not built for screenplay scenes yet; use the conversation in the Write tab.") : h("div", { style: { display: "flex", flexDirection: "column", gap: 8, padding: "10px 12px", border: "1px solid " + color + "33" } },
+                  label("GHOSTWRITER"),
+                  fieldArea(gFor === u.id ? gBrief : "", (v) => { setGFor(u.id); setGBrief(v); }, "Brief: what should this " + t.unit.toLowerCase() + " do and say?", 3, 1500),
+                  btn(gBusy && gFor === u.id ? "WRITING…" : "WRITE THIS FOR ME", () => ghostWrite(u), { variant: "primary", disabled: !tel || gBusy || !(gFor === u.id && gBrief.trim()) }),
+                  gDraft && gDraft.uid === u.id && h(R.Fragment, null, label("SCRIBE'S DRAFT"), h("div", { style: { ...body, fontSize: 14, maxHeight: 260, overflowY: "auto", whiteSpace: "pre-wrap" } }, gDraft.text),
+                    h("div", { style: { display: "flex", flexWrap: "wrap", gap: 6 } }, btn("USE AS DRAFT", () => ghostUse(u, "replace"), { variant: "primary", auto: true, pad: "6px 12px" }), (u.text || "").trim() && btn("ADD AFTER MY TEXT", () => ghostUse(u, "add"), { variant: "ghost", auto: true, pad: "6px 12px" }), btn("DISCARD", () => setGDraft(null), { variant: "ghost", auto: true, pad: "6px 12px" }))))),
+                (u.prov || []).length > 0 && h("div", { style: { fontSize: 10, color: "rgba(200,190,170,0.5)", fontStyle: "italic", lineHeight: 1.5 } }, "Your version history (only you see this): " + u.prov.map((x) => "Scribe drafted this on " + scFmtDate(x.ts) + (x.how === "add" ? " (added after your text)" : "")).join("; ")),
                 t.multi && h(R.Fragment, null, fieldInput(String(u.storyOrder === undefined ? "" : u.storyOrder), (v) => setUnit(u.id, { storyOrder: v.replace(/[^\d.\-]/g, "") }, true), "Story position (optional number)…", 8), note("Leave empty to follow reading order. Give a flashback an earlier number, for example 0.5, so facts that come true later stay out of it.")),
                 proj.typeId === "screenplay" && storyboardOptions().length > 0 && h("select", { value: u.link || "", onChange: (e) => setUnit(u.id, { link: e.target.value }), style: { width: "100%", padding: "10px 12px", background: "rgba(25,16,45,0.8)", color: "#EEE8DD", border: "1px solid " + color + "40", fontSize: 14, fontFamily: "Cormorant Garamond, Georgia, serif" } }, h("option", { value: "" }, "No storyboard linked"), storyboardOptions().map((o) => h("option", { key: o.value, value: o.value }, "Storyboard: " + o.label))),
                 proj.typeId === "storyboard" && linkedFrom(u) && h("div", { style: { fontSize: 11, color: "rgba(200,190,170,0.6)", fontStyle: "italic" } }, "Linked from screenplay scene: " + linkedFrom(u)),
@@ -32291,7 +32392,7 @@ The user is about to begin a ${cfg.language || "language"} practice session with
       }
     }
 
-    const tabs = proj ? (proj.category === "Creative" ? [["units", scType(proj).multi ? scType(proj).unit.toUpperCase() + "S" : "PIECE"], ["plan", "PLAN"], ["archive", "ARCHIVE"], ["write", "WRITE"]] : [["units", scType(proj).multi ? scType(proj).unit.toUpperCase() + "S" : "PIECE"], ["write", "WRITE"]]) : [];
+    const tabs = proj ? (proj.category === "Creative" ? [["start", "START"], ["units", scType(proj).multi ? scType(proj).unit.toUpperCase() + "S" : "PIECE"], ["plan", "PLAN"], ["archive", "ARCHIVE"], ["write", "WRITE"]] : [["start", "START"], ["units", scType(proj).multi ? scType(proj).unit.toUpperCase() + "S" : "PIECE"], ["write", "WRITE"]]) : [];
     return h("div", { style: { position: "fixed", inset: 0, zIndex: 100, display: "flex", flexDirection: "column", background: "radial-gradient(ellipse at 20% 10%, " + color + "22 0%, transparent 55%), #06040F", paddingTop: "env(safe-area-inset-top, 0px)" } },
       h("div", { style: { padding: "12px 16px 12px", borderBottom: "1px solid rgba(255,255,255,0.06)", background: "rgba(6,4,15,0.92)", flexShrink: 0 } },
         h("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 } },
