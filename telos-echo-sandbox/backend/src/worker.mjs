@@ -6,6 +6,7 @@
  */
 import { authenticate, AuthError } from './auth.mjs';
 import { PREBUILT, allRefFiles } from './prebuilt-canon.mjs';
+import { relayClaude } from './claude-relay.mjs';
 import html from '../ui/index.html';
 export { UserState } from './user-do.mjs';
 export { Ledger } from './ledger-do.mjs';
@@ -25,6 +26,7 @@ const withSec = (res, extra = {}) => {
   return new Response(res.body, { status: res.status, headers: h });
 };
 const err = (status, code) => withSec(new Response(JSON.stringify({ error: code }), { status, headers: { 'content-type': 'application/json' } }));
+const ok_status = (status, data) => withSec(new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json' } }));
 const ok = (data) => withSec(new Response(JSON.stringify(data), { headers: { 'content-type': 'application/json' } }));
 
 export default {
@@ -107,6 +109,13 @@ export default {
         files[f] = new Uint8Array(await a.arrayBuffer());
       }
       await stub.seedCanon(parts[2], files);
+    }
+    // Claude relay (src/claude-relay.mjs): lets the app reach Claude without the browser ever holding a key.
+    if (parts[1] === 'claude' && parts.length === 2) {
+      if (request.method !== 'POST') return err(405, 'METHOD_NOT_ALLOWED');
+      const body = await request.json().catch(() => null);
+      const out = await relayClaude({ body, env, stub });
+      return ok_status(out.status, out.json);
     }
     const headers = new Headers(request.headers);
     headers.set('x-telos-user', who.email);          // set by the Worker only; overwrites anything the client sent

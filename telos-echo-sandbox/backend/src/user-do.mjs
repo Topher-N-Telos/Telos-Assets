@@ -212,6 +212,14 @@ export class UserState extends DurableObject {
   }
 
   // ---------- prebuilt Telō canon references (seeded by the Worker over RPC; never reachable from a client request) ----------
+  /** Claude relay daily cap (Worker-only RPC): counts this account's relayed calls per UTC day. The owner/unlimited account is never capped. */
+  claudeTick(cap, now = Date.now()) {
+    const day = Math.floor(now / 864e5), cur = this.meta('claudeDay', null);
+    const used = cur && cur.day === day ? cur.n : 0;
+    if (!this.unlimited && used >= cap) return { ok: false, used };
+    this.setMeta('claudeDay', { day, n: used + 1 });
+    return { ok: true, used: used + 1 };
+  }
   hasCanon(charId) { return this.meta(`canon_${charId}`)?.version === PREBUILT_VERSION; }
   seedCanon(charId, files) {
     const c = PREBUILT[charId]; if (!c) throw new ApiError(404, 'NOT_FOUND');
