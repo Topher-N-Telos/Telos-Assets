@@ -24267,13 +24267,21 @@ Most responses should be short. Let silences and short exchanges carry weight ra
     window.__telosCallErr = "no-sample";
     return callClaudeViaFetch(system, messages, maxTokens);
   }
+  async function claudeRequest(system, messages, maxTokens) {
+    const payload = JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: maxTokens, system, messages });
+    try {
+      const rr = await fetch("/api/claude", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json", "x-telos": "1" }, body: payload });
+      if (rr.ok) return rr;
+      const eb = await rr.clone().json().catch(function () { return null; });
+      if (eb && typeof eb.error === "string" && eb.error.indexOf("CLAUDE_") === 0) throw new Error("api");
+    } catch (e) {
+      if (e && e.message === "api") throw e;
+    }
+    return fetch("https://api.anthropic.com/v1/messages", { method: "POST", headers: { "Content-Type": "application/json" }, body: payload });
+  }
   async function callClaudeViaFetch(system, messages, maxTokens = 300) {
     const doFetch = async () => {
-      const r = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: maxTokens, system, messages })
-      });
+      const r = await claudeRequest(system, messages, maxTokens);
       if (!r.ok) throw new Error("api");
       const d = await r.json();
       const text = d.content?.[0]?.text || "";
@@ -27448,11 +27456,7 @@ Write a complete roleplay system prompt in the voice of instructions to the AI (
   }
   async function callClaudeLongViaFetch(system, messages, maxTokens, timeoutMs) {
     const doFetch = async () => {
-      const r = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: maxTokens, system, messages })
-      });
+      const r = await claudeRequest(system, messages, maxTokens);
       if (!r.ok) throw new Error("api");
       const d = await r.json();
       return (d.content || []).filter((c) => c.type === "text").map((c) => c.text).join("");
