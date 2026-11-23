@@ -23993,12 +23993,17 @@ html.kb-open .tc-foot{padding-bottom:10px !important;}
         document.documentElement.style.setProperty("--app-h", Math.round(h) + "px");
         document.documentElement.style.setProperty("--app-top", Math.round(top > 0 ? top : 0) + "px");
         if (window.scrollY || window.scrollX) window.scrollTo(0, 0);
-        var kb = !!vv && (window.innerHeight - vv.height) > 120;
+        window.__telosBaseH = Math.max(window.__telosBaseH || 0, window.innerHeight, h);
+        var ae = document.activeElement, tag = ae && ae.tagName;
+        var typing = !!ae && (tag === "INPUT" || tag === "TEXTAREA" || ae.isContentEditable);
+        var kb = typing || (window.__telosBaseH - h) > 120;
         document.documentElement.classList.toggle("kb-open", kb);
       };
       setH();
       window.addEventListener("resize", setH);
       window.addEventListener("orientationchange", setH);
+      document.addEventListener("focusin", function() { setH(); setTimeout(setH, 150); setTimeout(setH, 500); });
+      document.addEventListener("focusout", function() { setTimeout(setH, 100); setTimeout(setH, 400); });
       if (window.visualViewport) { window.visualViewport.addEventListener("resize", setH); window.visualViewport.addEventListener("scroll", setH); }
     } catch (e) {
     }
