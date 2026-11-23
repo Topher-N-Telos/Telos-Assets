@@ -28,3 +28,6 @@ MAX_BATCH = "3"
 TIME_ZONE = "America/Detroit"
 ALLOW_LOW_MODERATION = "false"
 OWNER_ADULT_ATTESTED = "false"
+
+# Enables `wrangler preview` (branch preview builds). Empty on purpose: assets, compatibility, migrations and bindings stay at the top level.
+[previews]
