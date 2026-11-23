@@ -32085,7 +32085,9 @@ The user is about to begin a ${cfg.language || "language"} practice session with
     let content = null;
     if (!proj) {
       const creative = SC_TYPES.filter((t) => t.cat === "Creative"), prof = SC_TYPES.filter((t) => t.cat === "Professional");
-      const chip = (t) => h("div", { key: t.id }, h(ChamferBtn, { size: "sm", variant: nType === t.id ? "accent" : "ghost", accentColor: color, textColor: nType === t.id ? accent : "rgba(200,190,170,0.55)", fillColor: nType === t.id ? undefined : "rgba(10,6,20,0.62)", onClick: () => setNType(t.id), style: { fontSize: 9, padding: "7px 11px", width: "auto" } }, t.label.toUpperCase()));
+      const SHORT = { toast: "Toast or speech", childrens: "Children's book" };
+      const chip = (t, i, arr) => { const rem = arr.length % 3, span = (i === arr.length - 1 && rem) ? 4 - rem : 1; return h("div", { key: t.id, style: { gridColumn: span > 1 ? "span " + span : undefined, display: "flex" } }, h(ChamferBtn, { size: "sm", variant: nType === t.id ? "accent" : "ghost", accentColor: color, textColor: nType === t.id ? accent : "rgba(200,190,170,0.55)", fillColor: nType === t.id ? undefined : "rgba(10,6,20,0.62)", onClick: () => setNType(t.id), style: { fontSize: 9, letterSpacing: 1, lineHeight: 1.25, padding: "6px 4px", width: "100%", minHeight: 48, whiteSpace: "normal", textAlign: "center" } }, (SHORT[t.id] || t.label).toUpperCase())); };
+      const grid = { display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 };
       content = scroller(
         label("YOUR PROJECTS"),
         data.projects.filter((p) => !p.archived).length === 0 && note("Nothing here yet. Start a project below."),
@@ -32103,9 +32105,9 @@ The user is about to begin a ${cfg.language || "language"} practice session with
         label("NEW PROJECT"),
         fieldInput(nTitle, setNTitle, "Title…", 80),
         label("CREATIVE", { marginTop: 2 }),
-        h("div", { style: { display: "flex", flexWrap: "wrap", gap: 6 } }, creative.map(chip)),
+        h("div", { style: grid }, creative.map(chip)),
         label("PROFESSIONAL", { marginTop: 2 }),
-        h("div", { style: { display: "flex", flexWrap: "wrap", gap: 6 } }, prof.map(chip)),
+        h("div", { style: grid }, prof.map(chip)),
         note(scType({ typeId: nType }).cat === "Creative" ? "Creative work is private Sandbox fiction: it never touches your relationship memory." : "Professional work keeps your voice and a finished document, with no story ledger."),
         btn("CREATE PROJECT", createProject, { variant: "primary", disabled: !nTitle.trim() }));
     } else {
