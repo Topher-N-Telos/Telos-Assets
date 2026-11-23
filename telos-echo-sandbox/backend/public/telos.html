@@ -28619,6 +28619,7 @@ Write a complete roleplay system prompt in the voice of instructions to the AI (
             cfg.occupation ? ` \xB7 ${cfg.occupation}` : ""
           ] })
         ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: onExit, style: { width: "100%", padding: "12px 0", marginBottom: 20, borderRadius: 10, border: `1px solid ${worldColor}66`, background: `${worldColor}22`, color: "#ECE3D5", fontSize: 11, letterSpacing: 2, fontFamily: "Cinzel, serif", cursor: "pointer" }, children: "CHAT WITH " + String(teloName).toUpperCase() }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TeloImageGallery, { teloName, defaultImage: defaultTeloImage, worldColor }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "center", gap: 8, marginBottom: 24 }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { padding: "5px 12px", borderRadius: 12, border: `1px solid ${worldColor}33`, fontSize: 10, color: worldColor, fontFamily: "Cinzel, serif" }, children: cfg.worldLabel || cfg.world }),
@@ -40713,8 +40714,8 @@ initRemote();
                 };
               }
               switchActiveTelo(finalName, record.world || "TERRA");
-              setScreen("main");
               setActiveTab("companion");
+              setScreen("telosian-profile");
             }
           }
         ),
