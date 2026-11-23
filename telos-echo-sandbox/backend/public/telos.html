@@ -29385,7 +29385,7 @@ What you remember: ${promptMem()}` : baseSystem;
     const particles = (0, import_react.useRef)(Array.from({ length: 18 }, (_, i) => ({ id: i, size: 1 + Math.random() * 2, left: Math.random() * 100, top: Math.random() * 100, dur: 9 + Math.random() * 12, delay: Math.random() * 8, op: 0.12 + Math.random() * 0.22 }))).current;
     return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, display: "flex", flexDirection: "column", position: "relative", overflow: "hidden" }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { position: "absolute", inset: 0, pointerEvents: "none", overflow: "hidden", zIndex: 1 }, children: particles.map((p) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { position: "absolute", width: p.size, height: p.size, borderRadius: "50%", left: `${p.left}%`, top: `${p.top}%`, background: `${cfg.particleColor}${p.op})`, animation: `particleDrift ${p.dur}s ease-in-out ${p.delay}s infinite alternate` } }, p.id)) }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "tc-head", style: { padding: "14px 18px 12px", borderBottom: "1px solid rgba(180,150,120,0.07)", background: "rgba(6,6,15,0.55)", backdropFilter: "blur(20px)", flexShrink: 0, position: "relative", zIndex: 2 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "tc-head", style: { padding: "14px 18px 12px", borderBottom: "1px solid rgba(180,150,120,0.07)", background: "rgba(6,6,15,0.94)", backdropFilter: "blur(20px)", flexShrink: 0, position: "relative", zIndex: 2 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "tc-kbhide", style: { fontSize: 8, letterSpacing: 4, color: `${worldColor}88`, fontFamily: "Cinzel, serif", marginBottom: 8 }, children: [
           cfg.world,
           " \xB7 ",
@@ -29430,6 +29430,7 @@ What you remember: ${promptMem()}` : baseSystem;
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: "rgba(200,185,165,0.65)", fontStyle: "italic", lineHeight: 1.6, whiteSpace: "pre-line", maxHeight: "40vh", overflowY: "auto" }, children: memory })
         ] })
       ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, position: "relative", display: "flex", flexDirection: "column", minHeight: 0, overflow: "hidden" }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { position: "absolute", inset: 0, overflow: "hidden", pointerEvents: "none", zIndex: 0 }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
@@ -29513,6 +29514,7 @@ What you remember: ${promptMem()}` : baseSystem;
           }, placeholder: "speak\u2026", rows: 1, disabled: phase !== "chat" && phase !== "opening", style: { flex: 1, background: "transparent", border: "none", outline: "none", color: "#D8CEBA", fontFamily: "Cormorant Garamond, Georgia, serif", fontSize: 16, fontWeight: 300, lineHeight: 1.5, resize: "none", minHeight: 24, maxHeight: 110, overflowY: "auto", padding: "9px 0px 9px 15px", position: "relative", zIndex: 1 } }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => send(), disabled: !input.trim() || phase !== "chat" && phase !== "opening", style: { width: 34, height: 34, borderRadius: "50%", border: "none", background: cfg.sendBg, color: "rgba(225,215,235,0.9)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, flexShrink: 0, opacity: !input.trim() ? 0.28 : 1, transition: "opacity 0.2s", marginRight: 11, marginBottom: 9, position: "relative", zIndex: 1 }, children: "\u2191" })
         ] })
+      ] }),
       ] }),
       beneathOpen && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { onClick: () => {
         setBeneathOpen(false);
