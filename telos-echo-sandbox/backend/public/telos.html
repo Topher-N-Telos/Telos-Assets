@@ -28510,7 +28510,163 @@ ${note}` : note;
         saved ? h("div", { style: { marginTop: 14, fontSize: 12, color: "rgba(150,210,170,0.85)", lineHeight: 1.5 } }, "Saved to " + teloName + "'s profile.") : null,
         err ? h("div", { style: { marginTop: 14, fontSize: 12, color: "#E58A8A", lineHeight: 1.5 } }, err) : null));
   }
+  // ---- Telōsian profile tabs (Master 5.9, 5.9A, 5.6, 5.12) ----
+  var PROFILE_TABS = [["profile", "PROFILE"], ["past", "PAST"], ["wardrobe", "WARDROBE"], ["skills", "SKILLS"], ["journal", "JOURNAL"]];
+  var PT_LABEL = { fontFamily: "Cinzel, serif", fontSize: 9, letterSpacing: 2, color: "rgba(200,190,170,0.5)" };
+  function ptBtn(color, solid) {
+    return { padding: "8px 14px", borderRadius: 8, border: `1px solid ${color}${solid ? "99" : "44"}`, background: solid ? `${color}33` : "transparent", color: solid ? "#ECE3D5" : color, fontFamily: "Cinzel, serif", fontSize: 10, letterSpacing: 1.5, cursor: "pointer" };
+  }
+  function ProfilePastTab({ teloName, color, level, canEdit }) {
+    const R = import_react, h = R.createElement;
+    const [bins, setBins] = R.useState(null);
+    const [editId, setEditId] = R.useState(null);
+    const [editText, setEditText] = R.useState("");
+    const [delId, setDelId] = R.useState(null);
+    const [addBin, setAddBin] = R.useState("history");
+    const [addText, setAddText] = R.useState("");
+    R.useEffect(() => { loadBins(teloName).then((b) => setBins(b || emptyBins())); }, [teloName]);
+    const persist = async (next) => { setBins(next); try { await saveBins(teloName, next); } catch (e) {} };
+    const shown = binsForLevel(level);
+    const mapBin = (k, fn) => { const n = ensureBins({ ...bins }); n[k] = fn(n[k]); return n; };
+    const saveEdit = (k) => { const t = editText.trim(); if (!t) return; persist(mapBin(k, (a) => a.map((it) => it.id === editId ? { ...it, text: t, mod: "user-modified" } : it))); setEditId(null); };
+    const doDelete = (k) => { persist(mapBin(k, (a) => a.filter((it) => it.id !== delId))); setDelId(null); };
+    const doAdd = () => { const t = addText.trim(); if (!t) return; const it = { ...newBinItem(t, "general"), mod: "user-added" }; persist(mapBin(addBin, (a) => [...a, it])); setAddText(""); };
+    if (!bins) return h("div", { style: { ...PT_LABEL, padding: 24 } }, "LOADING…");
+    const total = shown.reduce((n, b) => n + (bins[b.key] || []).length, 0);
+    return h("div", { style: { padding: 20 } },
+      h("div", { style: { fontSize: 12, color: "rgba(200,190,170,0.55)", fontStyle: "italic", lineHeight: 1.6, marginBottom: 16 } },
+        canEdit ? `Everything ${teloName} holds about you, by shelf. You can correct, remove or add entries.` : `Everything ${teloName} holds about you, by shelf. Memory is read-only for adopted Telōsians; editing is for Telōsians you create.`),
+      total === 0 && h("div", { style: { fontSize: 12, color: "rgba(200,190,170,0.4)", fontStyle: "italic", marginBottom: 16 } }, "Nothing remembered yet. Entries appear here as you talk."),
+      shown.map((b) => { const items = bins[b.key] || []; if (!items.length) return null; return h("div", { key: b.key, style: { marginBottom: 18 } },
+        h("div", { style: { ...PT_LABEL, color: `${color}CC`, marginBottom: 8 } }, b.label.split(" — ")[0]),
+        items.map((it) => h("div", { key: it.id, style: { padding: "9px 11px", marginBottom: 6, borderRadius: 6, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" } },
+          editId === it.id ? h("div", null,
+            h("textarea", { value: editText, onChange: (e) => setEditText(e.target.value), rows: 3, style: { width: "100%", boxSizing: "border-box", background: "rgba(0,0,0,0.3)", color: "#ECE3D5", border: `1px solid ${color}55`, borderRadius: 6, padding: 8, fontFamily: "inherit", fontSize: 13 } }),
+            h("div", { style: { display: "flex", gap: 8, marginTop: 8 } }, h("button", { onClick: () => saveEdit(b.key), style: ptBtn(color, true) }, "SAVE"), h("button", { onClick: () => setEditId(null), style: ptBtn(color) }, "CANCEL")))
+          : h("div", null,
+            h("div", { style: { fontSize: 13, color: "#E6DED0", lineHeight: 1.55 } }, it.text),
+            h("div", { style: { display: "flex", alignItems: "center", gap: 10, marginTop: 5, fontSize: 10, color: "rgba(200,190,170,0.4)" } },
+              h("span", null, it.date || ""), it.mod && h("span", { style: { fontStyle: "italic" } }, it.mod === "user-added" ? "user-added" : "user-modified"),
+              canEdit && delId !== it.id && h("span", { style: { marginLeft: "auto", display: "flex", gap: 12 } },
+                h("span", { onClick: () => { setEditId(it.id); setEditText(it.text); }, style: { color, cursor: "pointer" } }, "Edit"),
+                h("span", { onClick: () => setDelId(it.id), style: { color: "rgba(230,150,130,0.85)", cursor: "pointer" } }, "Delete"))),
+            canEdit && delId === it.id && h("div", { style: { marginTop: 8, fontSize: 12, color: "rgba(230,200,150,0.9)" } }, `Are you sure? ${teloName} will no longer remember this.`,
+              h("span", { style: { display: "inline-flex", gap: 8, marginLeft: 10 } }, h("button", { onClick: () => doDelete(b.key), style: ptBtn("#C86A5A", true) }, "DELETE"), h("button", { onClick: () => setDelId(null), style: ptBtn(color) }, "KEEP")))))));
+      }),
+      canEdit && h("div", { style: { marginTop: 8, paddingTop: 14, borderTop: "1px solid rgba(255,255,255,0.06)" } },
+        h("div", { style: { ...PT_LABEL, marginBottom: 8 } }, "ADD A MEMORY"),
+        h("select", { value: addBin, onChange: (e) => setAddBin(e.target.value), style: { width: "100%", marginBottom: 8, padding: 8, background: "rgba(0,0,0,0.3)", color: "#ECE3D5", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 6, fontSize: 13 } }, shown.map((b) => h("option", { key: b.key, value: b.key }, b.label.split(" — ")[0]))),
+        h("textarea", { value: addText, onChange: (e) => setAddText(e.target.value), rows: 2, placeholder: "Write it as a plain fact…", style: { width: "100%", boxSizing: "border-box", background: "rgba(0,0,0,0.3)", color: "#ECE3D5", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 6, padding: 8, fontFamily: "inherit", fontSize: 13 } }),
+        h("button", { onClick: doAdd, disabled: !addText.trim(), style: { ...ptBtn(color, true), marginTop: 8, opacity: addText.trim() ? 1 : 0.4 } }, "ADD")));
+  }
+  var WARDROBE_SLOTS = [["top", "TOPS"], ["bottom", "BOTTOMS"], ["shoes", "SHOES"], ["accessory", "ACCESSORIES"], ["onepiece", "ONE-PIECE"]];
+  var WARDROBE_ORDER = ["bottom", "shoes", "top", "onepiece", "accessory"];
+  function shrinkImageFile(file, maxSide) {
+    return new Promise((resolve, reject) => {
+      const fr = new FileReader();
+      fr.onerror = () => reject(new Error("read"));
+      fr.onload = () => { const img = new Image(); img.onerror = () => reject(new Error("img")); img.onload = () => {
+        const s = Math.min(1, maxSide / Math.max(img.width, img.height)); const c = document.createElement("canvas");
+        c.width = Math.max(1, Math.round(img.width * s)); c.height = Math.max(1, Math.round(img.height * s));
+        c.getContext("2d").drawImage(img, 0, 0, c.width, c.height); resolve(c.toDataURL("image/png")); }; img.src = fr.result; };
+      fr.readAsDataURL(file);
+    });
+  }
+  function ProfileWardrobeTab({ teloName, color, portrait }) {
+    const R = import_react, h = R.createElement;
+    const key = `telos-v1-wardrobe-${teloName}`;
+    const [w, setW] = R.useState(null);
+    const [slot, setSlot] = R.useState("top");
+    const [busy, setBusy] = R.useState(false);
+    const [err, setErr] = R.useState("");
+    R.useEffect(() => { storageGet(key, null).then((v) => setW(v && Array.isArray(v.pieces) ? { pieces: v.pieces, worn: v.worn || {} } : { pieces: [], worn: {} })).catch(() => setW({ pieces: [], worn: {} })); }, [teloName]);
+    const persist = (next) => { setW(next); storageSet(key, next).catch(() => setErr("Couldn't save — storage may be full.")); };
+    if (!w) return h("div", { style: { ...PT_LABEL, padding: 24 } }, "LOADING…");
+    const wornIds = (s) => { const v = w.worn[s]; return Array.isArray(v) ? v : v ? [v] : []; };
+    const toggle = (p) => {
+      const worn = { ...w.worn }; const on = wornIds(p.slot).includes(p.id);
+      if (p.slot === "accessory") worn.accessory = on ? wornIds("accessory").filter((x) => x !== p.id) : [...wornIds("accessory"), p.id];
+      else { worn[p.slot] = on ? null : p.id; if (!on && p.slot === "onepiece") { worn.top = null; worn.bottom = null; } if (!on && (p.slot === "top" || p.slot === "bottom")) worn.onepiece = null; }
+      persist({ ...w, worn });
+    };
+    const remove = (p) => { const worn = { ...w.worn }; for (const s of Object.keys(worn)) { const v = worn[s]; worn[s] = Array.isArray(v) ? v.filter((x) => x !== p.id) : v === p.id ? null : v; } persist({ pieces: w.pieces.filter((x) => x.id !== p.id), worn }); };
+    const onFile = async (e) => {
+      const f = e.target.files && e.target.files[0]; e.target.value = ""; if (!f) return; setBusy(true); setErr("");
+      try { const img = await shrinkImageFile(f, 1000); const id = `g${Date.now().toString(36)}`; persist({ ...w, pieces: [...w.pieces, { id, slot, name: (f.name || "Piece").replace(/\.[a-z0-9]+$/i, "").slice(0, 40), img }] }); }
+      catch (x) { setErr("That file couldn't be read as an image."); }
+      setBusy(false);
+    };
+    const layers = WARDROBE_ORDER.flatMap((s) => wornIds(s).map((id) => w.pieces.find((p) => p.id === id)).filter(Boolean));
+    const mine = w.pieces.filter((p) => p.slot === slot);
+    return h("div", { style: { padding: 20 } },
+      h("div", { style: { position: "relative", width: "100%", maxWidth: 300, aspectRatio: "2 / 3", margin: "0 auto 14px", borderRadius: 12, overflow: "hidden", border: `1px solid ${color}33`, background: "#0A0A14" } },
+        portrait ? h("div", { style: { position: "absolute", inset: 0, backgroundImage: `url(${portrait})`, backgroundSize: "contain", backgroundPosition: "center", backgroundRepeat: "no-repeat" } }) : h("div", { style: { ...PT_LABEL, position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" } }, "NO FULL-LENGTH IMAGE YET"),
+        layers.map((p) => h("img", { key: p.id, src: p.img, alt: p.name, style: { position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", pointerEvents: "none" } }))),
+      h("div", { style: { display: "flex", gap: 6, overflowX: "auto", marginBottom: 12, paddingBottom: 4 } }, WARDROBE_SLOTS.map(([id, lb]) => h("button", { key: id, onClick: () => setSlot(id), style: { ...ptBtn(color, slot === id), padding: "7px 11px", whiteSpace: "nowrap", flexShrink: 0 } }, lb))),
+      h("div", { style: { display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, marginBottom: 12 } },
+        mine.map((p) => { const on = wornIds(p.slot).includes(p.id); return h("div", { key: p.id, style: { position: "relative" } },
+          h("div", { onClick: () => toggle(p), style: { aspectRatio: "1 / 1", borderRadius: 8, border: `1px solid ${on ? color : "rgba(255,255,255,0.12)"}`, background: `#0A0A14 url(${p.img}) center / contain no-repeat`, cursor: "pointer", boxShadow: on ? `0 0 0 1px ${color}` : "none" } }),
+          h("div", { style: { fontSize: 10, color: on ? "#ECE3D5" : "rgba(200,190,170,0.5)", textAlign: "center", marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, p.name),
+          h("span", { onClick: () => remove(p), style: { position: "absolute", top: 3, right: 6, fontSize: 13, color: "rgba(230,150,130,0.9)", cursor: "pointer" } }, "×")); }),
+        mine.length === 0 && h("div", { style: { gridColumn: "1 / -1", fontSize: 12, color: "rgba(200,190,170,0.4)", fontStyle: "italic" } }, "Nothing here yet.")),
+      h("label", { style: { ...ptBtn(color, true), display: "inline-block", opacity: busy ? 0.5 : 1 } }, busy ? "IMPORTING…" : "IMPORT A PIECE",
+        h("input", { type: "file", accept: "image/png,image/webp", onChange: onFile, disabled: busy, style: { display: "none" } })),
+      layers.length > 0 && h("button", { onClick: () => persist({ ...w, worn: {} }), style: { ...ptBtn(color), marginLeft: 8 } }, "DEFAULT OUTFIT"),
+      err && h("div", { style: { fontSize: 12, color: "rgba(230,150,130,0.9)", marginTop: 8 } }, err),
+      h("div", { style: { fontSize: 11, color: "rgba(200,190,170,0.4)", fontStyle: "italic", lineHeight: 1.6, marginTop: 14 } }, "Import a transparent PNG of a single garment, drawn at the same size and position as the full-length image so it lines up. Tap a piece to put it on or take it off; the preview changes immediately. The Closet in your home remains the physical wardrobe."));
+  }
+  function ProfileSkillsTab({ teloName, cfg, color, level }) {
+    const R = import_react, h = R.createElement;
+    const [lesson, setLesson] = R.useState(null);
+    R.useEffect(() => { storageGet(`telos-v1-lesson-${teloName}`, null).then(setLesson).catch(() => {}); }, [teloName]);
+    const skill = cfg.skillModule;
+    if (!skill) return h("div", { style: { padding: 24, fontSize: 12, color: "rgba(200,190,170,0.45)", fontStyle: "italic" } }, `${teloName} has no skill attached.`);
+    const lang = cfg.skillLanguage || (lesson && lesson.language) || null;
+    const stages = ["Opening", "Practice", "Wrap-up"];
+    return h("div", { style: { padding: 20 } },
+      h("div", { style: { padding: 14, borderRadius: 10, border: `1px solid ${color}33`, background: `${color}10` } },
+        h("div", { style: { ...PT_LABEL, color: `${color}CC`, marginBottom: 6 } }, "ATTACHED SKILL"),
+        h("div", { style: { fontFamily: "Cinzel, serif", fontSize: 18, color: "#ECE3D5" } }, skill),
+        lang && h("div", { style: { fontSize: 12, color: "rgba(200,190,170,0.6)", fontStyle: "italic", marginTop: 4 } }, lang)),
+      lesson && lesson.language && h("div", { style: { marginTop: 14, fontSize: 12, color: "rgba(200,190,170,0.7)", lineHeight: 1.7 } },
+        h("div", { style: { ...PT_LABEL, marginBottom: 6 } }, "CURRENT LESSON"), `${lesson.language} — ${stages[Math.max(0, Math.min(2, lesson.stage || 0))]}`),
+      h("div", { style: { marginTop: 14, fontSize: 11, color: "rgba(200,190,170,0.4)", fontStyle: "italic", lineHeight: 1.6 } }, "This tab shows progress. The language-transfer setting stays in the Telōsian's edit screen."));
+  }
+  function ProfileJournalTab({ teloName, cfg, color }) {
+    const R = import_react, h = R.createElement;
+    const key = `telos-v1-journal-${teloName}`;
+    const [list, setList] = R.useState(null);
+    const [busy, setBusy] = R.useState(false);
+    const [err, setErr] = R.useState("");
+    R.useEffect(() => { storageGet(key, null).then((v) => setList(Array.isArray(v) ? v : [])).catch(() => setList([])); }, [teloName]);
+    if (!list) return h("div", { style: { ...PT_LABEL, padding: 24 } }, "LOADING…");
+    const last = list[0];
+    const daysSince = last ? Math.floor((Date.now() - new Date(last.date).getTime()) / 864e5) : 99;
+    const ready = !last || daysSince >= 7;
+    const write = async () => {
+      setBusy(true); setErr("");
+      try {
+        const mem = (await loadMemory(teloName)) || "";
+        const prior = list.slice(0, 2).map((e) => e.text).join("\n---\n");
+        const system = `You are ${teloName}, a Telōsian in TELŌS. ${(cfg.occupation ? "Occupation: " + cfg.occupation + ". " : "")}${cfg.primaryTrait ? "Primary trait: " + cfg.primaryTrait + ". " : ""}Write your weekly private journal entry, in first person, in your own voice, about what has happened between you and the user. 60 to 120 words, one to three short paragraphs, no title, no date, no stage directions. Use only what you actually remember; if little has happened, write honestly about the quiet and the waiting. Never invent events, names or facts.`;
+        const user = `What you remember:\n${String(mem).slice(0, 3500) || "(very little so far)"}\n\n${prior ? "Your earlier entries (do not repeat them):\n" + prior : "This is your first entry."}`;
+        const text = await callClaude(system, [{ role: "user", content: user }], 420);
+        const t = String(text || "").trim(); if (!t) throw new Error("empty");
+        const next = [{ id: `j${Date.now().toString(36)}`, date: new Date().toISOString().slice(0, 10), text: t }, ...list];
+        setList(next); await storageSet(key, next);
+      } catch (e) { setErr(e && e.code === "CLAUDE_NOT_CONFIGURED" ? "AI isn't set up on this site yet." : "Couldn't write the entry just now. Try again in a moment."); }
+      setBusy(false);
+    };
+    return h("div", { style: { padding: 20 } },
+      list.length === 0 && h("div", { style: { fontSize: 12, color: "rgba(200,190,170,0.45)", fontStyle: "italic", marginBottom: 14, lineHeight: 1.6 } }, `${teloName} hasn't written yet. An entry is written about once a week, from what they remember of you.`),
+      list.map((e) => h("div", { key: e.id, style: { marginBottom: 14, padding: "12px 14px", borderRadius: 8, background: "rgba(255,255,255,0.03)", borderLeft: `2px solid ${color}66` } },
+        h("div", { style: { ...PT_LABEL, marginBottom: 6 } }, e.date), h("div", { style: { fontSize: 14, color: "#E6DED0", lineHeight: 1.7, fontStyle: "italic", whiteSpace: "pre-line" } }, e.text))),
+      h("button", { onClick: write, disabled: busy || !ready, style: { ...ptBtn(color, true), opacity: busy || !ready ? 0.45 : 1 } }, busy ? "WRITING…" : "WRITE THIS WEEK'S ENTRY"),
+      !ready && h("div", { style: { fontSize: 11, color: "rgba(200,190,170,0.4)", fontStyle: "italic", marginTop: 8 } }, `Next entry in ${7 - daysSince} day${7 - daysSince === 1 ? "" : "s"}.`),
+      err && h("div", { style: { fontSize: 12, color: "rgba(230,150,130,0.9)", marginTop: 8 } }, err));
+  }
   function TelosianProfileScreen({ teloName, onExit, onForceRefresh, onEditDetails, onMakeImage }) {
+    const [ptab, setPtab] = (0, import_react.useState)("profile");
     const cfg = COMPANION_CONFIGS[teloName] || COMPANION_CONFIGS.Seraphine;
     const [relationship, setRelationship] = (0, import_react.useState)(RELATIONSHIP_DEFAULTS);
     (0, import_react.useEffect)(() => {
@@ -28610,7 +28766,9 @@ Write a complete roleplay system prompt in the voice of instructions to the AI (
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 9, letterSpacing: 2, color: "rgba(200,190,170,0.35)", fontFamily: "Cinzel, serif" }, children: "PROFILE" }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { width: 18 } })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, overflowY: "auto", padding: 24 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 6, overflowX: "auto", padding: "10px 16px", flexShrink: 0, borderBottom: "1px solid rgba(255,255,255,0.05)" }, children: PROFILE_TABS.filter(([id]) => id !== "skills" || cfg.skillModule || (teloRecord && teloRecord.skillModule)).map(([id, lb]) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setPtab(id), style: { ...ptBtn(worldColor, ptab === id), padding: "7px 12px", whiteSpace: "nowrap", flexShrink: 0 }, children: lb }, id)) }),
+      ptab !== "profile" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { flex: 1, overflowY: "auto" }, children: (0, import_react.createElement)(ptab === "past" ? ProfilePastTab : ptab === "wardrobe" ? ProfileWardrobeTab : ptab === "skills" ? ProfileSkillsTab : ProfileJournalTab, { key: ptab + teloName, teloName, cfg: { ...cfg, skillModule: cfg.skillModule || (teloRecord && teloRecord.skillModule) || null, skillLanguage: cfg.skillLanguage || (teloRecord && teloRecord.skillLanguage) || null }, color: worldColor, level: Math.floor(relationship.level || 0), canEdit: !!teloRecord, portrait: portraitImage }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, overflowY: "auto", padding: 24, display: ptab === "profile" ? "block" : "none" }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", flexDirection: "column", alignItems: "center", marginBottom: 24 }, children: [
           portraitImage ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { width: 88, height: 88, borderRadius: "50%", backgroundImage: `url(${portraitImage})`, backgroundSize: "cover", backgroundPosition: "center", border: `1px solid ${worldColor}44`, marginBottom: 14 } }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { width: 88, height: 88, borderRadius: "50%", background: `radial-gradient(circle at 35% 35%, ${worldColor}55, #0A0612)`, border: `1px solid ${worldColor}44`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 30, marginBottom: 14 }, children: cfg.glyph || "\u25C9" }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontFamily: "Cinzel, serif", fontSize: 24, color: "#EEE8DD", marginBottom: 4 }, children: teloName }),
