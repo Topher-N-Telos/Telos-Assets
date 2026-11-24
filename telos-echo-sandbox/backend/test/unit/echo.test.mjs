@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { COLLAGE_COUNTS, COLLAGE_ROWS, panelRects, skolPrices, priceFor, collagePrompt, styleId, STYLES, normalizeFormat, eligibleForLowModeration, allowedWorlds, worldLock, WORLD_IDS, subWorldsFor, worldCanon, solisSky, REGIONAL_MAPS_READY } from '../../src/echo.mjs';
+import { COLLAGE_COUNTS, COLLAGE_ROWS, panelRects, skolPrices, priceFor, collagePrompt, styleId, STYLES, normalizeFormat, normalizeEcho, eligibleForLowModeration, allowedWorlds, worldLock, WORLD_IDS, subWorldsFor, worldCanon, solisSky, REGIONAL_MAPS_READY } from '../../src/echo.mjs';
 
 test('every collage size has full-width rows and a rectangle per panel, ending at the last number', () => {
   for (const n of COLLAGE_COUNTS) {
@@ -62,4 +62,11 @@ test('Solis sky is inferred from the scene; polar stays off until the regional m
   // behaviour once the regional maps are switched on
   assert.equal(solisSky('Crossing the glacier', null, true), 'polar'); assert.equal(solisSky('An arctic camp at noon', null, true), 'day'); assert.equal(solisSky('make it brighter', 'polar', true), 'polar');
   assert.match(worldCanon('SOLIS', 'day'), /belong only to polar Solis/); assert.doesNotMatch(worldCanon('TERRA', null), /burgundy/);
+});
+
+test('a venue interior (s:) reference is accepted alongside people, and a malformed one is rejected', () => {
+  const base = { prompt: 'A photo inside the Archive', style: 'realism', adultAttested: true, idempotencyKey: 'k'.repeat(20), quoteId: 'q'.repeat(20), world: 'TERRA', species: ['Human'], format: 'single' };
+  const ok = normalizeEcho({ ...base, refs: ['i:abcdef12', 's:2158eded970774e4eadc89de9041521a'] });
+  assert.deepEqual(ok.refs, ['i:abcdef12', 's:2158eded970774e4eadc89de9041521a']);
+  assert.throws(() => normalizeEcho({ ...base, refs: ['s:../../etc/passwd'] }));
 });

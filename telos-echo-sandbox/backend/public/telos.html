@@ -35290,7 +35290,7 @@ Convert this into a precise, structured clothing/outfit description optimized fo
       c.id
     )) });
   }
-  function VenueModals({ world, step, setStep, onEnter }) {
+  function VenueModals({ world, step, setStep, onEnter, avatarSpecies }) {
     const [sivaadMember, setSivaadMember] = (0, import_react.useState)(false);
     (0, import_react.useEffect)(() => {
       let c = false;
@@ -35347,7 +35347,7 @@ Convert this into a precise, structured clothing/outfit description optimized fo
     }
     if (step?.stage === "zoom" && cluster && cluster.directGame && venues[cluster.venues[0]]) {
       const dv = venues[cluster.venues[0]];
-      return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(VenueDetail, { venue: { ...dv, interior: cluster.zoomImage }, venueId: cluster.venues[0], onBack: () => setStep(null), onEnter: null, onImageClick: () => { lgLaunchFromVenue(cluster.venues[0]); } });
+      return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(VenueDetail, { venue: { ...dv, interior: cluster.zoomImage }, venueId: cluster.venues[0], world, avatarSpecies, onBack: () => setStep(null), onEnter: null, onImageClick: () => { lgLaunchFromVenue(cluster.venues[0]); } });
     }
     if (step?.stage === "zoom" && cluster) {
       const single = cluster.venues.length === 1;
@@ -35418,7 +35418,9 @@ Convert this into a precise, structured clothing/outfit description optimized fo
             else setStep(null);
           },
           onEnter: step.venueId === "arena_terra" || step.venueId === "deep_archive" ? onEnter : null,
-          venueId: step.venueId
+          venueId: step.venueId,
+          world,
+          avatarSpecies
         }
       );
     }
@@ -35438,8 +35440,97 @@ Convert this into a precise, structured clothing/outfit description optimized fo
       return true;
     } catch { return false; }
   }
-  function VenueDetail({ venue, venueId, onBack, onEnter, onImageClick }) {
+  function VenuePhotoSheet({ venue, venueId, world, avatarSpecies, onClose }) {
+    var R = import_react, h = R.createElement;
+    var color = (WORLDS[world] && WORLDS[world].color) || "#9B7EC8";
+    var m = /\/_blob\/([a-f0-9]{32})\./.exec(venue.interior || "");
+    var sceneRef = m ? "s:" + m[1] : null;
+    var alive = R.useRef(true); R.useEffect(function () { alive.current = true; return function () { alive.current = false; }; }, []);
+    var optsS = R.useState(null), opts = optsS[0], setOpts = optsS[1];
+    var telS = R.useState([]), telos = telS[0], setTelos = telS[1];
+    var whoS = R.useState({}), who = whoS[0], setWho = whoS[1];
+    var styleS = R.useState("realism"), style = styleS[0], setStyle = styleS[1];
+    var noteS = R.useState(""), note = noteS[0], setNote = noteS[1];
+    var quoteS = R.useState(null), quote = quoteS[0], setQuote = quoteS[1];
+    var adultS = R.useState(false), adult = adultS[0], setAdult = adultS[1];
+    var busyS = R.useState(false), busy = busyS[0], setBusy = busyS[1];
+    var msgS = R.useState(""), msg = msgS[0], setMsg = msgS[1];
+    var resS = R.useState(null), result = resS[0], setResult = resS[1];
+    var keyRef = R.useRef(TelosImg.newKey());
+    R.useEffect(function () {
+      (async function () {
+        try { var o = await TelosImg.call("/api/echo/options"); if (alive.current) { setOpts(o); if (o.styles && o.styles.length && !o.styles.some(function (s) { return s.id === "realism"; })) setStyle(o.styles[0].id); } } catch (e) { if (alive.current) setMsg("Photos aren't available right now."); }
+        try { var l = await loadMyTelosians(); if (alive.current) setTelos(Array.isArray(l) ? l : []); } catch (e) {}
+      })();
+    }, []);
+    var subjects = [];
+    if (opts) {
+      (opts.refs || []).forEach(function (r) {
+        if (r.source === "avatar") subjects.push({ ref: r.ref, label: "You (avatar)", species: avatarSpecies });
+        else if (r.source === "telo") {
+          var id = r.kind && r.kind.indexOf("telo~") === 0 ? r.kind.slice(5) : null;
+          var rec = telos.find(function (t) { return id ? String(t.id) === id : true; });
+          subjects.push({ ref: r.ref, label: rec ? (rec.firstName || rec.name || "Your Telō") : "Your Telō", species: rec ? (rec.species || rec.teloType || rec.type) : null });
+        }
+      });
+    }
+    var picked = subjects.filter(function (s) { return who[s.ref]; });
+    var maxPeople = Math.max(0, ((opts && opts.maxRefs) || 3) - 1);
+    var speciesList = picked.map(function (s) { return s.species; }).filter(Boolean).map(String);
+    var effWorld = world;
+    var sub = effWorld === "MARIS" ? (/^(sivaad|deep)/.test(venueId) ? "deep" : "outpost") : null;
+    R.useEffect(function () {
+      setQuote(null); if (!opts) return; var dead = false;
+      (async function () { try { var q = await TelosImg.call("/api/echo/quote", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ format: "single" }) }); if (!dead && alive.current) setQuote(q); } catch (e) { if (!dead && alive.current) setMsg(e && e.code === "INSUFFICIENT_SKOL" ? "Not enough Sköl for a photo." : "Photos aren't available right now."); } })();
+      return function () { dead = true; };
+    }, [!!opts]);
+    var canGo = !!(opts && quote && sceneRef && picked.length > 0 && speciesList.length === picked.length && adult && !busy);
+    function toggle(s) { var n = Object.assign({}, who); if (n[s.ref]) delete n[s.ref]; else if (Object.keys(n).length < maxPeople) n[s.ref] = true; setWho(n); setMsg(""); }
+    async function snap() {
+      if (!canGo) return; setBusy(true); setMsg("");
+      var names = picked.map(function (s) { return s.label.replace(" (avatar)", ""); }).join(" and ");
+      var prompt = ("A candid souvenir photograph taken inside " + venue.name + ". " + names + (picked.length > 1 ? " are" : " is") + " posed naturally in the room, with its interior artwork and architecture clearly visible behind. " + note.trim()).slice(0, 1500);
+      var body = { prompt: prompt, direction: "", style: style, adultAttested: true, idempotencyKey: keyRef.current, quoteId: quote.quoteId, refs: picked.map(function (s) { return s.ref; }).concat([sceneRef]), world: effWorld, species: speciesList, format: "single", aspect: "portrait" };
+      if (sub) body.subWorld = sub;
+      try {
+        var j = await TelosImg.call("/api/echo/generate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+        var deadline = Date.now() + 5 * 60 * 1000;
+        while ((j.state === "created" || j.state === "working") && Date.now() < deadline) { await new Promise(function (r) { setTimeout(r, 2000); }); if (!alive.current) return; j = await TelosImg.call("/api/jobs/" + j.id); }
+        keyRef.current = TelosImg.newKey();
+        if (j.state === "complete") { if (alive.current) setResult(j.imageId); }
+        else if (j.state === "failed") setMsg("That photo could not be made. Nothing was charged.");
+        else setMsg("This is taking longer than expected.");
+      } catch (e) { setMsg(e && e.code === "WORLD_NOT_COMPATIBLE" ? "That character can't be pictured in this world." : e && e.code === "BLOCKED_MINOR_TERMS" ? "That note cannot be used." : "That did not go through. Nothing was charged."); }
+      if (alive.current) setBusy(false);
+    }
+    var small = function (t, onClick, dis, on) { return h(ChamferBtn, { size: "sm", variant: on ? "accent" : "ghost", accentColor: color, textColor: "#EEE8DD", fillColor: on ? undefined : "rgba(10,6,20,0.62)", disabled: !!dis, onClick: onClick, style: { width: "auto", padding: "7px 12px", fontSize: 9 } }, t); };
+    var hint = function (t) { return h("div", { style: { fontSize: 11, color: "rgba(200,190,170,0.6)", fontStyle: "italic", lineHeight: 1.5 } }, t); };
+    var cost = quote ? (quote.charged ? quote.amountSkol + " Sköl will be charged (you have " + quote.balance + ")." : "No charge: this photo is covered by your allowance.") : "Checking the price…";
+    return h("div", { onClick: function (e) { e.stopPropagation(); }, style: { position: "absolute", inset: 0, zIndex: 60, display: "flex", flexDirection: "column", background: "rgba(6,4,15,0.97)" } },
+      h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "calc(12px + env(safe-area-inset-top, 0px)) 16px 12px", borderBottom: "1px solid rgba(255,255,255,0.06)" } }, h("div", { style: { fontFamily: "Cinzel, serif", fontSize: 11, letterSpacing: 2.5, color: color } }, "PHOTO · " + venue.name.toUpperCase()), small("CLOSE", onClose)),
+      h("div", { style: { flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 12 } },
+        result ? h(R.Fragment, null,
+          h("img", { src: "/api/images/" + encodeURIComponent(result), alt: "", style: { width: "100%", maxHeight: "62vh", objectFit: "contain", border: "1px solid " + color + "44" } }),
+          hint("Saved to your Echō images."),
+          h("div", { style: { display: "flex", gap: 8 } }, small("ANOTHER PHOTO", function () { setResult(null); setBusy(false); }, false, true)))
+        : h(R.Fragment, null,
+          hint("Choose who is in the picture. The photo is set inside this room, with its artwork and architecture."),
+          opts && subjects.length === 0 && hint("You need an avatar or a Telō image first. Make one from Create, then come back."),
+          h("div", { style: { display: "flex", flexDirection: "column", gap: 8 } }, subjects.map(function (s) {
+            var on = !!who[s.ref];
+            return h("div", { key: s.ref, onClick: function () { toggle(s); }, style: { cursor: "pointer", padding: "12px 14px", border: "1px solid " + (on ? color : color + "40"), background: on ? color + "22" : "rgba(25,16,45,0.8)", color: "#EEE8DD", fontSize: 15, fontFamily: "Cormorant Garamond, Georgia, serif" } }, (on ? "☑ " : "☐ ") + s.label);
+          })),
+          opts && h("select", { value: style, onChange: function (e) { setStyle(e.target.value); }, style: { width: "100%", padding: "10px 12px", background: "rgba(25,16,45,0.8)", color: "#EEE8DD", border: "1px solid " + color + "40", fontSize: 14, fontFamily: "Cormorant Garamond, Georgia, serif" } }, (opts.styles || []).map(function (s) { return h("option", { key: s.id, value: s.id }, "Style: " + s.label); })),
+          h("input", { value: note, onChange: function (e) { setNote(e.target.value.slice(0, 200)); }, placeholder: "Optional: pose, mood, what they're doing…", style: { width: "100%", boxSizing: "border-box", padding: "10px 12px", background: "rgba(25,16,45,0.8)", color: "#EEE8DD", border: "1px solid " + color + "40", fontSize: 14, fontFamily: "Cormorant Garamond, Georgia, serif" } }),
+          hint(cost),
+          h("div", { onClick: function () { setAdult(!adult); }, style: { cursor: "pointer", fontSize: 13, color: "#D8CEBA" } }, (adult ? "☑ " : "☐ ") + "I am 18 or older."),
+          msg && hint(msg),
+          h(ChamferBtn, { size: "sm", variant: "primary", disabled: !canGo, onClick: snap, style: { width: "100%", fontSize: 10 } }, busy ? "DEVELOPING THE PHOTO…" : "TAKE THE PHOTO"),
+          hint("The same checks as every image on the platform apply."))));
+  }
+  function VenueDetail({ venue, venueId, world, avatarSpecies, onBack, onEnter, onImageClick }) {
     const [showInfo, setShowInfo] = (0, import_react.useState)(false);
+    const [photoOpen, setPhotoOpen] = (0, import_react.useState)(false);
     const [langTel, setLangTel] = (0, import_react.useState)(null);
     (0, import_react.useEffect)(() => {
       let off = false;
@@ -35474,6 +35565,8 @@ Convert this into a precise, structured clothing/outfit description optimized fo
             e.stopPropagation();
             handleBack();
           }, style: { position: "absolute", top: "calc(14px + env(safe-area-inset-top, 0px))", left: 14, zIndex: 6, width: 40, height: 40, borderRadius: "50%", border: "1px solid rgba(255,255,255,0.35)", background: "rgba(10,6,20,0.7)", backdropFilter: "blur(8px)", color: "#fff", fontSize: 22, lineHeight: "38px", padding: 0, textAlign: "center", cursor: "pointer" }, children: "\u2190" }),
+          world && !showInfo && !photoOpen && venue.interior && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { "aria-label": "Take a photo", onClick: (e) => { e.stopPropagation(); setPhotoOpen(true); }, style: { position: "absolute", right: 14, bottom: 28, zIndex: 6, width: 46, height: 46, borderRadius: "50%", border: "1px solid rgba(255,255,255,0.4)", background: "rgba(10,6,20,0.62)", color: "#EEE8DD", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("svg", { width: 22, height: 22, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.6, children: [ /* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", { d: "M4 8h3l1.6-2.4h6.8L17 8h3v11H4z" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("circle", { cx: 12, cy: 13, r: 3.6 }) ] }) }),
+          photoOpen && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(VenuePhotoSheet, { venue, venueId, world, avatarSpecies, onClose: () => setPhotoOpen(false) }),
           venue.gate === "sivaad" && member !== null && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { position: "absolute", top: 16, right: 16, zIndex: 6, padding: "5px 10px", borderRadius: 6, background: "rgba(10,6,20,0.65)", border: `1px solid ${member ? "rgba(232,184,74,0.6)" : "rgba(255,255,255,0.2)"}`, color: member ? "#E8B84A" : "rgba(230,222,205,0.75)", fontSize: 9, letterSpacing: 1.5, fontFamily: "Cinzel, serif" }, children: member ? "\u2726 RESIDENT" : "RESIDENTS ONLY" }),
           !showInfo && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { position: "absolute", left: 0, right: 0, bottom: 28, display: "flex", justifyContent: "center" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
             ChamferBtn,
@@ -35574,8 +35667,8 @@ Convert this into a precise, structured clothing/outfit description optimized fo
         ] }),
         onClose && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: onClose, style: { width: 34, height: 34, borderRadius: "50%", border: "1px solid rgba(255,255,255,0.2)", background: "rgba(10,6,20,0.6)", backdropFilter: "blur(8px)", color: "rgba(255,255,255,0.7)", fontSize: 15, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, pointerEvents: "auto" }, children: "\u2715" })
       ] }),
-      LG_KEEP_ARCHIVE[world] && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(VenueModals, { world, step: terraStep, setStep: setTerraStep, onEnter }),
-      WORLD_CLUSTERS[world] && !LG_KEEP_ARCHIVE[world] ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(VenueModals, { world, step: terraStep, setStep: setTerraStep, onEnter }) : world === "MARIS" ? null : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+      LG_KEEP_ARCHIVE[world] && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(VenueModals, { world, step: terraStep, setStep: setTerraStep, onEnter, avatarSpecies }),
+      WORLD_CLUSTERS[world] && !LG_KEEP_ARCHIVE[world] ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(VenueModals, { world, step: terraStep, setStep: setTerraStep, onEnter, avatarSpecies }) : world === "MARIS" ? null : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { position: "absolute", left: "50%", bottom: previewOpen ? 140 : 90, transform: "translateX(-50%)", zIndex: 2, transition: "bottom 0.25s ease" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
           "button",
           {
