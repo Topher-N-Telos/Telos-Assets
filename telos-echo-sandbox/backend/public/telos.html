@@ -28998,6 +28998,9 @@ ABOUT THE PERSON YOU'RE TALKING TO: Their name is ${userProfile.name}. Their pro
     const [input, setInput] = (0, import_react.useState)("");
     const [loading, setLoading] = (0, import_react.useState)(false);
     const [continuingIdx, setContinuingIdx] = (0, import_react.useState)(null);
+    const [photoOpen, setPhotoOpen] = (0, import_react.useState)(false);
+    const [photoOffer, setPhotoOffer] = (0, import_react.useState)(false);   // automatic offer: only at significant points (a new relationship tier), never persisted
+    const sceneText = () => { const m = [...messages].reverse().find((x) => x.role === "assistant" && !x.venue); return String((m && m.content) || "").replace(/[*_"\u201C\u201D]/g, "").replace(/\s+/g, " ").trim().slice(0, 280); };
     const followThroughTimer = (0, import_react.useRef)(null);
     const queuedMessageRef = (0, import_react.useRef)(null);
     const userPreemptedOpeningRef = (0, import_react.useRef)(false);
@@ -29328,6 +29331,7 @@ CONVERSATION PACING (factual, not a suggestion to comment on directly): ${signal
         setMessages(withReply);
         const pointsAwarded = earnMessagePoints({ ...relationship, lastInteractionTimestamp: Date.now() });
         const updatedRelationship = pointsAwarded;
+        if (updatedRelationship && relationship && updatedRelationship.tier && relationship.tier && updatedRelationship.tier !== relationship.tier && Math.floor(updatedRelationship.level || 0) > Math.floor(relationship.level || 0)) setPhotoOffer(true);
         setRelationship(updatedRelationship);
         await Promise.all([
           saveHistory(teloName, withReply),
@@ -29542,6 +29546,7 @@ What you remember: ${promptMem()}` : baseSystem;
     const levelPct = Math.min(100, (relationship.relationshipPoints % 1 + 1) % 1 * 100);
     const particles = (0, import_react.useRef)(Array.from({ length: 18 }, (_, i) => ({ id: i, size: 1 + Math.random() * 2, left: Math.random() * 100, top: Math.random() * 100, dur: 9 + Math.random() * 12, delay: Math.random() * 8, op: 0.12 + Math.random() * 0.22 }))).current;
     return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, display: "flex", flexDirection: "column", position: "relative", overflow: "hidden" }, children: [
+      photoOpen && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(VenuePhotoSheet, { chat: { teloName, world: cfg.world, scene: sceneText() }, world: cfg.world, avatarSpecies: userProfile?.species, onClose: () => setPhotoOpen(false) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { position: "absolute", inset: 0, pointerEvents: "none", overflow: "hidden", zIndex: 1 }, children: particles.map((p) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { position: "absolute", width: p.size, height: p.size, borderRadius: "50%", left: `${p.left}%`, top: `${p.top}%`, background: `${cfg.particleColor}${p.op})`, animation: `particleDrift ${p.dur}s ease-in-out ${p.delay}s infinite alternate` } }, p.id)) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "tc-head", style: { padding: "14px 18px 12px", borderBottom: "1px solid rgba(180,150,120,0.07)", background: "rgba(6,6,15,0.94)", backdropFilter: "blur(20px)", flexShrink: 0, position: "relative", zIndex: 2 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "tc-kbhide", style: { fontSize: 8, letterSpacing: 4, color: `${worldColor}88`, fontFamily: "Cinzel, serif", marginBottom: 8 }, children: [
@@ -29628,9 +29633,14 @@ What you remember: ${promptMem()}` : baseSystem;
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 8, letterSpacing: 2.5, color: `${worldAccent}CC`, fontFamily: "Cinzel, serif", textShadow: "0 1px 3px rgba(0,0,0,0.9)" }, children: teloName.toUpperCase() + " \u00B7 LESSON" })
             ] }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MessageBubble, { msg, isFirst: i === 0, worldColor, worldAccent, cfg }),
-            msg.role === "assistant" && i === messages.length - 1 && i !== 0 && !loading && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginTop: 6, marginLeft: 4 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ChamferBtn, { size: "sm", variant: "accent", accentColor: worldColor, fillColor: "rgba(10,6,20,0.62)", textColor: worldAccent, disabled: continuingIdx !== null && continuingIdx !== i, onClick: () => continueMessage(i), style: { width: "auto", padding: "5px 11px", fontSize: 10, letterSpacing: 1.2, fontWeight: 500 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { display: "inline-flex", alignItems: "center", gap: 5 }, children: continuingIdx === i ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_jsx_runtime.Fragment, { children: [0, 0.22, 0.44].map((d, k) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { width: 3, height: 3, borderRadius: "50%", background: worldAccent, display: "inline-block", animation: `blink 1.2s ${d}s ease-in-out infinite` } }, k)) }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_jsx_runtime.Fragment, { children: "\u21B3 continue" }) }) }) })
+            msg.role === "assistant" && i === messages.length - 1 && i !== 0 && !loading && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 6, marginLeft: 4, display: "flex", alignItems: "center", gap: 6 }, children: [ /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ChamferBtn, { size: "sm", variant: "accent", accentColor: worldColor, fillColor: "rgba(10,6,20,0.62)", textColor: worldAccent, disabled: continuingIdx !== null && continuingIdx !== i, onClick: () => continueMessage(i), style: { width: "auto", padding: "5px 11px", fontSize: 10, letterSpacing: 1.2, fontWeight: 500 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { display: "inline-flex", alignItems: "center", gap: 5 }, children: continuingIdx === i ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_jsx_runtime.Fragment, { children: [0, 0.22, 0.44].map((d, k) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { width: 3, height: 3, borderRadius: "50%", background: worldAccent, display: "inline-block", animation: `blink 1.2s ${d}s ease-in-out infinite` } }, k)) }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_jsx_runtime.Fragment, { children: "\u21B3 continue" }) }) }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { "aria-label": "Make a picture of this moment", onMouseDown: (e) => e.preventDefault(), onTouchStart: () => {}, onClick: () => { try { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); } catch (e) {} setPhotoOpen(true); }, style: { width: 28, height: 26, display: "flex", alignItems: "center", justifyContent: "center", border: `1px solid ${worldColor}66`, background: "rgba(10,6,20,0.62)", color: worldAccent, cursor: "pointer", padding: 0, borderRadius: 3 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("svg", { width: 15, height: 15, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.7, children: [ /* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", { d: "M4 8h3l1.6-2.4h6.8L17 8h3v11H4z" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("circle", { cx: 12, cy: 13, r: 3.6 }) ] }) }) ] })
           ] }, i)),
           (loading || phase === "opening") && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ChamferBox, { size: "sm", borderColor: "rgba(180,150,120,0.07)", fillColor: "rgba(18,12,32,0.65)", style: { alignSelf: "flex-start" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 6, padding: "12px 16px" }, children: [0, 0.22, 0.44].map((d, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { width: 5, height: 5, borderRadius: "50%", background: `${worldColor}66`, animation: `blink 1.5s ${d}s ease-in-out infinite` } }, i)) }) }),
+          photoOffer && !loading && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { alignSelf: "center", display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", border: `1px solid ${worldColor}55`, background: "rgba(10,6,20,0.7)", borderRadius: 4 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 12, color: "rgba(230,222,205,0.9)", fontStyle: "italic" }, children: "A moment worth keeping." }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => { setPhotoOffer(false); setPhotoOpen(true); }, style: { fontSize: 9, letterSpacing: 1.6, fontFamily: "Cinzel, serif", color: worldAccent, background: `${worldColor}22`, border: `1px solid ${worldColor}66`, borderRadius: 3, padding: "5px 9px", cursor: "pointer" }, children: "MAKE A PICTURE" }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { "aria-label": "Dismiss", onClick: () => setPhotoOffer(false), style: { fontSize: 14, lineHeight: 1, color: "rgba(200,190,170,0.6)", background: "none", border: "none", cursor: "pointer", padding: "0 2px" }, children: "\u00D7" })
+          ] }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { ref: bottomRef })
         ] })
       ] }),
@@ -35440,10 +35450,10 @@ Convert this into a precise, structured clothing/outfit description optimized fo
       return true;
     } catch { return false; }
   }
-  function VenuePhotoSheet({ venue, venueId, world, avatarSpecies, onClose }) {
+  function VenuePhotoSheet({ venue, venueId, world, avatarSpecies, onClose, chat }) {
     var R = import_react, h = R.createElement;
     var color = (WORLDS[world] && WORLDS[world].color) || "#9B7EC8";
-    var m = /\/_blob\/([a-f0-9]{32})\./.exec(venue.interior || "");
+    var m = venue ? /\/_blob\/([a-f0-9]{32})\./.exec(venue.interior || "") : null;
     var sceneRef = m ? "s:" + m[1] : null;
     var alive = R.useRef(true); R.useEffect(function () { alive.current = true; return function () { alive.current = false; }; }, []);
     var optsS = R.useState(null), opts = optsS[0], setOpts = optsS[1];
@@ -35464,6 +35474,7 @@ Convert this into a precise, structured clothing/outfit description optimized fo
       })();
     }, []);
     var subjects = [];
+    var preS = R.useRef(false);
     if (opts) {
       (opts.refs || []).forEach(function (r) {
         if (r.source === "avatar") subjects.push({ ref: r.ref, label: "You (avatar)", species: avatarSpecies });
@@ -35474,23 +35485,30 @@ Convert this into a precise, structured clothing/outfit description optimized fo
         }
       });
     }
+    R.useEffect(function () {
+      if (!chat || preS.current || !subjects.length) return;
+      var mine = subjects.find(function (s) { return s.label === chat.teloName; });
+      if (mine) { preS.current = true; var n = {}; n[mine.ref] = true; setWho(n); }
+    });
     var picked = subjects.filter(function (s) { return who[s.ref]; });
     var maxPeople = Math.max(0, ((opts && opts.maxRefs) || 3) - 1);
     var speciesList = picked.map(function (s) { return s.species; }).filter(Boolean).map(String);
     var effWorld = world;
-    var sub = effWorld === "MARIS" ? (/^(sivaad|deep)/.test(venueId) ? "deep" : "outpost") : null;
+    var sub = effWorld === "MARIS" ? (/^(sivaad|deep)/.test(venueId || "") ? "deep" : "outpost") : null;
     R.useEffect(function () {
       setQuote(null); if (!opts) return; var dead = false;
       (async function () { try { var q = await TelosImg.call("/api/echo/quote", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ format: "single" }) }); if (!dead && alive.current) setQuote(q); } catch (e) { if (!dead && alive.current) setMsg(e && e.code === "INSUFFICIENT_SKOL" ? "Not enough Sköl for a photo." : "Photos aren't available right now."); } })();
       return function () { dead = true; };
     }, [!!opts]);
-    var canGo = !!(opts && quote && sceneRef && picked.length > 0 && speciesList.length === picked.length && adult && !busy);
+    var canGo = !!(opts && quote && (sceneRef || chat) && picked.length > 0 && speciesList.length === picked.length && adult && !busy);
     function toggle(s) { var n = Object.assign({}, who); if (n[s.ref]) delete n[s.ref]; else if (Object.keys(n).length < maxPeople) n[s.ref] = true; setWho(n); setMsg(""); }
     async function snap() {
       if (!canGo) return; setBusy(true); setMsg("");
       var names = picked.map(function (s) { return s.label.replace(" (avatar)", ""); }).join(" and ");
-      var prompt = ("A candid souvenir photograph taken inside " + venue.name + ". " + names + (picked.length > 1 ? " are" : " is") + " posed naturally in the room, with its interior artwork and architecture clearly visible behind. " + note.trim()).slice(0, 1500);
-      var body = { prompt: prompt, direction: "", style: style, adultAttested: true, idempotencyKey: keyRef.current, quoteId: quote.quoteId, refs: picked.map(function (s) { return s.ref; }).concat([sceneRef]), world: effWorld, species: speciesList, format: "single", aspect: "portrait" };
+      var prompt = (chat
+        ? "A candid photograph capturing this moment from their story: " + chat.scene + " Pictured: " + names + ". " + note.trim()
+        : "A candid souvenir photograph taken inside " + venue.name + ". " + names + (picked.length > 1 ? " are" : " is") + " posed naturally in the room, with its interior artwork and architecture clearly visible behind. " + note.trim()).slice(0, 1500);
+      var body = { prompt: prompt, direction: "", style: style, adultAttested: true, idempotencyKey: keyRef.current, quoteId: quote.quoteId, refs: picked.map(function (s) { return s.ref; }).concat(sceneRef ? [sceneRef] : []), world: effWorld, species: speciesList, format: "single", aspect: "portrait" };
       if (sub) body.subWorld = sub;
       try {
         var j = await TelosImg.call("/api/echo/generate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
@@ -35507,14 +35525,14 @@ Convert this into a precise, structured clothing/outfit description optimized fo
     var hint = function (t) { return h("div", { style: { fontSize: 11, color: "rgba(200,190,170,0.6)", fontStyle: "italic", lineHeight: 1.5 } }, t); };
     var cost = quote ? (quote.charged ? quote.amountSkol + " Sköl will be charged (you have " + quote.balance + ")." : "No charge: this photo is covered by your allowance.") : "Checking the price…";
     return h("div", { onClick: function (e) { e.stopPropagation(); }, style: { position: "absolute", inset: 0, zIndex: 60, display: "flex", flexDirection: "column", background: "rgba(6,4,15,0.97)" } },
-      h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "calc(12px + env(safe-area-inset-top, 0px)) 16px 12px", borderBottom: "1px solid rgba(255,255,255,0.06)" } }, h("div", { style: { fontFamily: "Cinzel, serif", fontSize: 11, letterSpacing: 2.5, color: color } }, "PHOTO · " + venue.name.toUpperCase()), small("CLOSE", onClose)),
+      h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "calc(12px + env(safe-area-inset-top, 0px)) 16px 12px", borderBottom: "1px solid rgba(255,255,255,0.06)" } }, h("div", { style: { fontFamily: "Cinzel, serif", fontSize: 11, letterSpacing: 2.5, color: color } }, (chat ? "PICTURE · " + chat.teloName.toUpperCase() : "PHOTO · " + venue.name.toUpperCase())), small("CLOSE", onClose)),
       h("div", { style: { flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 12 } },
         result ? h(R.Fragment, null,
           h("img", { src: "/api/images/" + encodeURIComponent(result), alt: "", style: { width: "100%", maxHeight: "62vh", objectFit: "contain", border: "1px solid " + color + "44" } }),
           hint("Saved to your Echō images."),
           h("div", { style: { display: "flex", gap: 8 } }, small("ANOTHER PHOTO", function () { setResult(null); setBusy(false); }, false, true)))
         : h(R.Fragment, null,
-          hint("Choose who is in the picture. The photo is set inside this room, with its artwork and architecture."),
+          hint(chat ? "Choose who is in the picture. It captures the moment you are in now." : "Choose who is in the picture. The photo is set inside this room, with its artwork and architecture."),
           opts && subjects.length === 0 && hint("You need an avatar or a Telō image first. Make one from Create, then come back."),
           h("div", { style: { display: "flex", flexDirection: "column", gap: 8 } }, subjects.map(function (s) {
             var on = !!who[s.ref];
