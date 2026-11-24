@@ -307,19 +307,34 @@ export class UserState extends DurableObject {
     return { enabled, mode, defaultMode: enabled ? 'low' : 'auto', modes: enabled ? ['auto', 'low'] : ['auto'] };
   }
   echoSubjects(p) {
-    if (!p.refs?.length) return [{ id: 'echo-scene', name: 'Any people in the scene' }];
-    return p.refs.map((r, i) => ({ id: `ref${i + 1}`, name: `Subject from reference image ${i + 1}` }));
+    const people = (p.refs ?? []).filter((r) => r[0] !== 's');
+    if (!people.length) return [{ id: 'echo-scene', name: 'Any people in the scene' }];
+    return people.map((r, i) => ({ id: `ref${i + 1}`, name: `Subject from reference image ${i + 1}` }));
   }
-  echoRefImages(p) {
+  async echoRefImages(p) {
     const out = [];
+    let person = 0;
     for (let i = 0; i < p.refs.length; i++) {
       const t = p.refs[i][0], id = p.refs[i].slice(2);
+      if (t === 's') {
+        // A venue interior shipped with the app: fetched from the app's own assets, used only as the setting.
+        let ab = null;
+        for (const ext of ['jpg', 'png']) {
+          const a = await this.env.ASSETS.fetch(new Request(`https://assets.local/_blob/${id}.${ext}`)).catch(() => null);
+          if (a && a.ok) { ab = new Uint8Array(await a.arrayBuffer()); if (sniffImage(ab)) break; ab = null; }
+        }
+        const mime = ab && sniffImage(ab);
+        if (!mime) throw new Error('CANON_REFERENCES_UNAVAILABLE');
+        out.push({ bytes: ab, mime, label: 'the VENUE INTERIOR — the setting of this scene, not a person. Reproduce this exact room: its architecture, artwork, furnishings, materials, lighting and colour palette. Place the subjects inside it.' });
+        continue;
+      }
+      person++;
       const row = t === 'i' ? this.one('SELECT blob_id FROM images WHERE id=?', id) : this.one('SELECT blob_id FROM echo_refs WHERE id=?', id);
       const b = row && this.getBlob(row.blob_id);
       if (!b) throw new Error('CANON_REFERENCES_UNAVAILABLE');
       out.push({ bytes: b.bytes, mime: b.mime, label: i === 0 && p.refinedFrom
         ? 'the EXISTING image to refine (SUBJECT 1) — keep its composition, characters, layout and art style'
-        : `reference image for SUBJECT ${i + 1} — keep this exact person: face, skin tone, hair, build, clothing` });
+        : `reference image for SUBJECT ${person} — keep this exact person: face, skin tone, hair, build, clothing` });
     }
     return out;
   }
@@ -538,6 +553,7 @@ export class UserState extends DurableObject {
     if (this.one("SELECT COUNT(*) n FROM jobs WHERE state IN ('created','working')").n >= cfg.maxQueuedUser) throw new ApiError(429, 'TOO_MANY_QUEUED');
     if (!this.unlimited && this.callsToday(now) + 1 > cfg.maxCallsPerDayUser) throw new ApiError(429, 'DAILY_CALL_CAP', { cap: cfg.maxCallsPerDayUser });
     for (const r of p.refs) {
+      if (r[0] === 's') continue;
       const id = r.slice(2), ok = r[0] === 'i' ? this.one('SELECT 1 x FROM images WHERE id=?', id) : this.one('SELECT 1 x FROM echo_refs WHERE id=?', id);
       if (!ok) throw new ApiError(404, 'REF_IMAGE_NOT_FOUND');
     }
