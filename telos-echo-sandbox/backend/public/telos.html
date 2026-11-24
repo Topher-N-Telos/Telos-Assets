@@ -28999,7 +28999,8 @@ ABOUT THE PERSON YOU'RE TALKING TO: Their name is ${userProfile.name}. Their pro
     const [loading, setLoading] = (0, import_react.useState)(false);
     const [continuingIdx, setContinuingIdx] = (0, import_react.useState)(null);
     const [photoOpen, setPhotoOpen] = (0, import_react.useState)(false);
-    const [photoOffer, setPhotoOffer] = (0, import_react.useState)(false);   // automatic offer: only at significant points (a new relationship tier), never persisted
+    const [photoOffer, setPhotoOffer] = (0, import_react.useState)(false);   // automatic offer: only when the Telō marks a significant moment in the conversation; never persisted
+    const lastMomentRef = (0, import_react.useRef)(-999);   // user-message count at the last offer, so offers stay rare
     const sceneText = () => { const m = [...messages].reverse().find((x) => x.role === "assistant" && !x.venue); return String((m && m.content) || "").replace(/[*_"\u201C\u201D]/g, "").replace(/\s+/g, " ").trim().slice(0, 280); };
     const followThroughTimer = (0, import_react.useRef)(null);
     const queuedMessageRef = (0, import_react.useRef)(null);
@@ -29304,6 +29305,7 @@ What you remember: ${promptMem()}` : baseSystem;
         if (signals) activeSystem += `
 
 CONVERSATION PACING (factual, not a suggestion to comment on directly): ${signals}`;
+        if (!lessonRef.current && (newCount - lastMomentRef.current) >= 30) activeSystem += "\n\nSIGNIFICANT MOMENTS: Very rarely, and only when this exact exchange is a genuinely significant moment in your story together (a first, a confession, a promise, a reconciliation, a milestone, a deeply shared emotional peak), end your reply with the exact tag [MOMENT]. Most conversations never contain one. Never mention the tag or what it does.";
         const API_MESSAGE_LIMIT = 60;
         const apiSlice = updated.slice(-API_MESSAGE_LIMIT);
         const apiMsgs = apiSlice.map((m, idx) => ({ role: m.role, content: m.role === "user" && idx === apiSlice.length - 1 && m.content.length < 8 ? `[The user offered only: "${m.content}". Respond to what that might mean.]` : m.content }));
@@ -29326,12 +29328,13 @@ CONVERSATION PACING (factual, not a suggestion to comment on directly): ${signal
           if (isVenue) setMood(cfg.moods[2]);
         }
         const selfContinue = /\[CONTINUE\]/.test(reply);
-        reply = reply.replace(/\[CONTINUE\]/g, "").replace(/\s{2,}/g, " ").trim();
+        const momentTagged = /\[MOMENT\]/.test(reply) && !lessonRef.current && !isVenue;
+        reply = reply.replace(/\[CONTINUE\]/g, "").replace(/\[MOMENT\]/g, "").replace(/\s{2,}/g, " ").trim();
         let withReply = [...updated, { role: "assistant", content: reply, venue: isVenue, ...(lessonRef.current && !isVenue ? { lesson: lessonRef.current.startedAt || true } : {}) }];
         setMessages(withReply);
         const pointsAwarded = earnMessagePoints({ ...relationship, lastInteractionTimestamp: Date.now() });
         const updatedRelationship = pointsAwarded;
-        if (updatedRelationship && relationship && updatedRelationship.tier && relationship.tier && updatedRelationship.tier !== relationship.tier && Math.floor(updatedRelationship.level || 0) > Math.floor(relationship.level || 0)) setPhotoOffer(true);
+        if (momentTagged) { lastMomentRef.current = newCount; setPhotoOffer(true); }
         setRelationship(updatedRelationship);
         await Promise.all([
           saveHistory(teloName, withReply),
