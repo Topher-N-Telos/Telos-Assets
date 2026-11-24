@@ -28938,6 +28938,7 @@ Write a complete roleplay system prompt in the voice of instructions to the AI (
     ] });
   }
   var MessageBubble = (0, import_react.memo)(function MessageBubble2({ msg, isFirst, worldColor, worldAccent, cfg }) {
+    if (msg && msg.role === "assistant" && typeof msg.content === "string" && msg.content.indexOf("[MOMENT]") >= 0) msg = { ...msg, content: msg.content.replace(/\s*\[MOMENT\]/g, "") };   // internal marker, never shown
     if (msg.role === "user") {
       const c2 = 7;
       const clipUser = `polygon(${c2}px 0, calc(100% - 0px) 0, 100% 0px, 100% calc(100% - 0px), calc(100% - 0px) 100%, ${c2}px 100%, 0 calc(100% - ${c2}px), 0 ${c2}px)`;
